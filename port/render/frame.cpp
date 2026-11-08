@@ -20,6 +20,12 @@ uint32_t gPresents = 0;
 // shown pillarboxed. The game sets the layout per frame (Game_0x40::Draw).
 int32_t gFrameWidth = 640;
 float gHudOffsetX = 0.0f;
+#if defined(GTA2_PORT_NATIVE)
+// Native tall view (vid_web.cpp gta2_port_set_view_height): frame height and the
+// vertical offset of the HUD part being drawn. 480 and 0 outside gameplay.
+int32_t gFrameHeight = 480;
+float gHudOffsetY = 0.0f;
+#endif
 
 // The HUD part of the last full draw, replayed by interpolated draws between
 // game updates (Game_0x40::Draw, port patch; D04).
@@ -40,6 +46,9 @@ void gta2_frame_push_vertex(uint32_t texture, uint32_t blend, const FrameVertex&
     gCmds.back().count++;
     gVerts.push_back(v);
     gVerts.back().x += gHudOffsetX;
+#if defined(GTA2_PORT_NATIVE)
+    gVerts.back().y += gHudOffsetY;
+#endif
 }
 
 void gta2_frame_clear(uint8_t r, uint8_t g, uint8_t b, int32_t left, int32_t top, int32_t right, int32_t bottom)
@@ -49,8 +58,17 @@ void gta2_frame_clear(uint8_t r, uint8_t g, uint8_t b, int32_t left, int32_t top
     gCmds.push_back(c);
 }
 
+#if defined(GTA2_PORT_NATIVE)
+void Gta2Native_SetPresentHeight(int height); // render/gles_renderer.cpp, render_headless.cpp
+#endif
+
 void gta2_frame_present()
 {
+#if defined(GTA2_PORT_NATIVE)
+    Gta2Native_SetPresentHeight(gFrameHeight);
+    gFrameHeight = 480;
+    gHudOffsetY = 0.0f;
+#endif
     gta2_js_present(gCmds.data(), static_cast<int>(gCmds.size()), gVerts.data(), static_cast<int>(gVerts.size()), gFrameWidth);
     gCmds.clear();
     gVerts.clear();
@@ -112,6 +130,14 @@ void Gta2Port_SetFrameLayout(int32_t width, int32_t hudOffsetX)
     gFrameWidth = width > 0 ? width : 640;
     gHudOffsetX = static_cast<float>(hudOffsetX);
 }
+
+#if defined(GTA2_PORT_NATIVE)
+void Gta2Port_SetFrameHeight(int32_t height, int32_t hudOffsetY)
+{
+    gFrameHeight = height > 0 ? height : 480;
+    gHudOffsetY = static_cast<float>(hudOffsetY);
+}
+#endif
 
 uint32_t gta2_port_present_count()
 {

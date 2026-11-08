@@ -1,0 +1,240 @@
+From 04a1c4968057747a9c1b470ad60031e47f7f782e Mon Sep 17 00:00:00 2001
+From: cdeletre <cyril.deletre@gmail.com>
+Date: Sun, 8 Nov 2026 07:26:19 -0500
+Subject: [PATCH] native: tall view for screens taller than 4:3
+
+A screen taller than 4:3 (720x720, 1920x1680) gets a 640-wide view as tall
+as its shape. The 4:3 box keeps its scale: the projection, HUD scale and
+tile and sprite ranges come from it, and more world shows above and below.
+The HUD's top parts stay at the top edge, the rest is centred. With the
+activation margin the camera boundaries cover the extra height too, as
+they cover the extra width of a wide screen.
+---
+ Source/Camera.cpp         | 10 ++++++++++
+ Source/Camera.hpp         | 28 ++++++++++++++++++++++++++++
+ Source/Game_0x40.cpp      |  9 +++++++++
+ Source/Hud.cpp            | 32 ++++++++++++++++++++++++++++----
+ Source/MapRenderer.cpp    |  5 +++++
+ Source/SpriteGrid_400.cpp |  4 ++++
+ 6 files changed, 84 insertions(+), 4 deletions(-)
+
+diff --git a/Source/Camera.cpp b/Source/Camera.cpp
+index 75de08d0..8cbb482d 100644
+--- a/Source/Camera.cpp
++++ b/Source/Camera.cpp
+@@ -425,6 +425,12 @@ void Camera_0xBC::UpdateBoundaries_435B90()
+     v = v_y;
+ #endif
+     v *= dword_6768E0;
++#if defined(GTA2_PORT_NATIVE)
++    if (gGta2PortActivationMargin)
++    {
++        v += PortTallExtraY(z); // native tall view: the boundaries cover the extra height too
++    }
++#endif
+ 
+     field_78_boundaries_non_neg.field_8_top = field_98_cam_pos2.field_4_y - v;
+     if (field_78_boundaries_non_neg.field_8_top < kZero_676818)
+@@ -613,7 +619,11 @@ void Camera_0xBC::SetScreenSize_4361B0(u32 x_pos, u32 y_pos)
+     field_60.y = Fix16(-1);
+ 
+ #ifdef GTA2_PORT
++#if defined(GTA2_PORT_NATIVE)
++    field_A8_ui_scale = Fix16(PortRefHeight()) / 480; // the 4:3 box, also in a tall view
++#else
+     field_A8_ui_scale = Fix16(y_pos) / 480; // same as x / 640 at 4:3
++#endif
+ #else
+     field_A8_ui_scale = Fix16(x_pos) / 640;
+ #endif
+diff --git a/Source/Camera.hpp b/Source/Camera.hpp
+index 7e65ad46..e7c59e4b 100644
+--- a/Source/Camera.hpp
++++ b/Source/Camera.hpp
+@@ -80,8 +80,36 @@ class Camera_0xBC
+     // Widescreen presentation: the screen is wider than the 4:3 reference box of the same height.
+     s32 PortRefWidth() const
+     {
++#if defined(GTA2_PORT_NATIVE)
++        // Native tall view (a screen taller than 4:3): the 4:3 box is as wide as the screen.
++        const s32 w = field_6C_screen_px_height * 4 / 3;
++        return field_68_screen_px_width < w ? field_68_screen_px_width : w;
++#else
+         return field_6C_screen_px_height * 4 / 3;
++#endif
++    }
++#if defined(GTA2_PORT_NATIVE)
++    s32 PortRefHeight() const
++    {
++        return PortRefWidth() * 3 / 4;
++    }
++    // Vertical offset of the centred 4:3 box inside a tall screen.
++    s32 PortHudOffsetY() const
++    {
++        return (field_6C_screen_px_height - PortRefHeight()) / 2;
++    }
++    // World height (each side, at ground level) that a tall screen shows beyond the 4:3 view,
++    // for a camera at height z.
++    Fix16 PortTallExtraY(Fix16 z) const
++    {
++        if (field_6C_screen_px_height <= PortRefHeight() || field_98_cam_pos2.field_C_zoom <= Fix16(0))
++        {
++            return Fix16(0);
++        }
++        return (z + Fix16(8)) / field_98_cam_pos2.field_C_zoom * (field_6C_screen_px_height - PortRefHeight()) /
++            PortRefWidth() / 2;
+     }
++#endif
+     // Horizontal offset of the centred 4:3 box (HUD space) inside the wide screen.
+     s32 PortHudOffsetX() const
+     {
+diff --git a/Source/Game_0x40.cpp b/Source/Game_0x40.cpp
+index 92377fad..82643731 100644
+--- a/Source/Game_0x40.cpp
++++ b/Source/Game_0x40.cpp
+@@ -68,6 +68,9 @@
+ #ifdef GTA2_PORT
+ // port/render/frame.cpp: width of the frame in reference pixels and the HUD box offset.
+ extern "C" void Gta2Port_SetFrameLayout(s32 width, s32 hudOffsetX);
++#if defined(GTA2_PORT_NATIVE)
++extern "C" void Gta2Port_SetFrameHeight(s32 height, s32 hudOffsetY); // native tall view
++#endif
+ // port/render/frame.cpp: the HUD's draw commands are kept so that interpolated draws can replay them.
+ extern "C" void Gta2Port_HudBegin();
+ extern "C" void Gta2Port_HudEnd();
+@@ -414,6 +417,9 @@ void Game_0x40::Draw_4B92D0()
+ 
+ #ifdef GTA2_PORT
+     Gta2Port_SetFrameLayout(gViewCamera_676978->field_68_screen_px_width, 0);
++#if defined(GTA2_PORT_NATIVE)
++    Gta2Port_SetFrameHeight(gViewCamera_676978->field_6C_screen_px_height, 0);
++#endif
+ #endif
+ 
+     gpMapRenderer_6F66E4->Draw_4F6A20(); // Note: Also seems to draw sprites
+@@ -425,6 +431,9 @@ void Game_0x40::Draw_4B92D0()
+ 
+ #ifdef GTA2_PORT
+     Gta2Port_SetFrameLayout(gViewCamera_676978->field_68_screen_px_width, gViewCamera_676978->PortHudOffsetX());
++#if defined(GTA2_PORT_NATIVE)
++    Gta2Port_SetFrameHeight(gViewCamera_676978->field_6C_screen_px_height, gViewCamera_676978->PortHudOffsetY());
++#endif
+     if (Gta2Port_InterpIsExtraDraw())
+     {
+         Gta2Port_HudReplay(); // a draw between updates: the HUD as last drawn (it services timers while drawing)
+diff --git a/Source/Hud.cpp b/Source/Hud.cpp
+index 52091e49..69b122bf 100644
+--- a/Source/Hud.cpp
++++ b/Source/Hud.cpp
+@@ -124,7 +124,12 @@ static inline void ProjectWorldToScreen_Hud_4B90E0(Camera_0xBC* pCam, Fix16 x, F
+ #else
+     *pOut1 = (((x - pCam->field_98_cam_pos2.field_0_x) * pCam->field_60.x) * scale) + Fix16(pCam->field_70_screen_px_center_x);
+ #endif
++#if defined(GTA2_PORT_NATIVE)
++    *pOut2 = (((y - pCam->field_98_cam_pos2.field_4_y) * pCam->field_60.x) * scale) +
++        Fix16(pCam->field_74_screen_px_center_y - pCam->PortHudOffsetY());
++#else
+     *pOut2 = (((y - pCam->field_98_cam_pos2.field_4_y) * pCam->field_60.x) * scale) + Fix16(pCam->field_74_screen_px_center_y);
++#endif
+ }
+ 
+ MATCH_FUNC(0x4bbbb0)
+@@ -3194,6 +3199,20 @@ void Hud_PauseScreen_2::DrawPause_5D63B0()
+ // centre or right edge (port/render/frame.cpp). gGta2PortHudEdges = 0 keeps the whole HUD centred.
+ extern "C" void Gta2Port_SetFrameLayout(s32 width, s32 hudOffsetX);
+ extern "C" s32 gGta2PortHudEdges;
++#if defined(GTA2_PORT_NATIVE)
++// Native tall view: the same with the top edge, centre or bottom edge (port/render/frame.cpp).
++extern "C" void Gta2Port_SetFrameHeight(s32 height, s32 hudOffsetY);
++static void PortHudAnchor(s32 side, s32 vside = 1) // side: 0 left, 1 centre, 2 right; vside: 0 top, 1 centre, 2 bottom
++{
++    const Camera_0xBC* pCam = gViewCamera_676978;
++    if (pCam)
++    {
++        Gta2Port_SetFrameLayout(pCam->field_68_screen_px_width, pCam->PortHudOffsetX() * (gGta2PortHudEdges ? side : 1));
++        Gta2Port_SetFrameHeight(pCam->field_6C_screen_px_height, pCam->PortHudOffsetY() * (gGta2PortHudEdges ? vside : 1));
++    }
++}
++#define PORT_HUD_ANCHOR_V(side, vside) PortHudAnchor(side, vside)
++#else
+ static void PortHudAnchor(s32 side) // 0 left, 1 centre, 2 right
+ {
+     const Camera_0xBC* pCam = gViewCamera_676978;
+@@ -3202,9 +3221,12 @@ static void PortHudAnchor(s32 side) // 0 left, 1 centre, 2 right
+         Gta2Port_SetFrameLayout(pCam->field_68_screen_px_width, pCam->PortHudOffsetX() * (gGta2PortHudEdges ? side : 1));
+     }
+ }
++#define PORT_HUD_ANCHOR_V(side, vside) PortHudAnchor(side)
++#endif
+ #define PORT_HUD_ANCHOR(side) PortHudAnchor(side)
+ #else
+ #define PORT_HUD_ANCHOR(side)
++#define PORT_HUD_ANCHOR_V(side, vside)
+ #endif
+ 
+ MATCH_FUNC(0x5d6860)
+@@ -3213,22 +3235,24 @@ void Hud_2B00::DrawGui_5D6860()
+     if (!bSkip_user_67D506)
+     {
+         SetFullAmbient_5D6A70();
+-        PORT_HUD_ANCHOR(2); // cash, lives, multiplier, weapon and ammo, power-up timers
++        PORT_HUD_ANCHOR_V(2, 0); // cash, lives, multiplier, weapon and ammo, power-up timers
+         field_1118_player_stats.DrawPlayerStats_5D5C80();
+         PORT_HUD_ANCHOR(1); // world-anchored and centred parts
+         field_110C_under_roof_arrow_marker.Draw_5CF910();
+         field_13C0_player_names.DrawPlayerNames_5CFE40();
++        PORT_HUD_ANCHOR_V(1, 0);
+         field_1028_wanted_level.DrawWantedLevel_5D0110();
+-        PORT_HUD_ANCHOR(0);
++        PORT_HUD_ANCHOR_V(0, 0);
+         field_107C_gang_respect_bars.DrawGangRespectBars_5CFA70();
+-        PORT_HUD_ANCHOR(2);
++        PORT_HUD_ANCHOR_V(2, 0);
+         field_1108_health.DrawHealth_5D0260();
+         PORT_HUD_ANCHOR(1);
+         field_4C_zone_name.DrawZoneName_5D5900();
+         field_0_car_name.DrawCarName_5D4A10();
+         field_1080_pickup_text.Draw_5D5420();
++        PORT_HUD_ANCHOR_V(1, 2); // mission brief: the bottom edge
+         field_DC_brief.DrawBrief_5D3B80();
+-        PORT_HUD_ANCHOR(0);
++        PORT_HUD_ANCHOR_V(0, 0);
+         field_620_pagers.DrawPagers_5D3040();
+         PORT_HUD_ANCHOR(1);
+         field_650_texts.Service_5D2010();
+diff --git a/Source/MapRenderer.cpp b/Source/MapRenderer.cpp
+index 077d5358..04fd4922 100644
+--- a/Source/MapRenderer.cpp
++++ b/Source/MapRenderer.cpp
+@@ -3572,7 +3572,12 @@ void MapRenderer::Draw_4F6A20()
+             }
+ 
+             // compute y boundary
++#if defined(GTA2_PORT_NATIVE)
++            // Native tall view: cover the extra height (presentation only).
++            Fix16 half_y = layer_column_width * gViewCamera_676978->field_6C_screen_px_height / gViewCamera_676978->PortRefHeight() / 2;
++#else
+             Fix16 half_y = layer_column_width / 2;
++#endif
+             s32 min_y = (gViewCamera_676978->field_98_cam_pos2.field_4_y - half_y).ToInt();
+             s32 max_y = (gViewCamera_676978->field_98_cam_pos2.field_4_y + half_y).ToInt();
+ 
+diff --git a/Source/SpriteGrid_400.cpp b/Source/SpriteGrid_400.cpp
+index 117ab9cb..594b886c 100644
+--- a/Source/SpriteGrid_400.cpp
++++ b/Source/SpriteGrid_400.cpp
+@@ -71,7 +71,11 @@ void SpriteGrid_400::DrawSpritesClipped_477A40()
+     const Fix16 cam_y = pCam->field_98_cam_pos2.field_4_y;
+     const Fix16 depth = (pCam->field_98_cam_pos2.field_8_z + Fix16(8)) / pCam->field_98_cam_pos2.field_C_zoom;
+     const Fix16 vis_x = depth / 2 + pCam->PortWideExtraX(pCam->field_98_cam_pos2.field_8_z);
++#if defined(GTA2_PORT_NATIVE)
++    const Fix16 vis_y = depth * Fix16(0x3000, 0) / 2 + pCam->PortTallExtraY(pCam->field_98_cam_pos2.field_8_z);
++#else
+     const Fix16 vis_y = depth * Fix16(0x3000, 0) / 2; // 3/4: the 4:3 view's height
++#endif
+     const WorldRect& b = pCam->field_78_boundaries_non_neg;
+     const Fix16 b_left = b.field_0_left < cam_x - vis_x ? b.field_0_left : cam_x - vis_x;
+     const Fix16 b_right = b.field_4_right > cam_x + vis_x ? b.field_4_right : cam_x + vis_x;
+-- 
+2.54.0
+

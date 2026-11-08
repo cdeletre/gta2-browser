@@ -4,6 +4,9 @@
 #if defined(GTA2_NATIVE_HEADLESS)
 extern "C" {
 
+void Gta2Native_SetPresentHeight(int)
+{
+}
 void gta2_js_present(const void*, int, const void*, int, int)
 {
 }

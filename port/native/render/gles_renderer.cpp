@@ -31,7 +31,7 @@ extern "C" void Gta2Native_EndFrame();                    // window_sdl.cpp: scr
 
 namespace
 {
-constexpr int kRefH = 480;
+int gRefH = 480; // frame height in reference pixels: 480, more in the tall view (frame.cpp)
 static_assert(sizeof(FrameVertex) == 24, "web/renderer.js layout");
 static_assert(sizeof(FrameCommand) == 40, "web/renderer.js layout");
 
@@ -203,6 +203,11 @@ void gta2_js_free_all_textures()
     gR.textures.clear();
 }
 
+void Gta2Native_SetPresentHeight(int height)
+{
+    gRefH = height > 0 ? height : 480;
+}
+
 void gta2_js_present(const void* cmdData, int cmdCount, const void* vertData, int vertCount, int refW)
 {
     Init();
@@ -213,10 +218,17 @@ void gta2_js_present(const void* cmdData, int cmdCount, const void* vertData, in
     {
         refW = 640;
     }
-    // Fit refW x 480 into the drawable (letter- or pillarboxed), as renderer.js resize().
-    const float scale = fminf(static_cast<float>(dw) / refW, static_cast<float>(dh) / kRefH);
-    const int vpw = static_cast<int>(lroundf(refW * scale));
-    const int vph = static_cast<int>(lroundf(kRefH * scale));
+    // Fit refW x refH into the drawable (letter- or pillarboxed), as renderer.js resize().
+    // Gameplay views are cut to the screen's shape (main.cpp); when the shapes differ by
+    // less than 2% (rounding to even sizes) the frame is stretched to fill the screen.
+    const int refH = gRefH;
+    const float sx = static_cast<float>(dw) / refW;
+    const float sy = static_cast<float>(dh) / refH;
+    const bool fill = fabsf(sx / sy - 1.0f) < 0.02f;
+    const float scaleX = fill ? sx : fminf(sx, sy);
+    const float scaleY = fill ? sy : scaleX;
+    const int vpw = fill ? dw : static_cast<int>(lroundf(refW * scaleX));
+    const int vph = fill ? dh : static_cast<int>(lroundf(refH * scaleY));
     const int vpx = (dw - vpw) / 2;
     const int vpy = (dh - vph) / 2;
 
@@ -235,7 +247,7 @@ void gta2_js_present(const void* cmdData, int cmdCount, const void* vertData, in
     glVertexAttribPointer(kUv, 2, GL_FLOAT, GL_FALSE, sizeof(FrameVertex), reinterpret_cast<const void*>(12));
     glEnableVertexAttribArray(kColour);
     glVertexAttribPointer(kColour, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(FrameVertex), reinterpret_cast<const void*>(20));
-    glUniform4f(gR.uView, 2.0f / refW, -2.0f / kRefH, -1.0f, 1.0f);
+    glUniform4f(gR.uView, 2.0f / refW, -2.0f / refH, -1.0f, 1.0f);
     glActiveTexture(GL_TEXTURE0);
     gR.blend = -1;
 
@@ -249,8 +261,8 @@ void gta2_js_present(const void* cmdData, int cmdCount, const void* vertData, in
             glEnable(GL_SCISSOR_TEST);
             if (r > l && b > t)
             {
-                glScissor(vpx + static_cast<int>(floorf(l * scale)), vpy + static_cast<int>(floorf((kRefH - b) * scale)),
-                          static_cast<int>(ceilf((r - l) * scale)), static_cast<int>(ceilf((b - t) * scale)));
+                glScissor(vpx + static_cast<int>(floorf(l * scaleX)), vpy + static_cast<int>(floorf((refH - b) * scaleY)),
+                          static_cast<int>(ceilf((r - l) * scaleX)), static_cast<int>(ceilf((b - t) * scaleY)));
             }
             else
             {

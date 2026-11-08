@@ -25,6 +25,7 @@ s32 gEnumIdx = 0;
 SVidVersion gVersion = {0x3FE7AE14, "GTA2 browser port video driver"};
 constexpr s32 kModeId = 1;
 s32 gViewWidth = 640;
+s32 gViewHeight = 480; // above 480 only in the native build (gta2_port_set_view_height)
 } // namespace
 
 // Read by the game's camera (Camera.hpp): the activation margin (D07/D17).
@@ -59,6 +60,32 @@ EMSCRIPTEN_KEEPALIVE int gta2_port_set_view_width(int width)
     }
     return gViewWidth;
 }
+
+#if defined(GTA2_PORT_NATIVE)
+// Native: a screen taller than 4:3 gets a view as tall as its shape, 640 wide (the
+// 4:3 box keeps its scale, more world shows above and below). 480 to 960, even.
+// See docs/native-status.md.
+int gta2_port_set_view_height(int height)
+{
+    height = height < 480 ? 480 : height > 960 ? 960 : height;
+    height &= ~1;
+    if (height == gViewHeight)
+    {
+        return gViewHeight;
+    }
+    gViewHeight = height;
+    if (gVideo && gVideo->field_4C_rect_bottom)
+    {
+        gVideo->field_4C_rect_bottom = gViewHeight;
+    }
+    if (gGame_0x40_67E008 && gGame_0x40_67E008->field_38_orf1)
+    {
+        gCachedScreenDimension_706C58 = 0;
+        UpdateGameScreenSize_5D8E00();
+    }
+    return gViewHeight;
+}
+#endif
 
 EMSCRIPTEN_KEEPALIVE void gta2_port_set_activation_margin(int on)
 {
@@ -157,7 +184,7 @@ s32 CC Vid_SetMode(SVideo* v, HWND hwnd, s32)
     v->field_C_found_height = 480;
     v->field_10_found_rgb_bit_count = 16;
     v->field_48_rect_right = gViewWidth;
-    v->field_4C_rect_bottom = 480;
+    v->field_4C_rect_bottom = gViewHeight;
     v->field_5C = 5; // RGB 5:6:5 component widths, read by the Bink path
     v->field_60_g = 6;
     v->field_64_r = 5;

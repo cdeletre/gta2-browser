@@ -24,6 +24,7 @@
 // Window, vsync and screenshots: see platform/window_sdl.cpp.
 #include <errno.h>
 #include <limits.h>
+#include <math.h>
 #include <sys/stat.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -59,7 +60,8 @@ extern "C" bool Gta2Native_RegistrySave();
 extern "C" void Gta2Native_AudioInit();     // audio/audio_sdl.cpp (audio_null.cpp headless)
 extern "C" void Gta2Native_AudioPump();
 extern "C" void Gta2Native_AudioShutdown();
-extern "C" int gta2_port_set_view_width(int width); // port/render/vid_web.cpp
+extern "C" int gta2_port_set_view_width(int width);   // port/render/vid_web.cpp
+extern "C" int gta2_port_set_view_height(int height); // port/render/vid_web.cpp (native only)
 #if !defined(GTA2_NATIVE_HEADLESS)
 extern "C" bool Gta2Native_WindowInit(); // platform/window_sdl.cpp
 extern "C" void Gta2Native_SetConfDir(const char* dir); // platform/input_sdl.cpp
@@ -176,13 +178,24 @@ int main(int argc, char** argv)
     {
         return 1;
     }
-    // Gameplay frames are as wide as the screen's shape, 480 high (web/shell.js
-    // chooseViewWidth: 852 at 16:9); menus stay 640x480, pillarboxed.
+    // Gameplay frames take the screen's shape: wider than 4:3, they are 480 high and as wide
+    // as the shape (web/shell.js chooseViewWidth: 852 at 16:9); taller than 4:3, they are
+    // 640 wide and as tall as the shape (720x720: 640x640). The 4:3 box keeps its scale
+    // either way. Menus stay 640x480, letter- or pillarboxed.
     int dw = 640;
     int dh = 480;
     Gta2Native_DrawableSize(&dw, &dh);
-    const int viewWidth = gta2_port_set_view_width(dh > 0 ? static_cast<int>(480.0 * dw / dh) : 640);
-    fprintf(stderr, "gta2: gameplay view %dx480\n", viewWidth);
+    int viewWidth = 640;
+    int viewHeight = 480;
+    if (dw > 0 && dh > 0 && dw * 3 >= dh * 4)
+    {
+        viewWidth = gta2_port_set_view_width(static_cast<int>(lround(480.0 * dw / dh)));
+    }
+    else if (dw > 0 && dh > 0)
+    {
+        viewHeight = gta2_port_set_view_height(static_cast<int>(lround(640.0 * dh / dw)));
+    }
+    fprintf(stderr, "gta2: gameplay view %dx%d\n", viewWidth, viewHeight);
 #endif
     Gta2Native_AudioInit(); // before WinMain: the game opens its sound banks there
 
