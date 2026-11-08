@@ -1,0 +1,33 @@
+From 2e8aabb020a0780928c1f59ea35c425f1ed2c0b7 Mon Sep 17 00:00:00 2001
+From: cdeletre <cyril.deletre@gmail.com>
+Date: Sun, 8 Nov 2026 00:46:57 -0500
+Subject: [PATCH] native: no ErrorLog intro line on the way out
+
+The original writes "Coop vX.Y" and a time stamp to each of its log files
+when it closes them. The port sends ErrorLog to the console, so the native
+build printed four of these banners at every exit (one per global ErrorLog),
+which only clutter the console log. Under GTA2_PORT_NATIVE the destructor
+skips them; the web build is unchanged.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ Source/error.cpp | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/Source/error.cpp b/Source/error.cpp
+index 2e3fa8f0..c5027c59 100644
+--- a/Source/error.cpp
++++ b/Source/error.cpp
+@@ -122,7 +122,9 @@ void* ErrorLog::log_on_line_written_4D9670(TLogLineCallback pCallBack)
+ MATCH_FUNC(0x4A3610)
+ ErrorLog::~ErrorLog()
+ {
++#if !defined(GTA2_PORT_NATIVE)
+     log_intro_4D95A0();
++#endif
+ #if !defined(__clang__) && (_MSC_VER <= 1200)
+     field_0_ofstr.close();
+ #endif
+-- 
+2.54.0
+

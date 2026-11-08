@@ -345,11 +345,41 @@ static bool IsPersistent(const std::string& norm)
     return norm.compare(0, 7, "player/") == 0;
 }
 
+#if defined(GTA2_PORT_NATIVE)
+// Opens the game expects to fail, left out of the native console log unless
+// GTA2_LOG_FILES=1: the music CD scan over every drive ("X:\GTAUDIO\1.wav"; its first
+// run is in a global constructor, before main() has chosen the data folder, and
+// port_static_init.cpp repeats it), and the language check, which opens each
+// data\?.gxt to see which ones are installed (debug.cpp).
+static bool ExpectedMiss(const char* path)
+{
+    static const bool all = getenv("GTA2_LOG_FILES") && atoi(getenv("GTA2_LOG_FILES")) != 0;
+    if (all)
+    {
+        return false;
+    }
+    std::string p; // the game's path, lowercase, with '/'
+    for (const char* c = path; *c; ++c)
+    {
+        p.push_back(*c == '\\' ? '/' : static_cast<char>(tolower(static_cast<unsigned char>(*c))));
+    }
+    if (p.size() > 11 && p[1] == ':' && (p.compare(2, 9, "/gtaudio/") == 0))
+    {
+        return true;
+    }
+    return p.size() == 10 && p.compare(0, 5, "data/") == 0 && p.compare(6, 4, ".gxt") == 0;
+}
+#endif
+
 FILE* gta2_fopen(const char* path, const char* mode)
 {
     const std::string norm = NormalisePath(path);
     FILE* f = fopen(norm.c_str(), mode);
+#if defined(GTA2_PORT_NATIVE)
+    if (!f && !ExpectedMiss(path))
+#else
     if (!f)
+#endif
     {
         fprintf(stderr, "fopen(\"%s\" -> \"%s\", \"%s\"): %s\n", path, norm.c_str(), mode, strerror(errno));
     }
