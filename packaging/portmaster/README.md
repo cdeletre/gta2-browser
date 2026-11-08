@@ -47,6 +47,7 @@ TrimUI Smart Pro S (REG Linux).
 | L3 (hold) | Look around with the D-pad |
 | R3 | Status |
 | Start | Pause, quit prompt |
+| Select | Next radio station (in a car) |
 | Menus: A / B | Confirm / Back |
 
 Every button can be changed in `conf/controls.ini`.

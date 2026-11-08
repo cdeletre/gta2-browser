@@ -6,7 +6,7 @@
 // Keyboard: SDL key events, web/shell.js's key table. The game reads its own controls; the
 // native build keeps the original's default bindings (patch 0008): arrows, Left Ctrl
 // (attack), Return (enter/exit car), Space (jump/handbrake), Z/X (weapons), Tab and Left
-// Alt (special 1/2), Right Shift (status).
+// Alt (special 1/2), Right Shift (status), F1/F2 (radio station).
 //
 // Controller (SDL_GameController): conf/controls.ini, written with the defaults and
 // comments on the first run (kDefaultControls below). As web/gamepad.js, a "city" and a
@@ -149,6 +149,8 @@ int TypedChar(const SDL_Keysym& k)
 // --- controller -------------------------------------------------------------------
 const Key kUp{0xc8, 0x26}, kDown{0xd0, 0x28}, kLeft{0xcb, 0x25}, kRight{0xcd, 0x27};
 const Key kReturn{0x1c, 0x0d}, kEscape{0x01, 0x1b};
+// The original's radio keys (Player::Hud_Controls_565890): F1 next station, F2 previous.
+const Key kF1{0x3b, 0x70}, kF2{0x3c, 0x71};
 
 // The game's 12 control slots (hklm\...\gta2\control\0..11) and the original's keys for
 // them (gDefaultControls_61A9E4), used when the registry has no value.
@@ -214,7 +216,8 @@ const char* const kDefaultControls = R"(# GTA2 controller layout
 # [city] actions (on foot or driving): the game's own controls
 #   forward backward left right attack enter_exit jump prev_weapon next_weapon
 #   special1 special2 status
-#   and: pause (Escape: the game's pause and quit prompt)
+#   and: pause (Escape: the game's pause and quit prompt),
+#        radio_next, radio_prev (car radio station, F1 and F2 in the original)
 # [menu] actions (front end menus): up down left right confirm back
 # Both sections also accept key:<name>, a keyboard key by its SDL name
 #   (key:Escape, key:Return, key:F1, key:Tab ...).
@@ -250,7 +253,7 @@ r1 = next_weapon
 l3 = special2
 r3 = status
 start = pause
-select = none
+select = radio_next
 
 [menu]
 up = up
@@ -320,11 +323,19 @@ bool ParseAction(Layout layout, const std::string& value, Action* out)
                 return true;
             }
         }
-        if (v == "pause")
+        const struct
         {
-            out->kind = kFixed;
-            out->key = kEscape;
-            return true;
+            const char* name;
+            Key key;
+        } kCityActions[] = {{"pause", kEscape}, {"radio_next", kF1}, {"radio_prev", kF2}};
+        for (const auto& c : kCityActions)
+        {
+            if (v == c.name)
+            {
+                out->kind = kFixed;
+                out->key = c.key;
+                return true;
+            }
         }
         return false;
     }
