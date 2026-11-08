@@ -78,7 +78,7 @@ log()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m!!\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31mxx\033[0m %s\n' "$*" >&2; exit 1; }
 
-for tool in clang clang++ cmake ninja git; do
+for tool in clang clang++ cmake ninja git python3; do
   command -v "$tool" >/dev/null || die "$tool manquant dans le conteneur (voir docker/Dockerfile)"
 done
 [[ "$(uname -m)" == "aarch64" ]] || warn "Architecture $(uname -m), pas aarch64 : le binaire ne tournera pas sur la console."
@@ -176,6 +176,12 @@ fi
 
 [[ $CLEAN -eq 1 ]] && { log "Nettoyage de $BUILD_DIR"; rm -rf "$BUILD_DIR"; }
 
+# Alias de casse des #include, à chaque build comme build_port.py (les fichiers de
+# port/ changent sans nouvelle préparation). Même ordre d'includes que le CMakeLists.
+CASE_ALIASES="$ROOT/build/native/case-aliases"
+python3 scripts/native/case_aliases.py "$CASE_ALIASES" \
+  port/native/compat port/core/compat "$WORK/Source" "$WORK" port
+
 log "Configuration ($BUILD_TYPE$([[ $SANITIZE -eq 1 ]] && echo ', ASan+UBSan'))"
 cmake -S port/native -B "$BUILD_DIR" -G Ninja \
   -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
@@ -184,6 +190,7 @@ cmake -S port/native -B "$BUILD_DIR" -G Ninja \
   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
   -DGTA2_CORE_DIR="$ROOT/$WORK" \
   -DGTA2_PORT_ROOT="$ROOT/port" \
+  -DGTA2_CASE_ALIASES="$CASE_ALIASES" \
   -DGTA2_SANITIZE="$([[ $SANITIZE -eq 1 ]] && echo ON || echo OFF)"
 
 ln -sf "$BUILD_DIR/compile_commands.json" compile_commands.json

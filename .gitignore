@@ -13,3 +13,6 @@ build/
 # Generated game packs, captures, converted media and dumps (never committed)
 *.gta2pack
 *.gta2save
+
+# Native build: clangd link made by scripts/build_native.sh
+/compile_commands.json
