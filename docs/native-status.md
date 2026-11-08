@@ -58,9 +58,13 @@ essais mesurés par SSH, binaire dans `/tmp`, cache disque vidé avant chaque es
 | RG CubeXX (Mali r20p0) | direct (0,041 ms) | 9,6 s | aucun |
 | R36S (Mali r13p0) | direct (0,050 ms) | 12,7 s | aucun |
 | MANGMI Air X (freedreno) | direct (0,024 ms) | 6,0 s | aucun |
+| RG353VS (Mali-G52 g29p1) | groupé (0,153 à 0,222 ms) | 6 s (18 s en direct) | aucun sur 4 min |
 
   Sur la R36S, l'envoi groupé forcé donnait 10,0 s : le seuil de 0,15 ms la laisse en direct,
   au prix de 2,7 s, pour ne pas risquer le cas de la CubeXX (0,041 ms) ; à revoir si besoin.
+  Le seuil est passé de 0,15 à **0,10 ms** après le RG353VS : sa médiane varie de 0,153 à
+  0,222 ms selon l'essai (7 essais), si près de 0,15 qu'un essai sur deux aurait pu tomber en
+  direct et mettre 18 s au lieu de 6. Les autres consoles gardent le même choix.
 - `GTA2_LOG_TEXTURES=1` écrit aussi les images de plus de 100 ms (envois de textures, envois
   de pages, attente de l'affichage) et les tours de boucle de plus de 100 ms avec le temps de
   chaque étape (événements, son, jeu). Soak de 90 s sous ASan, son actif et envoi groupé
@@ -71,6 +75,20 @@ essais mesurés par SSH, binaire dans `/tmp`, cache disque vidé avant chaque es
   `SDL_GAMECONTROLLERCONFIG` (« Argument list too long ») : depuis l'interface, `regmsgd`
   fournit seulement les manettes branchées. Les essais par SSH passent la base par
   `SDL_GAMECONTROLLERCONFIG_FILE`.
+
+## RG353VS (dArkOS) (observé, 8 novembre 2026)
+
+Console : Anbernic RG353VS, RK3566 (4 Cortex-A55 à 1,99 GHz, gouverneur `performance`),
+966 Mo de RAM sans swap, dArkOS sur Debian 13 (noyau 5.10, glibc 2.41, SDL 2.32.10),
+Mali-G52 avec le **pilote Mali propriétaire** g29p1 (pas Panfrost), KMSDRM en 640×480,
+son ALSA, manette « retrogame_joypad ». Port installé dans `/roms/ports/gta2` (exFAT) et
+joué brièvement par l'utilisateur. Essais par SSH (`ark`, `sudo` sans mot de passe),
+EmulationStation arrêté (`sudo systemctl stop emulationstation.service`), cache disque vidé.
+
+- Downtown atteint vers 6 s en envoi groupé, 18 s en direct (`GTA2_ATLAS_BATCH=0`) : voir
+  le seuil de l'atlas plus haut.
+- Soak de 4 min avec conduite : 30,3 ticks/s, 60 images/s, aucune boucle lente après le
+  chargement, 364 Mo au plus, sortie propre.
 
 ## RG CubeXX (H700, muOS) (observé, 8 novembre 2026)
 

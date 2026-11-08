@@ -29,7 +29,11 @@
 // save (RG CubeXX, Mali blob: 0.04 ms an upload, Downtown 8 s direct, 17 s batched), so the
 // first kCalibrationUploads are made directly and timed: batching starts only if their
 // median is above kBatchAboveMs (the median, as the first upload into a new page can take
-// far longer on some drivers). GTA2_ATLAS_BATCH=0 or 1 forces the choice.
+// far longer on some drivers). Medians measured: 0.024 to 0.050 ms on freedreno and the
+// Mali blobs of the RG CubeXX and R36S (direct is faster or close), 0.15 to 0.22 ms on the
+// Mali-G52 blob of the RG353VS (Downtown 18 s direct, 6 s batched) and 0.22 to 0.28 ms with
+// Panfrost; the threshold sits between the two groups. GTA2_ATLAS_BATCH=0 or 1 forces the
+// choice.
 //
 // The window and the buffer swap are in port/native/platform/window_sdl.cpp; a GL ES 2.0
 // context is current on this thread before the first call here.
@@ -115,7 +119,7 @@ struct Shelf
 
 constexpr int kMaxShadows = 8;      // pages with a copy in memory (4 MB each)
 constexpr unsigned kCalibrationUploads = 1000;
-constexpr double kBatchAboveMs = 0.15;
+constexpr double kBatchAboveMs = 0.10;
 constexpr unsigned kShadowIdle = 300; // frames without writes before a copy is dropped
 
 struct Page
