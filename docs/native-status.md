@@ -12,8 +12,13 @@ GPU (Adreno 610) : menu, puis Downtown, à 60 images/s et 30,3 ticks/s.
   pour les touches imprimables, répétitions ignorées. Les touches du jeu sont celles de
   l'original : flèches, Ctrl gauche (tirer), Entrée (voiture), Espace (saut/frein à main),
   Z/X (armes), Tab et Alt gauche (spécial 1/2), Maj droite (statut).
-- **Manette** (`SDL_GameController`, boutons par position : A en bas, B à droite, X à gauche,
-  Y en haut), sur le modèle de `web/gamepad.js` mais avec les touches de l'original :
+- **Manette** (`SDL_GameController`), sur le modèle de `web/gamepad.js` mais avec les touches
+  de l'original. A, B, X, Y ci-dessous sont les **étiquettes** des boutons : SDL ne connaît
+  que les positions, et les portables sont en général étiquetés à la Nintendo (A à droite,
+  B en bas, X en haut, Y à gauche ; c'est le cas de la MANGMI Air X). Par défaut
+  `GTA2_FACE_BUTTONS=nintendo` ; `=xbox` pour des étiquettes Xbox (A en bas, B à droite).
+  Premier essai à la main sur la console avec la lecture par position : le bouton marqué
+  A faisait Échap, donc il quittait le menu ; corrigé ainsi.
   - en ville : croix/stick gauche = flèches, R2 = accélérer, L2 = freiner, A = tirer,
     Y = monter/descendre, X = saut/frein à main, B = spécial 1, L1/R1 = arme
     précédente/suivante, L3 = spécial 2, R3 = statut, Start = Échap ;

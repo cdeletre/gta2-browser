@@ -6,8 +6,12 @@
 // arrows, Left Ctrl (attack), Return (enter/exit car), Space (jump/handbrake), Z/X
 // (weapons), Tab and Left Alt (special 1/2), Right Shift (status).
 //
-// Controller (SDL_GameController; buttons by position, A = bottom, B = right, X = left,
-// Y = top), as web/gamepad.js but on the original's keys:
+// Controller (SDL_GameController), as web/gamepad.js but on the original's keys. A, B, X, Y
+// below are the labels on the buttons. SDL only knows positions (its A is the bottom
+// button), and on handhelds the labels are usually Nintendo-style: A right, B bottom,
+// X top, Y left (the MANGMI Air X, whose pad InputPlumber presents as a DualSense).
+// GTA2_FACE_BUTTONS=nintendo (default) maps by those labels; =xbox by Xbox labels
+// (A bottom, B right, X left, Y top, i.e. SDL's positions).
 //   in the city:  d-pad / left stick = arrows, R2 = up (accelerate), L2 = down (brake),
 //                 A = attack, Y = enter/exit car, X = jump/handbrake, B = special 1,
 //                 L1/R1 = previous/next weapon, L3 = special 2, R3 = status,
@@ -20,6 +24,8 @@
 #if !defined(GTA2_NATIVE_HEADLESS)
 #include <SDL.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include <set>
 
@@ -163,14 +169,17 @@ int gPlaying = -1; // unknown
 std::set<Key> gHeld; // keys the controller is holding down
 int gControllers = 0;
 
+bool gNintendoLabels = true; // GTA2_FACE_BUTTONS
+
 int ButtonFromSdl(Uint8 b)
 {
     switch (b)
     {
-        case SDL_CONTROLLER_BUTTON_A: return kA;
-        case SDL_CONTROLLER_BUTTON_B: return kB;
-        case SDL_CONTROLLER_BUTTON_X: return kXBtn;
-        case SDL_CONTROLLER_BUTTON_Y: return kY;
+        // SDL's A/B/X/Y are positions: bottom, right, left, top.
+        case SDL_CONTROLLER_BUTTON_A: return gNintendoLabels ? kB : kA;
+        case SDL_CONTROLLER_BUTTON_B: return gNintendoLabels ? kA : kB;
+        case SDL_CONTROLLER_BUTTON_X: return gNintendoLabels ? kY : kXBtn;
+        case SDL_CONTROLLER_BUTTON_Y: return gNintendoLabels ? kXBtn : kY;
         case SDL_CONTROLLER_BUTTON_BACK: return kBack;
         case SDL_CONTROLLER_BUTTON_START: return kStart;
         case SDL_CONTROLLER_BUTTON_LEFTSHOULDER: return kL1;
@@ -274,8 +283,27 @@ void OpenController(int index)
 
 extern "C" {
 
+// The SDL button (position) that carries a label, for the soak driver's controller
+// events (soak_native.cpp): 0 = A, 1 = B, 2 = X, 3 = Y; other SDL buttons pass through.
+int Gta2Native_PadButtonForLabel(int sdlButtonAsLabel)
+{
+    if (!gNintendoLabels || sdlButtonAsLabel > SDL_CONTROLLER_BUTTON_Y)
+    {
+        return sdlButtonAsLabel;
+    }
+    static const int kNintendo[4] = {SDL_CONTROLLER_BUTTON_B, SDL_CONTROLLER_BUTTON_A, SDL_CONTROLLER_BUTTON_Y,
+                                     SDL_CONTROLLER_BUTTON_X};
+    return kNintendo[sdlButtonAsLabel];
+}
+
 void Gta2Native_InputInit(const char* gameDir)
 {
+    if (const char* labels = getenv("GTA2_FACE_BUTTONS"))
+    {
+        gNintendoLabels = strcmp(labels, "xbox") != 0;
+    }
+    fprintf(stderr, "gta2: controller face buttons: %s labels\n",
+            gNintendoLabels ? "Nintendo (A right, B bottom)" : "Xbox (A bottom, B right)");
     char path[1024];
     snprintf(path, sizeof(path), "%s/gamecontrollerdb.txt", gameDir);
     const int added = SDL_GameControllerAddMappingsFromFile(path);

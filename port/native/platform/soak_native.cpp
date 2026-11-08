@@ -17,6 +17,7 @@
 
 #if !defined(GTA2_NATIVE_HEADLESS)
 #include <SDL.h>
+extern "C" int Gta2Native_PadButtonForLabel(int label); // input_sdl.cpp
 #endif
 
 extern "C" void gta2_port_key(int scancode, int vk, int down, int ch);
@@ -77,10 +78,12 @@ void Send(const Key& k, bool down)
     }
     if (gMode == kPad)
     {
+        // padButton holds the label (A 0, B 1, X 2, Y 3); input_sdl.cpp knows which button
+        // carries it (GTA2_FACE_BUTTONS).
         SDL_Event e{};
         e.type = down ? SDL_CONTROLLERBUTTONDOWN : SDL_CONTROLLERBUTTONUP;
         e.cbutton.state = down ? SDL_PRESSED : SDL_RELEASED;
-        e.cbutton.button = static_cast<Uint8>(k.padButton);
+        e.cbutton.button = static_cast<Uint8>(Gta2Native_PadButtonForLabel(k.padButton));
         SDL_PushEvent(&e);
         return;
     }
