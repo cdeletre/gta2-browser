@@ -19,3 +19,6 @@ build/
 
 # The PortMaster port being assembled by hand (launch script, tools, zip): local for now
 /portmaster/
+
+# GTA2 demo files (user-provided game data, never committed)
+/data-demo/
