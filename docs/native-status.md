@@ -29,6 +29,30 @@ SDL2 est lié par son chemin plutôt qu'avec les options de `sdl2.pc`, qui ajout
   30,5 ticks/s sur toutes les tranches de 5 s** après le chargement (49 sur 57 à 30,3).
   Le soak a joué sur le profil 0 de `saves/` de la console.
 
+## RG CubeXX (H700, muOS) (observé, 8 novembre 2026)
+
+Console : Anbernic RG CubeXX, Allwinner H700 (4 Cortex-A53, jusqu'à 1,8 GHz), 973 Mo de
+RAM sans swap, Mali-G31 (pilote propriétaire r20p0), noyau 4.9, muOS 2606.0 ANDROMEDA,
+glibc 2.44, SDL 2.28.5. **Écran 720×720 sur le framebuffer (`/dev/fb0`), sans KMS/DRM** :
+SDL passe par son pilote vidéo `mali`. Son ALSA (PipeWire derrière).
+
+- **Premier lancement par SSH** (menu de muOS arrêté par `FRONTEND stop`, relancé par
+  `FRONTEND start`, fonctions de `/root/.profile`) : pilote `mali`, `drawable 720x720`,
+  **vue de jeu 640×640**, Downtown en moins de 10 s, 30,3 ticks/s et 60 images/s, 330 Mo
+  stables. L'utilisateur a regardé l'écran : menu en 4:3 avec des bandes en haut et en bas,
+  jeu en plein écran, son correct.
+- **Partie à la main, lancée depuis le menu de muOS** par un lanceur de test au format
+  PortMaster (`control.txt`, `get_controls`, `SDL_GAMECONTROLLERCONFIG`,
+  `pm_platform_helper`) : 4 min dans Downtown, à pied et en voiture, 30,3 ticks/s hors
+  chargement, 330 à 351 Mo. Manette « Deeplay-keys » (la correspondance de PortMaster sur
+  muOS), `face_buttons = auto` : boutons corrects, Start puis A A quitte. Processeur en
+  `schedutil` (1,2 à 1,4 GHz pendant le jeu), GPU en `simple_ondemand` à 360 MHz.
+- **Vue haute sur un vrai écran carré :** pas de voiture, de passant ni de barrage de
+  police qui apparaisse ou disparaisse à vue ; brief de mission en bas, argent, vies et
+  barres de respect en haut, comme prévu. Fluidité jugée bonne pour une première version.
+- Par SSH, sans lancement par muOS, le jeu ne voit que « muOS-Keys » (sans correspondance) :
+  la manette virtuelle « Deeplay-keys » n'existe que quand muOS lance un contenu.
+
 ## R36S (RK3326, AmberELEC) (observé, 8 novembre 2026)
 
 Console : R36S (arbre de périphériques « Anbernic RG351MP »), 4 Cortex-A35 à 1,3 GHz,
