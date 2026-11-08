@@ -6,7 +6,12 @@
 // WinMain's initialisation, then the message loop in slices (patch 0007).
 //
 // Environment:
-//   GTA2_DATA_DIR     game folder (the one holding data/); default: the binary's folder
+// Folders (defaults relative to the binary, i.e. the port folder roms/ports/gta2/):
+//   GTA2_DATA_DIR     the installed game files, the folder holding data/ (default gamedata/)
+//   GTA2_SAVE_DIR     what the game writes to player\: profiles, church saves, high scores
+//                     (default saves/; platform/fs_native.cpp redirects player\ there)
+//   GTA2_CONF_DIR     settings: registry.txt (the game's registry), controls.ini (default conf/)
+// Other:
 //   GTA2_AUTOSTART=1  press Enter twice like ?autostart=1 (PLAY, then area 1: Downtown)
 //   GTA2_RUN_SECONDS  stop cleanly after this many seconds (soak tests)
 //   GTA2_SOAK=1       random play once the player exists (walk, drive, shoot; soak_native.cpp)
@@ -42,6 +47,9 @@ extern "C" void Gta2Native_SoakStep(double now);
 extern "C" void Gta2Native_SoakSummary(char* out, int size);
 extern "C" void Gta2Native_InputModeInit();
 extern "C" void Gta2Native_AutostartKey(bool down);
+extern "C" void Gta2Native_SetSaveDir(const char* dir);       // platform/fs_native.cpp
+extern "C" int Gta2Native_RegistryLoad(const char* path);    // platform/registry_native.cpp
+extern "C" bool Gta2Native_RegistrySave();
 extern "C" int gta2_port_set_view_width(int width); // port/render/vid_web.cpp
 #if !defined(GTA2_NATIVE_HEADLESS)
 extern "C" bool Gta2Native_WindowInit(); // platform/window_sdl.cpp
@@ -88,6 +96,36 @@ void SeedRegistry()
     gta2_port_reg_set_string((std::string(kRegRoot) + "\\option").c_str(), "language", "e");
 }
 
+// mkdir -p
+bool MakeDirs(const std::string& path)
+{
+    for (size_t i = 1; i <= path.size(); ++i)
+    {
+        if (i == path.size() || path[i] == '/')
+        {
+            const std::string part = path.substr(0, i);
+            if (mkdir(part.c_str(), 0755) != 0 && errno != EEXIST)
+            {
+                fprintf(stderr, "gta2: cannot create %s: %s\n", part.c_str(), strerror(errno));
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+std::string Absolute(const std::string& path)
+{
+    char buf[PATH_MAX];
+    return realpath(path.c_str(), buf) ? std::string(buf) : path;
+}
+
+std::string DirFromEnv(const char* name, const std::string& base, const char* sub)
+{
+    const char* env = getenv(name);
+    return env && *env ? std::string(env) : base + "/" + sub;
+}
+
 void SleepMs(int ms)
 {
     timespec ts{ms / 1000, (ms % 1000) * 1000000L};
@@ -105,21 +143,21 @@ struct Tap
 int main(int argc, char** argv)
 {
     setvbuf(stdout, nullptr, _IOLBF, 0);
-    const char* env = getenv("GTA2_DATA_DIR");
-    const std::string dataDir = env && *env ? env : BinaryDir();
+    const std::string base = BinaryDir();
+    const std::string dataDir = Absolute(DirFromEnv("GTA2_DATA_DIR", base, "gamedata"));
+    if (!MakeDirs(DirFromEnv("GTA2_SAVE_DIR", base, "saves")) || !MakeDirs(DirFromEnv("GTA2_CONF_DIR", base, "conf")))
+    {
+        return 1;
+    }
+    const std::string saveDir = Absolute(DirFromEnv("GTA2_SAVE_DIR", base, "saves"));
+    const std::string confDir = Absolute(DirFromEnv("GTA2_CONF_DIR", base, "conf"));
     if (chdir(dataDir.c_str()) != 0)
     {
         fprintf(stderr, "gta2: cannot open the game folder %s\n", dataDir.c_str());
         return 1;
     }
-    fprintf(stderr, "gta2: game folder %s\n", dataDir.c_str());
-    // The game writes its player data and saves to player\ (the web shell creates it too).
-    // TODO (jalon 1, item 4): $GTA2_SAVE_DIR.
-    if (mkdir("player", 0755) != 0 && errno != EEXIST)
-    {
-        fprintf(stderr, "gta2: cannot create %s/player: %s\n", dataDir.c_str(), strerror(errno));
-        return 1;
-    }
+    fprintf(stderr, "gta2: game files %s, saves %s, settings %s\n", dataDir.c_str(), saveDir.c_str(), confDir.c_str());
+    Gta2Native_SetSaveDir(saveDir.c_str());
 
 #if !defined(GTA2_NATIVE_HEADLESS)
     if (!Gta2Native_WindowInit())
@@ -136,6 +174,10 @@ int main(int argc, char** argv)
 #endif
 
     SeedRegistry();
+    // The saved registry overrides the defaults (as web/shell.js does with its stored copy),
+    // except the movie switch: there is no Bink playback.
+    Gta2Native_RegistryLoad((confDir + "/registry.txt").c_str());
+    gta2_port_reg_set_dword((std::string(kRegRoot) + "\\screen").c_str(), "do_play_movie", 0);
     Gta2Port_StaticInit(); // what the original's C runtime start-up did
 
     static char cmd[256];
@@ -220,6 +262,7 @@ int main(int argc, char** argv)
             fprintf(stderr, "gta2: %.0f s, %.1f ticks/s, %u frames, %s\n", now / 1000.0,
                     (ticks - lastTicks) * 1000.0 / elapsed, gta2_port_present_count(), status);
             lastTicks = ticks;
+            Gta2Native_RegistrySave(); // only writes when something changed
         }
         if (runMs > 0 && now >= runMs)
         {
@@ -237,6 +280,7 @@ int main(int argc, char** argv)
             SleepMs(1); // the slice ended on its time budget: nothing to show yet
         }
     }
+    Gta2Native_RegistrySave();
 #if !defined(GTA2_NATIVE_HEADLESS)
     Gta2Native_WindowShutdown();
 #endif

@@ -20,6 +20,11 @@
 
 #include <emscripten.h> // emscripten_get_now (port/native/compat)
 
+// port_prefix.h (forced into every file) routes fopen/fclose to the game's versions, which
+// lowercase and resolve game paths; screenshots go to their own absolute paths.
+#undef fopen
+#undef fclose
+
 extern "C" void Gta2Native_InputInit(const char* gameDir); // input_sdl.cpp
 extern "C" bool Gta2Native_InputEvent(const SDL_Event& e);
 extern "C" void Gta2Native_InputFrame();

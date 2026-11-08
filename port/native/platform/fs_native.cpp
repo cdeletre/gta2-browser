@@ -9,6 +9,10 @@
 //
 // A component that matches nothing (a file about to be created, a wildcard) is kept as
 // given, and the rest of the path after it too.
+//
+// The game's save folder, player\ (profiles, church saves, high scores), is redirected to
+// the port's saves/ folder (Gta2Native_SetSaveDir, from main.cpp): the game runs in
+// gamedata/, which holds only the installed game files.
 #include <dirent.h>
 #include <strings.h>
 #include <sys/stat.h>
@@ -18,6 +22,7 @@
 
 namespace
 {
+std::string gSaveDir; // absolute, no trailing slash; empty: no redirection
 using Listing = std::unordered_map<std::string, std::string>; // lowercase -> name on disk
 std::unordered_map<std::string, Listing> gDirs;
 
@@ -61,8 +66,20 @@ bool Exists(const std::string& path)
 }
 } // namespace
 
-std::string Gta2Native_ResolveCase(const std::string& path)
+extern "C" void Gta2Native_SetSaveDir(const char* dir)
 {
+    gSaveDir = dir ? dir : "";
+    while (gSaveDir.size() > 1 && gSaveDir.back() == '/')
+    {
+        gSaveDir.pop_back();
+    }
+}
+
+std::string Gta2Native_ResolveCase(const std::string& lowered)
+{
+    // player\... -> saves/... (the path arrives lowercased, see crt_compat.cpp)
+    const bool inPlayer = lowered == "player" || lowered.compare(0, 7, "player/") == 0;
+    const std::string path = inPlayer && !gSaveDir.empty() ? gSaveDir + lowered.substr(6) : lowered;
     std::string out = path.size() && path[0] == '/' ? "/" : "";
     size_t pos = out.size();
     bool resolving = true;
