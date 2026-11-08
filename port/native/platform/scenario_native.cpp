@@ -7,7 +7,19 @@
 //                          (Char_B4::PhoneTouched_5535B0 -> AnswerPhone_5129F0), then
 //                          lets the soak (GTA2_SOAK=1) play while the mission runs
 //   GTA2_TEST_PHONE=n      which of the district's mission phones (default 0)
+//   GTA2_TEST_DELAY=s      seconds in the city before the save or the phone (default 3).
+//                          Answering a phone while another mission is starting (the
+//                          soak often walks into the phone by the church at once) loads
+//                          the second mission over the first before the first has set
+//                          its mission flag, which crashes; a player cannot reach two
+//                          phones that fast, so the phone scenario waits for the soak's
+//                          mission flag to clear (see docs/native-status.md)
 //   GTA2_TEST=watch        only the log below (after loading a save, for example)
+//   GTA2_TEST_UNLOCK=1     unlocks the three areas for the current player in the menus (as the
+//                          UKGAMER name cheat; gta2_dev_unlock_areas), so GTA2_MENU_KEYS
+//                          can start area 2 or 3 with a fresh profile; works with any test
+//   GTA2_TEST_TRACE=1      also logs each script thread's next command when it changes
+//                          (checked once per loop iteration, so EXEC blocks show their end)
 //
 // Every step is logged ("gta2: test: ..."), with the score and the mission flag each
 // second, so a run shows whether the save was paid for and whether the mission started.
@@ -20,12 +32,17 @@
 #include "Game_0x40.hpp"
 #include "Player.hpp"
 #include "ScriptManager_C1EA8.hpp"
+#include "Object_2C_Pool.hpp"
 #include "miss2_0x11C.hpp"
 
 extern "C" const s32* gta2_dev_state();
 extern "C" int gta2_dev_add_cash(int cash);
 extern "C" int gta2_dev_teleport(int x, int y);
+extern "C" int gta2_dev_unlock_areas();
 extern "C" void gta2_port_key(int scancode, int vk, int down, int ch);
+EXTERN_GLOBAL(SCR_POINTER*, gBasePtr_6F8070); // miss2_0x11C.cpp: the command being run
+EXTERN_GLOBAL(s32, gPrevCmdIdx_6F806C);
+extern "C" void __sanitizer_set_death_callback(void (*callback)(void)) __attribute__((weak));
 
 namespace
 {
@@ -38,6 +55,7 @@ enum Test
 };
 Test gTest = kNone;
 int gPhone = 0;
+double gDelay = 3000;
 double gPlayerSince = -1; // run clock (ms) when the player first existed
 int gStep = 0;
 double gNextLog = 0;
@@ -100,6 +118,31 @@ bool SaveZone(int* x, int* y)
     return found > 0;
 }
 
+// The model of object id among the live objects, or -1. The pool is scanned in full:
+// a test aid, run once.
+int ObjectModel(s32 id)
+{
+    if (!gObject_2C_Pool_6F8F80)
+    {
+        return -1;
+    }
+    for (Object_2C& o : gObject_2C_Pool_6F8F80->field_8_pool)
+    {
+        if (o.field_14_id == id && o.field_18_model)
+        {
+            return o.field_18_model;
+        }
+    }
+    return -1;
+}
+
+// What touching it needs (Char_B4's collision switch, char.cpp): one of the phone models.
+bool IsPhoneModel(int model)
+{
+    return model == objects::blue_phone_164 || model == objects::red_phone_177 || model == objects::yellow_phone_179 ||
+           model == objects::green_phone_181;
+}
+
 bool AnswerPhone()
 {
     ScriptManager_C1EA8* sm = gScriptManager_6F8060;
@@ -109,17 +152,100 @@ bool AnswerPhone()
     {
         const ThreadTrigger_C& t = sm->field_188_phone_triggers[i];
         SCR_CMD_HEADER* h = sm->GetBasePointer_512770(t.field_8_cmd_line);
-        fprintf(stderr, "gta2: test: phone %d: ped %d, object %d, command %u (type %u)\n", i, t.field_0_ped_id,
-                t.field_4_obj_f14, t.field_8_cmd_line, h ? h->field_2_type : 0);
+        const SCR_THREAD* th = reinterpret_cast<const SCR_THREAD*>(h);
+        const bool startOk = h && sm->GetBasePointer_512770(th->field_E_thread_start_cmd) != nullptr;
+        fprintf(stderr, "gta2: test: phone %d: ped %d, object %d (model %d), command %u (type %u), thread start %u%s\n", i,
+                t.field_0_ped_id, t.field_4_obj_f14, ObjectModel(t.field_4_obj_f14), t.field_8_cmd_line,
+                h ? h->field_2_type : 0, h ? th->field_E_thread_start_cmd : 0, startOk ? "" : " (no such line)");
     }
     if (gPhone >= count)
     {
         return false;
     }
     const ThreadTrigger_C& t = sm->field_188_phone_triggers[gPhone];
+    if (!IsPhoneModel(ObjectModel(t.field_4_obj_f14)) && !getenv("GTA2_TEST_ANY_PHONE"))
+    {
+        fprintf(stderr, "gta2: test: phone %d cannot be touched (no phone object with that id), not answered\n", gPhone);
+        return false;
+    }
+    if (getenv("GTA2_TEST_TRACE"))
+    {
+        const SCR_THREAD* th = reinterpret_cast<const SCR_THREAD*>(sm->GetBasePointer_512770(t.field_8_cmd_line));
+        for (int line = th->field_E_thread_start_cmd; line < th->field_E_thread_start_cmd + 40; ++line)
+        {
+            SCR_CMD_HEADER* h = sm->GetBasePointer_512770(static_cast<u16>(line));
+            const u8* b = reinterpret_cast<const u8*>(h);
+            fprintf(stderr, "gta2: trace: line %d: type %d, next %d, value %d, bytes", line, h ? h->field_2_type : -1,
+                    h ? h->field_4_cmd_next : -1, h ? h->field_6_return_value : -1);
+            for (int k = 8; h && k < 24; ++k)
+            {
+                fprintf(stderr, " %02x", b[k]);
+            }
+            fprintf(stderr, "\n");
+        }
+    }
     const bool ok = sm->AnswerPhone_5129F0(t.field_0_ped_id, t.field_4_obj_f14);
     fprintf(stderr, "gta2: test: answered phone %d: %s\n", gPhone, ok ? "yes" : "no");
     return ok;
+}
+// On a sanitizer error (GTA2_TEST_TRACE): the command being run and every thread's state.
+void OnDeath()
+{
+    ScriptManager_C1EA8* sm = gScriptManager_6F8060;
+    const SCR_CMD_HEADER* cur = reinterpret_cast<const SCR_CMD_HEADER*>(gBasePtr_6F8070);
+    fprintf(stderr, "gta2: trace: at the error, command line %d (type %d, next %d), previous line %d\n",
+            cur ? cur->field_0_cmd_this : -1, cur ? cur->field_2_type : -1, cur ? cur->field_4_cmd_next : -1,
+            gPrevCmdIdx_6F806C);
+    if (!miss2_0x11C_Pool_6F8064 || !sm)
+    {
+        return;
+    }
+    Pool<miss2_0x11C, 8>& pool = miss2_0x11C_Pool_6F8064->field_0_pool;
+    for (miss2_0x11C* t = pool.field_4_pPrev; t; t = t->mpNext)
+    {
+        fprintf(stderr, "gta2: trace: thread %d (id %d): next line %u%s, stopped %d, exec %d\n",
+                static_cast<int>(t - pool.field_8_pool), t->field_11A_thread_id, t->field_4_next_cmd,
+                sm->GetBasePointer_512770(t->field_4_next_cmd) ? "" : " (no such line)", t->field_10_stopped,
+                t->field_12_exec_flag);
+    }
+}
+
+void TraceThreads()
+{
+    static u16 last[8];
+    static bool live[8];
+    bool seen[8] = {};
+    ScriptManager_C1EA8* sm = gScriptManager_6F8060;
+    if (!miss2_0x11C_Pool_6F8064 || !sm)
+    {
+        return;
+    }
+    Pool<miss2_0x11C, 8>& pool = miss2_0x11C_Pool_6F8064->field_0_pool;
+    for (miss2_0x11C* t = pool.field_4_pPrev; t; t = t->mpNext)
+    {
+        const int slot = static_cast<int>(t - pool.field_8_pool);
+        if (slot < 0 || slot >= 8)
+        {
+            continue;
+        }
+        seen[slot] = true;
+        if (!live[slot] || last[slot] != t->field_4_next_cmd)
+        {
+            SCR_CMD_HEADER* h = sm->GetBasePointer_512770(t->field_4_next_cmd);
+            fprintf(stderr, "gta2: trace: thread %d (id %d): line %u, type %d, next %d\n", slot, t->field_11A_thread_id,
+                    t->field_4_next_cmd, h ? h->field_2_type : -1, h ? h->field_4_cmd_next : -1);
+            last[slot] = t->field_4_next_cmd;
+            live[slot] = true;
+        }
+    }
+    for (int i = 0; i < 8; ++i)
+    {
+        if (live[i] && !seen[i])
+        {
+            fprintf(stderr, "gta2: trace: thread %d ended\n", i);
+            live[i] = false;
+        }
+    }
 }
 } // namespace
 
@@ -131,16 +257,30 @@ extern "C" void Gta2Native_ScenarioInit()
         return;
     }
     gTest = !strcmp(test, "save") ? kSave : !strcmp(test, "phone") ? kPhone : !strcmp(test, "watch") ? kWatch : kNone;
+    if (const char* delay = getenv("GTA2_TEST_DELAY"))
+    {
+        gDelay = atof(delay) * 1000.0;
+    }
     if (const char* phone = getenv("GTA2_TEST_PHONE"))
     {
         gPhone = atoi(phone);
     }
     fprintf(stderr, "gta2: test: scenario %s\n", gTest == kNone ? "unknown, ignored" : test);
+    if (getenv("GTA2_TEST_TRACE") && __sanitizer_set_death_callback)
+    {
+        __sanitizer_set_death_callback(OnDeath);
+    }
 }
 
 // Called once per loop iteration with the run's clock (ms).
 extern "C" void Gta2Native_ScenarioStep(double now)
 {
+    static bool unlock = getenv("GTA2_TEST_UNLOCK") && atoi(getenv("GTA2_TEST_UNLOCK")) != 0;
+    if (unlock && gta2_dev_unlock_areas())
+    {
+        fprintf(stderr, "gta2: test: all areas unlocked for this player\n");
+        unlock = false;
+    }
     if (gTest == kNone)
     {
         return;
@@ -157,10 +297,15 @@ extern "C" void Gta2Native_ScenarioStep(double now)
         gPlayerSince = now;
     }
     const double inGame = now - gPlayerSince;
+    static const bool trace = getenv("GTA2_TEST_TRACE") && atoi(getenv("GTA2_TEST_TRACE")) != 0;
+    if (trace)
+    {
+        TraceThreads();
+    }
 
     if (gTest == kSave)
     {
-        if (gStep == 0 && inGame > 3000)
+        if (gStep == 0 && inGame > gDelay)
         {
             fprintf(stderr, "gta2: test: score %d after adding 60000\n", gta2_dev_add_cash(60000));
             int x = 0;
@@ -192,7 +337,7 @@ extern "C" void Gta2Native_ScenarioStep(double now)
     }
     else if (gTest == kPhone)
     {
-        if (gStep == 0 && inGame > 3000)
+        if (gStep == 0 && inGame > gDelay)
         {
             AnswerPhone();
             gStep = 1;
