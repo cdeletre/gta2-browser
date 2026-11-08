@@ -48,6 +48,7 @@ extern "C" void gta2_port_reg_set_dword(const char* path, const char* name, DWOR
 extern "C" void gta2_port_reg_set_string(const char* path, const char* name, const char* value);
 extern "C" unsigned int gta2_port_present_count();
 extern "C" void Gta2Native_StatusLine(char* out, int size); // platform/status_native.cpp
+extern "C" void Gta2Native_InstallCrashHandler();           // platform/crash_native.cpp
 extern "C" int Gta2Native_TickCount(int* peds, int* cars);
 extern "C" void Gta2Native_SoakInit(); // platform/soak_native.cpp
 extern "C" void Gta2Native_SoakStep(double now);
@@ -180,6 +181,15 @@ int main(int argc, char** argv)
     {
         return 1;
     }
+    // After SDL's set-up: the crash report runs first, then SDL's own handler. ASan builds
+    // keep ASan's report.
+#if defined(__has_feature)
+#if !__has_feature(address_sanitizer)
+    Gta2Native_InstallCrashHandler();
+#endif
+#else
+    Gta2Native_InstallCrashHandler();
+#endif
     // Gameplay frames take the screen's shape: wider than 4:3, they are 480 high and as wide
     // as the shape (web/shell.js chooseViewWidth: 852 at 16:9); taller than 4:3, they are
     // 640 wide and as tall as the shape (720x720: 640x640). The 4:3 box keeps its scale
