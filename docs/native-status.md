@@ -43,20 +43,28 @@ Downtown et sortent proprement (code 0).**
 | 960×544 | 846×480 | aucune |
 | 1280×720, 1920×1080 (16:9) | 852×480 | aucune |
 | 1920×1152 (5:3) | 800×480 | aucune |
-| 720×720 (1:1), 1920×1680 (8:7) | 640×480 | en haut et en bas (25 % et 12 % de l'écran) |
+| 720×720 (1:1) | 640×640 | aucune |
+| 1920×1680 (8:7) | 640×560 | aucune |
 
-- La vue fait toujours 480 de haut, et sa largeur suit la forme de l'écran, bornée entre
-  640 et 1280 (`gta2_port_set_view_width`, comme le web). Les menus restent en 640×480,
-  centrés avec des bandes.
+- **La vue de jeu remplit tout l'écran** (patch natif 0015, 8 novembre 2026). Plus large que
+  4:3, elle fait 480 de haut et sa largeur suit la forme de l'écran, bornée entre 640 et
+  1280 (`gta2_port_set_view_width`, comme le web). Plus haute que 4:3, elle fait 640 de
+  large et sa hauteur suit la forme de l'écran, bornée entre 480 et 960
+  (`gta2_port_set_view_height`, natif seulement). Dans les deux cas la boîte 4:3 garde son
+  échelle : on voit plus de ville sur les côtés, ou au-dessus et en dessous. Quand la forme
+  arrondie (largeur paire) diffère de l'écran de moins de 2 %, le renderer étire l'image
+  pour combler le pixel restant. Vérifié : aucune ligne ni colonne noire au bord des
+  captures en 960×544, 720×720 et 1920×1680, tuiles et sprites jusqu'en bas.
+- Les menus restent en 640×480, centrés avec des bandes (ce sont des images 4:3).
 - Le HUD est à la même place qu'en 640×480 à toutes les tailles (le dernier cœur touche le
-  bord droit, comme dans l'original).
+  bord droit, comme dans l'original). En vue haute, les parties du haut (barres de respect,
+  argent, vies, cœurs, recherche, pager) restent collées en haut, le brief de mission en
+  bas, le reste (gros textes, flèches, pause) au centre.
 - L'image est nette même à une échelle non entière (×1,5 en 1280×720) : la géométrie est
   dessinée directement à la taille de l'écran, seules les textures sont agrandies (NEAREST).
 - En 320×240 (moitié de 640×480), les textes des menus restent lisibles.
-- **Écrans plus hauts que 4:3 (720×720 surtout) :** un quart de l'écran reste noir. Une vue
-  plus haute que 480 utiliserait tout l'écran, mais changerait ce que la caméra montre
-  (déviation de gameplay à documenter) ; pas fait.
-- Pas vérifié sur une vraie console autre que 1920×1080.
+- Pas vérifié sur une vraie console autre que 1920×1080 (vue 852×480, écran rempli,
+  30,4 ticks/s avec le binaire du 8 novembre).
 
 Le binaire release cherche `libSDL2` dans les chemins du système ; dans le conteneur, celle
 de `/usr/local/lib` (qui a le pilote `offscreen`) demande `LD_LIBRARY_PATH=/usr/local/lib`.
@@ -93,18 +101,25 @@ cas provoqué ci-dessous** (téléphone 11 décroché à 3 s).
   `map_0x370.cpp` colonnes et zones), le nom de gang (`Hud.cpp:158`), et des écritures
   non alignées dans `PlyDat_2BC0.cpp:430` (permises en mode utilisateur sur aarch64, comme
   sur x86).
-- **Pas vérifié :** une sauvegarde `.svg` faite par le jeu Windows ou le build web, puis
-  reprise en natif. Les structures écrites (`SaveData_748`, `Map_sub`, `gmp_block_info`)
-  gardent leur taille exacte en natif (`GTA2_ASSERT_SIZEOF_ALWAYS`), donc le format est
-  le même ; il manque un fichier de l'original pour l'essayer. Une mission jouée jusqu'au
-  bout (le soak ne réussit pas les objectifs).
+- **Profil et sauvegarde du jeu Windows** (un dossier `player\` « 100 % » téléchargé,
+  copié dans un dossier de sauvegardes de test, sous ASan) : le menu affiche le nom
+  (ILUMINAT), le score 999 999 999, la zone 3 et le stage bonus débloqués. « Resume saved
+  status » reprend `plyslot0.svg` à Downtown, devant l'église, à la position du fichier
+  (159,9 ; 137,6 ; 2,0), avec l'argent du fichier (0) et `bLoadedFromSave` levé ; 90 s de
+  soak sans erreur ASan. La zone 3 démarre Industrial, le stage bonus 1 (`mike2h.gmp`) se
+  joue jusqu'à l'écran de résultats, qui affiche les meilleurs scores de `hiscores.hsc`.
+  Seul nouveau rapport UBSan : `map_0x370.cpp:3429` (`FindRailwayBelowZAtCoord`), le même
+  tableau de colonne de longueur variable que les autres lignes de `map_0x370.cpp`.
+- **Pas vérifié :** une mission jouée jusqu'au bout (le soak ne réussit pas les objectifs) ;
+  une sauvegarde du build web reprise en natif.
 
 ## Log de la console
 
 Ce que le jeu écrit sur stdout/stderr (le `log.txt` du lanceur) :
 - au démarrage, une ligne par réglage (dossiers, vidéo, manette, audio), les quatre lignes
   d'initialisation du moteur et le GPU ;
-- puis une ligne d'état toutes les 5 s (ticks/s, carte, peds, voitures, position) ;
+- puis une ligne d'état toutes les 60 s (ticks/s, carte, peds, voitures, position) ;
+  `GTA2_STATUS_SECONDS` change l'intervalle, `GTA2_STATUS_SECONDS=0` la supprime ;
 - les ouvertures de fichiers qui échouent, sauf celles que le jeu fait exprès : la
   recherche du CD de musique sur chaque lecteur (`X:\GTAUDIO\1.wav`, dont le premier passage
   a lieu dans un constructeur global, avant que `main()` ait choisi le dossier des données)
@@ -269,8 +284,9 @@ Ce que le jeu écrit sur stdout/stderr (le `log.txt` du lanceur) :
     `map "data\wil.gmp", player at (159.50, 139.50, 2.00) blocks` ;
   - 60 s sans erreur ASan, sortie propre (code 0) ;
   - le build sans sanitizer tourne aussi jusqu'au bout (20 s essayées).
-- Une ligne d'état toutes les 5 s (`port/native/platform/status_native.cpp`) : carte,
-  position du joueur, véhicule.
+- Une ligne d'état périodique (`port/native/platform/status_native.cpp`) : carte,
+  position du joueur, véhicule. Toutes les 5 s à l'époque, 60 s par défaut depuis le
+  8 novembre (`GTA2_STATUS_SECONDS`).
 
 ## Soaks (jalon 2, observé)
 
@@ -309,7 +325,13 @@ et « Écarts par rapport à l'original » ci-dessous).
 
 ## Écarts par rapport à l'original (natif seulement)
 
-Les deux remplacent une lecture hors de son objet, dont le résultat dépendait de ce qui
+- **Vue haute** (patch natif 0015) : sur un écran plus haut que 4:3, on voit plus de ville
+  au-dessus et en dessous du joueur, comme le widescreen du web en montre plus sur les
+  côtés (D07). Avec la marge d'activation (active par défaut, comme dans le web), les
+  limites de la caméra qui décident de l'apparition et de la disparition des peds et des
+  voitures couvrent aussi cette hauteur. En 4:3 et plus large, rien ne change.
+
+Les deux suivants remplacent une lecture hors de son objet, dont le résultat dépendait de ce qui
 suivait en mémoire, par une valeur fixe :
 
 - **Éclairage des chiffres du score qui explose** (patch natif 0012) : `gQuadVerts_706B88`
