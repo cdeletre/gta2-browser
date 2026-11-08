@@ -1,9 +1,42 @@
 # Port natif Linux aarch64 : statut
 
-Mis à jour le 8 novembre 2026. **Jalons 1 à 3 atteints ; jalon 4 (clavier et manette) fait et
-vérifié par événements SDL simulés, pas encore essayé à la main sur la console.** Le jeu
-s'affiche sur la console (MANGMI Air X, ROCKNIX 20261101) en 1920×1080 par Wayland, avec le
-GPU (Adreno 610) : menu, puis Downtown, à 60 images/s et 30,3 ticks/s.
+Mis à jour le 8 novembre 2026. **Jalons 1 à 4 atteints ; jalon 5 (son) fait, à confirmer à
+l'oreille sur la console.** Le jeu s'affiche sur la console (MANGMI Air X, ROCKNIX 20261101)
+en 1920×1080 par Wayland, avec le GPU (Adreno 610) : menu, puis Downtown, à 60 images/s et
+30,3 ticks/s ; manette et clavier ; son par PulseAudio.
+
+## Jalon 5 : son
+
+- **Mixeur** (`port/native/audio/audio_sdl.cpp`), derrière les mêmes ponts que
+  `web/audio.js` (`port/audio/miles_web.cpp` inchangé) : callback SDL audio, 44100 Hz
+  stéréo 16 bits.
+  - **Effets :** PCM de la banque de sons (8 bits non signé ou 16 bits, mono ou stéréo),
+    joué à la fréquence de l'échantillon (interpolation linéaire), volume /127,
+    panoramique à puissance constante (les formules du `StereoPannerNode` de Web Audio),
+    boucles avec points de boucle ; mêmes conversions et même cache (adresse, longueur,
+    format, somme de contrôle partielle) que le web.
+  - **Flux (voix, radio, musique) :** WAV IMA ADPCM ou PCM 16 bits, lus en mémoire à
+    l'ouverture, décodés par blocs de 0,5 s jusqu'à 1 s d'avance **dans le thread du jeu**
+    (`Gta2Native_AudioPump`, à chaque itération), le callback ne faisant que mixer. Statut
+    et position suivent l'horloge murale (comme le web) ; après un manque de données, le
+    décodeur se recale sur l'horloge.
+  - `GTA2_AUDIO=0` coupe le son. Le build `--headless` garde des ponts vides
+    (`audio_null.cpp`).
+- **Décodeur vérifié échantillon par échantillon contre le JS :** `scripts/native/check_ima.sh`
+  décode chaque fichier avec `wav_ima.cpp` et avec les fonctions de `web/audio.js`
+  exécutées telles quelles sous Node (`scripts/native/wav_dump_js.js`), puis compare les
+  sorties octet par octet. **Les 119 WAV du jeu sont identiques**, dont la station `1.wav`
+  entière (31,7 millions d'échantillons stéréo). Node est ajouté au `Dockerfile`.
+- **Dans le conteneur** (`SDL_AUDIODRIVER=disk`, 40 s de soak) : la sortie n'est jamais
+  silencieuse (RMS de 1 600 à 13 800 par seconde), gauche et droite diffèrent quand des
+  sons sont panoramiqués. La crête atteint souvent la saturation (32 767) quand le jeu
+  superpose radio et effets ; le web fait la même somme (Web Audio écrête aussi à la
+  sortie). Pas encore comparé à l'oreille avec le web.
+- **Sur la console :** SDL choisit PulseAudio (44100 Hz, 2 canaux, tampon de 1024 images) ;
+  la cadence reste à 30,2–30,3 ticks/s. **Pas encore écouté.**
+- **Pas fait :** la touche R du web (couper la radio en voiture) ; les identifiants de sons
+  restent le pointeur tronqué en `int` de `miles_web.cpp` (`Id()`), collision très
+  improbable mais possible en 64 bits.
 
 ## Jalon 4 : clavier et manette
 

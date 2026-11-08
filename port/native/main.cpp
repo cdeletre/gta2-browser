@@ -1,5 +1,5 @@
 // Native entry point (Linux aarch64): SDL2 window + GLES 2 renderer (jalon 3), or no
-// window at all in GTA2_HEADLESS builds. No sound yet.
+// window at all in GTA2_HEADLESS builds. Sound through SDL audio (audio/audio_sdl.cpp).
 //
 // Does what web/shell.js and port/platform/main_web.cpp do in the browser:
 // registry defaults, the original's C runtime start-up (Gta2Port_StaticInit),
@@ -49,6 +49,9 @@ extern "C" void Gta2Native_AutostartKey(bool down);
 extern "C" void Gta2Native_SetSaveDir(const char* dir);       // platform/fs_native.cpp
 extern "C" int Gta2Native_RegistryLoad(const char* path);    // platform/registry_native.cpp
 extern "C" bool Gta2Native_RegistrySave();
+extern "C" void Gta2Native_AudioInit();     // audio/audio_sdl.cpp (audio_null.cpp headless)
+extern "C" void Gta2Native_AudioPump();
+extern "C" void Gta2Native_AudioShutdown();
 extern "C" int gta2_port_set_view_width(int width); // port/render/vid_web.cpp
 #if !defined(GTA2_NATIVE_HEADLESS)
 extern "C" bool Gta2Native_WindowInit(); // platform/window_sdl.cpp
@@ -173,6 +176,7 @@ int main(int argc, char** argv)
     const int viewWidth = gta2_port_set_view_width(dh > 0 ? static_cast<int>(480.0 * dw / dh) : 640);
     fprintf(stderr, "gta2: gameplay view %dx480\n", viewWidth);
 #endif
+    Gta2Native_AudioInit(); // before WinMain: the game opens its sound banks there
 
     SeedRegistry();
     // The saved registry overrides the defaults (as web/shell.js does with its stored copy),
@@ -243,6 +247,8 @@ int main(int argc, char** argv)
             Gta2Native_SoakStep(now);
         }
 
+        Gta2Native_AudioPump(); // streams decoded ahead of the audio callback
+
         const unsigned before = gta2_port_present_count();
         const int slice = Gta2Port_RunLoopSlice();
         if (slice != -1)
@@ -282,6 +288,7 @@ int main(int argc, char** argv)
         }
     }
     Gta2Native_RegistrySave();
+    Gta2Native_AudioShutdown();
 #if !defined(GTA2_NATIVE_HEADLESS)
     Gta2Native_WindowShutdown();
 #endif
