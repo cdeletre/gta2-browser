@@ -1,7 +1,6 @@
 # Port natif Linux aarch64 : statut
 
-Mis à jour le 8 novembre 2026. **Jalons 1 à 4 atteints ; jalon 5 (son) fait, à confirmer à
-l'oreille sur la console.** Le jeu s'affiche sur la console (MANGMI Air X, ROCKNIX 20261101)
+Mis à jour le 8 novembre 2026. **Jalons 1 à 5 atteints.** Le jeu s'affiche sur la console (MANGMI Air X, ROCKNIX 20261101)
 en 1920×1080 par Wayland, avec le GPU (Adreno 610) : menu, puis Downtown, à 60 images/s et
 30,3 ticks/s ; manette et clavier ; son par PulseAudio.
 
@@ -33,7 +32,9 @@ en 1920×1080 par Wayland, avec le GPU (Adreno 610) : menu, puis Downtown, à 60
   superpose radio et effets ; le web fait la même somme (Web Audio écrête aussi à la
   sortie). Pas encore comparé à l'oreille avec le web.
 - **Sur la console :** SDL choisit PulseAudio (44100 Hz, 2 canaux, tampon de 1024 images) ;
-  la cadence reste à 30,2–30,3 ticks/s. **Pas encore écouté.**
+  la cadence reste à 30,2–30,3 ticks/s. **Écouté par le propriétaire (8 novembre 2026),
+  environ 4 minutes de jeu à la manette : tous les sons fonctionnent** (musique du menu,
+  effets, voix, radio). Fin de partie normale depuis le jeu (code 0).
 - **Pas fait :** la touche R du web (couper la radio en voiture) ; les identifiants de sons
   restent le pointeur tronqué en `int` de `miles_web.cpp` (`Id()`), collision très
   improbable mais possible en 64 bits.
