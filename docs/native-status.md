@@ -1,6 +1,6 @@
 # Port natif Linux aarch64 : statut
 
-Mis à jour le 8 novembre 2026. **Jalons 1 à 5 atteints.** Le jeu s'affiche sur la console (MANGMI Air X, ROCKNIX 20261101)
+Mis à jour le 8 novembre 2026. **Jalons 1 à 5 atteints** ; jalon 6 en cours (paquet PortMaster de l'utilisateur, WIP). Le jeu s'affiche sur la console (MANGMI Air X, ROCKNIX 20261101)
 en 1920×1080 par Wayland, avec le GPU (Adreno 610) : menu, puis Downtown, à 60 images/s et
 30,3 ticks/s ; manette et clavier ; son par PulseAudio.
 
@@ -28,6 +28,89 @@ SDL2 est lié par son chemin plutôt qu'avec les options de `sdl2.pc`, qui ajout
   sortie propre (code 0), 8 810 ticks, 298 actions, 6 voitures ; cadence de **30,1 à
   30,5 ticks/s sur toutes les tranches de 5 s** après le chargement (49 sur 57 à 30,3).
   Le soak a joué sur le profil 0 de `saves/` de la console.
+
+## Résolutions d'écran (observé, 8 novembre 2026)
+
+Dix tailles de fenêtre dans le conteneur (`GTA2_WINDOW`, binaire release, llvmpipe), avec
+une capture du menu et deux en jeu : 640×480, 720×480, 720×720, 960×544, 1280×720,
+1920×1080, 1920×1152, 1920×1680, 480×320 et 320×240. **Toutes démarrent, entrent dans
+Downtown et sortent proprement (code 0).**
+
+| Écran | Vue de jeu | Bandes noires en jeu |
+|---|---|---|
+| 640×480, 320×240 (4:3) | 640×480 | aucune |
+| 720×480, 480×320 (3:2) | 720×480 | aucune |
+| 960×544 | 846×480 | aucune |
+| 1280×720, 1920×1080 (16:9) | 852×480 | aucune |
+| 1920×1152 (5:3) | 800×480 | aucune |
+| 720×720 (1:1), 1920×1680 (8:7) | 640×480 | en haut et en bas (25 % et 12 % de l'écran) |
+
+- La vue fait toujours 480 de haut, et sa largeur suit la forme de l'écran, bornée entre
+  640 et 1280 (`gta2_port_set_view_width`, comme le web). Les menus restent en 640×480,
+  centrés avec des bandes.
+- Le HUD est à la même place qu'en 640×480 à toutes les tailles (le dernier cœur touche le
+  bord droit, comme dans l'original).
+- L'image est nette même à une échelle non entière (×1,5 en 1280×720) : la géométrie est
+  dessinée directement à la taille de l'écran, seules les textures sont agrandies (NEAREST).
+- En 320×240 (moitié de 640×480), les textes des menus restent lisibles.
+- **Écrans plus hauts que 4:3 (720×720 surtout) :** un quart de l'écran reste noir. Une vue
+  plus haute que 480 utiliserait tout l'écran, mais changerait ce que la caméra montre
+  (déviation de gameplay à documenter) ; pas fait.
+- Pas vérifié sur une vraie console autre que 1920×1080.
+
+Le binaire release cherche `libSDL2` dans les chemins du système ; dans le conteneur, celle
+de `/usr/local/lib` (qui a le pilote `offscreen`) demande `LD_LIBRARY_PATH=/usr/local/lib`.
+
+## Missions, sauvegardes et districts (observé, 8 novembre 2026)
+
+Sous ASan + UBSan dans le conteneur, avec les scénarios de `platform/scenario_native.cpp`
+(`GTA2_TEST`, voir l'en-tête du fichier) et `GTA2_MENU_KEYS` pour choisir le district ou
+reprendre une sauvegarde. **78 lancements sous ASan ; les 4 erreurs sont toutes le
+cas provoqué ci-dessous** (téléphone 11 décroché à 3 s).
+
+| Quoi | Lancements | Résultat |
+|---|---|---|
+| Sauvegarde à l'église, Downtown, Residential, Industrial | 3 | payée (−50 000 points), `plyslot0.svg` écrit (3 232 octets à Downtown) |
+| Reprise de ces sauvegardes (« Resume saved status ») | 3 | même district, 10 000 points, `bLoadedFromSave` levé |
+| Téléphones de mission de Downtown (18), décrochés à 20 s, puis soak 100 s | 18 | 7 lancent une mission qui tourne jusqu'à la fin (96 s) ; les autres ne lèvent pas le drapeau de mission (cause pas vérifiée : sans doute pas encore disponibles en début de partie) |
+| Les mêmes, décrochés à 3 s | 18 | 17 sans erreur, 1 plantage provoqué (ci-dessous) |
+| Residential et Industrial : soak 300 s, téléphones 0 à 4 | 2 + 10 | 4 missions lancées (jusqu'à 95 s) |
+
+- Les districts 2 et 3 demandent un profil qui les a débloqués : `GTA2_TEST_UNLOCK=1` le
+  fait depuis les menus (comme la triche UKGAMER). Avec lui, `ok,left,ok` démarre
+  Residential (`ste.gmp`) ; `ok,right,ok` démarre Industrial (`bil.gmp`), mais `ok,ok` a
+  aussi donné Industrial une fois : vérifier la carte dans le log.
+- **Plantage provoqué, pas un défaut du port :** décrocher un deuxième téléphone pendant
+  que la mission du premier démarre (le soak entre dans celle du téléphone près de l'église
+  dès les premières secondes) charge la deuxième mission par-dessus la première avant que
+  celle-ci ait levé son drapeau « en mission » ; le fil de la première lit alors une ligne
+  de script effacée (`miss2_0x11C::PoolUpdate`, adresse nulle). Le moteur ferait pareil sur
+  Windows. Un joueur ne peut pas toucher deux téléphones aussi vite ; à 20 s, le même
+  téléphone (11) lance sa mission sans erreur. Trouvé avec `GTA2_TEST_TRACE=1`.
+- **Rapports UBSan :** 30 distincts sur ces lancements, tous dans les catégories de
+  l'entrée 15 de `docs/native-64bit.md`. Nouveaux dans Residential et Industrial : les
+  mêmes tableaux de longueur variable lus dans les fichiers (`Car_BC.cpp:2152` remaps,
+  `map_0x370.cpp` colonnes et zones), le nom de gang (`Hud.cpp:158`), et des écritures
+  non alignées dans `PlyDat_2BC0.cpp:430` (permises en mode utilisateur sur aarch64, comme
+  sur x86).
+- **Pas vérifié :** une sauvegarde `.svg` faite par le jeu Windows ou le build web, puis
+  reprise en natif. Les structures écrites (`SaveData_748`, `Map_sub`, `gmp_block_info`)
+  gardent leur taille exacte en natif (`GTA2_ASSERT_SIZEOF_ALWAYS`), donc le format est
+  le même ; il manque un fichier de l'original pour l'essayer. Une mission jouée jusqu'au
+  bout (le soak ne réussit pas les objectifs).
+
+## Log de la console
+
+Ce que le jeu écrit sur stdout/stderr (le `log.txt` du lanceur) :
+- au démarrage, une ligne par réglage (dossiers, vidéo, manette, audio), les quatre lignes
+  d'initialisation du moteur et le GPU ;
+- puis une ligne d'état toutes les 5 s (ticks/s, carte, peds, voitures, position) ;
+- les ouvertures de fichiers qui échouent, sauf celles que le jeu fait exprès : la
+  recherche du CD de musique sur chaque lecteur (`X:\GTAUDIO\1.wav`, dont le premier passage
+  a lieu dans un constructeur global, avant que `main()` ait choisi le dossier des données)
+  et la détection des langues (`data\?.gxt`). `GTA2_LOG_FILES=1` les remet ;
+- plus les quatre bannières « Coop vX.Y / date » que les journaux du moteur écrivaient à la
+  sortie (patch natif 0014).
 
 ## Jalon 5 : son
 
@@ -212,7 +295,9 @@ Build `--sanitize` (25 patches web + 13 natifs), `GTA2_AUTOSTART=1`, dans `gta2-
   monte en voiture, et réapparaît ailleurs après une mort ou une arrestation ; jusqu'à
   24 piétons et 73 voitures autour de lui.
 - **Ce que le soak ne couvre pas :** les missions (aucune n'est démarrée volontairement),
-  les sauvegardes, les deux autres districts, le réseau.
+  les sauvegardes, les deux autres districts, le réseau. Les trois premiers sont couverts
+  depuis par les scénarios (« Missions, sauvegardes et districts » plus haut) ; il reste le
+  réseau.
 - **Rapports UBSan restants, non bloquants :** 29 distincts sur les cinq soaks, tous
   classés sans lien avec le 64 bits (`docs/native-64bit.md`, entrée 15).
 - **Avertissements de compilation :** 40 distincts, tous classés sans conséquence (même

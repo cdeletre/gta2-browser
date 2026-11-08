@@ -61,14 +61,6 @@ int gStep = 0;
 double gNextLog = 0;
 double gStepAt = 0;
 
-// Up and down arrows (DirectInput, VK): walk forward, then back, so the ped moves through
-// the touch point the script put on the trigger (Car_214::AddThreadTrigger_5C86C0): touch
-// points fire on contact while moving, not on a teleport alone.
-void Walk(int step)
-{
-    const bool forward = step == 0 || step == 1;
-    gta2_port_key(forward ? 0xC8 : 0xD0, forward ? 0x26 : 0x28, step == 0 || step == 2, 0);
-}
 
 int ToBlocks(const Fix16& f)
 {
@@ -80,7 +72,7 @@ Player* ThePlayer()
     return gGame_0x40_67E008 ? gGame_0x40_67E008->field_38_orf1 : nullptr;
 }
 
-bool SaveZone(int* x, int* y)
+bool SaveZone(int* x, int* y, int* z)
 {
     ScriptManager_C1EA8* sm = gScriptManager_6F8060;
     int found = 0;
@@ -112,6 +104,7 @@ bool SaveZone(int* x, int* y)
             {
                 *x = cx;
                 *y = cy;
+                *z = cmd->field_C_rect.field_0_pos.field_8_z.mValue;
             }
         }
     }
@@ -305,30 +298,116 @@ extern "C" void Gta2Native_ScenarioStep(double now)
 
     if (gTest == kSave)
     {
+        // 0: pay; 1: leave the car (Residential starts in one); 2-3: teleport to the zone's
+        // centre or a block next to it, keeping the first spot at the zone's height (a
+        // teleport lands on top of the column, the roof at Downtown's church); 10-17:
+        // turns and walks until the save is paid for (below).
+        static const int kAround[][2] = {{0, 0},  {0, 1},  {0, -1}, {1, 0},  {-1, 0}, {1, 1},  {-1, 1}, {1, -1},
+                                         {-1, -1}, {0, 2},  {0, -2}, {2, 0},  {-2, 0}, {2, 2},  {-2, 2}, {2, -2},
+                                         {-2, -2}, {1, 2},  {-1, 2}, {1, -2}, {-1, -2}, {2, 1}, {-2, 1}, {2, -1},
+                                         {-2, -1}};
+        const int kSpots = static_cast<int>(sizeof(kAround) / sizeof(kAround[0]));
+        static int zoneX = 0;
+        static int zoneY = 0;
+        static int zoneZ = 0;
+        static int spot = 0;
+        static int exits = 0;
+        static double enterUpAt = -1;
+        if (enterUpAt >= 0 && now >= enterUpAt)
+        {
+            gta2_port_key(0x1C, 0x0D, 0, 0);
+            enterUpAt = -1;
+        }
         if (gStep == 0 && inGame > gDelay)
         {
             fprintf(stderr, "gta2: test: score %d after adding 60000\n", gta2_dev_add_cash(60000));
-            int x = 0;
-            int y = 0;
-            if (!SaveZone(&x, &y))
+            if (!SaveZone(&zoneX, &zoneY, &zoneZ))
             {
                 fprintf(stderr, "gta2: test: no save zone in this district's script\n");
                 gStep = 99;
                 return;
             }
-            // One block south of the zone's centre: the centre itself can be under a roof,
-            // and a teleport lands on top of the column (the church's at (159, 137)).
-            const int moved = gta2_dev_teleport(x, y + 1);
-            fprintf(stderr, "gta2: test: moved into the save zone: %s\n", moved ? "yes" : "no (in a car?)");
             gStep = 1;
             gStepAt = now;
         }
-        // Then forward for 0.5 s and back for 0.5 s, twice.
-        else if (gStep >= 1 && gStep <= 8 && now >= gStepAt + 500)
+        else if (gStep == 1 && now >= gStepAt)
         {
-            Walk((gStep - 1) % 4);
+            if (s[1] && exits < 5)
+            {
+                fprintf(stderr, "gta2: test: leaving the car\n");
+                gta2_port_key(0x1C, 0x0D, 1, 0); // Enter: get out
+                enterUpAt = now + 150;
+                gStepAt = now + 2500;
+                ++exits;
+            }
+            else
+            {
+                gStep = 2;
+            }
+        }
+        else if (gStep == 2)
+        {
+            const int moved = gta2_dev_teleport(zoneX + kAround[spot][0], zoneY + kAround[spot][1]);
+            if (!moved)
+            {
+                fprintf(stderr, "gta2: test: cannot move the player (still in a car?)\n");
+                gStep = 99;
+                return;
+            }
+            gStep = 3;
+            gStepAt = now + 300;
+        }
+        else if (gStep == 3 && now >= gStepAt)
+        {
+            const int dz = s[4] - zoneZ;
+            fprintf(stderr, "gta2: test: at (%.2f, %.2f, %.2f), the zone is at height %.2f\n", s[2] / 16384.0,
+                    s[3] / 16384.0, s[4] / 16384.0, zoneZ / 16384.0);
+            if (dz > -10000 && dz < 10000)
+            {
+                gStep = 10;
+                gStepAt = now;
+            }
+            else if (++spot < kSpots)
+            {
+                gStep = 2;
+            }
+            else
+            {
+                fprintf(stderr, "gta2: test: no spot at the zone's height\n");
+                gStep = 99;
+            }
+        }
+        else if (gStep == 10 + 6 * 8)
+        {
+            // Not paid from this spot (a wall between it and the zone): the next one.
+            gStep = ++spot < kSpots ? 2 : 99;
+            if (gStep == 99)
+            {
+                fprintf(stderr, "gta2: test: could not walk into the save zone\n");
+            }
+        }
+        else if (gStep >= 10 && gStep < 10 + 6 * 8 && now >= gStepAt)
+        {
+            // Eight rounds of: turn left a little, forward 0.5 s, back 0.5 s. The spot is
+            // next to the zone, so one of the headings walks into it. Stops once paid.
+            if (player->GetScore_421980() < 20000)
+            {
+                fprintf(stderr, "gta2: test: the save was paid for\n");
+                gStep = 98;
+                return;
+            }
+            const int phase = (gStep - 10) % 6;
+            static const struct
+            {
+                int scancode;
+                int vk;
+                int down;
+                int ms;
+            } kWiggle[6] = {{0xCB, 0x25, 1, 250}, {0xCB, 0x25, 0, 0}, {0xC8, 0x26, 1, 500},
+                            {0xC8, 0x26, 0, 0},   {0xD0, 0x28, 1, 500}, {0xD0, 0x28, 0, 0}};
+            gta2_port_key(kWiggle[phase].scancode, kWiggle[phase].vk, kWiggle[phase].down, 0);
+            gStepAt = now + kWiggle[phase].ms;
             ++gStep;
-            gStepAt = now;
         }
     }
     else if (gTest == kWatch)
@@ -344,7 +423,7 @@ extern "C" void Gta2Native_ScenarioStep(double now)
         }
     }
 
-    if (gStep > 0 && gStep < 99 && now >= gNextLog)
+    if (gStep > 0 && gStep < 98 && now >= gNextLog)
     {
         gNextLog = now + 1000;
         ScriptManager_C1EA8* sm = gScriptManager_6F8060;
