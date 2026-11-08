@@ -1,0 +1,36 @@
+From ccef7091938b1145974c950c786bc7eabf4b7d89 Mon Sep 17 00:00:00 2001
+From: GTA2 port <port@localhost>
+Date: Sun, 8 Nov 2026 18:08:05 -0500
+Subject: [PATCH] native: the station count starts at 0 in each game
+
+gStationCount_6FF1CC was never reset: it grew with every district
+loaded, and past the 100 entries of field_0_stations the bus stop
+loop read beyond the table and crashed (attract replays, after 20 to
+30 min). The web build has the same defect.
+---
+ Source/PublicTransport.cpp | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/Source/PublicTransport.cpp b/Source/PublicTransport.cpp
+index 9b72d267..8262da25 100644
+--- a/Source/PublicTransport.cpp
++++ b/Source/PublicTransport.cpp
+@@ -875,6 +875,15 @@ void PublicTransport_181C::SetupTrainAndBusStops_5794B0()
+     char Buffer[8];
+     byte_6FF1CD = 0;
+     dword_6FF1D0 = 0;
++#if defined(GTA2_PORT_NATIVE)
++    // gStationCount_6FF1CC counts the stations of field_0_stations, a fresh table in each
++    // game (Game_0x40 news a PublicTransport_181C), but nothing set it back to 0: it grew
++    // with every district loaded, and once past the table's 100 entries the bus stop loop
++    // (GetBusStopOnScreen_5799B0) read the memory after it as stations and crashed on a
++    // garbage zone pointer (attract replays of Industrial, after 20 to 30 min). The web build
++    // has the same defect.
++    gStationCount_6FF1CC = 0;
++#endif
+     if (!bSkip_trains_67D550)
+     {
+         for (u8 station_zone_kind = 0; station_zone_kind < 5; station_zone_kind++)
+-- 
+2.54.0
+

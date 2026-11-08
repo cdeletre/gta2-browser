@@ -77,6 +77,22 @@ essais mesurés par SSH, binaire dans `/tmp`, cache disque vidé avant chaque es
   fournit seulement les manettes branchées. Les essais par SSH passent la base par
   `SDL_GAMECONTROLLERCONFIG_FILE`.
 
+## Plantage pendant les démos du menu (observé, 8 novembre 2026)
+
+- **Vu par l'utilisateur :** le port laissé sur le menu, qui enchaîne ses 3 démos
+  (`data\attract\attr1..3.rep`), plante par segfault au bout de 20 à 30 min, sur la Air X,
+  la R36S, le RG353VS et la G350, toujours pendant la démo d'Industrial (`bil.gmp`).
+- **Rapport de plantage** (`platform/crash_native.cpp`) : le log reçoit le signal, l'adresse,
+  pc et lr, la ligne d'état du jeu et la pile (module + décalage, et l'adresse à passer à
+  `addr2line` avec le `.debug` de la même release). Installé après SDL, puis le gestionnaire
+  de SDL s'exécute. Pas installé sous ASan.
+- **Cause, d'après le rapport sur la R36S :** lecture à l'adresse 0x3 dans
+  `PublicTransport_181C::GetBusStopOnScreen_5799B0`. `gStationCount_6FF1CC` n'était jamais
+  remis à zéro (`SetupTrainAndBusStops_5794B0`, fonction identique à l'original) : il grossit
+  à chaque district chargé. Au-delà des 100 stations de la table, la boucle lit la mémoire qui
+  suit comme des stations. Corrigé par le patch natif 0016, qui le remet à 0 au début de
+  chaque partie. Même défaut dans le build web (« Correctifs à reporter »).
+
 ## Écran Options (observé, 8 novembre 2026)
 
 L'entrée « Options » du menu principal lançait GTA2 Manager, un programme Windows séparé. Le
@@ -567,6 +583,7 @@ reporter l'un d'eux, il suffit de retirer sa garde `#if defined(GTA2_PORT_NATIVE
 | `port/audio/miles_web.cpp`, `AIL_release_sample_handle` | handle nul déréférencé (`cSampleManager::Terminate_58DAE0` libère des cases encore vides au premier `AllocSamples_58D9F0`) | écriture silencieuse à l'adresse 0x30 de la mémoire wasm, à chaque initialisation du son |
 | `port/render/gbh_web.cpp` (`Draw`, lumières) avec `gQuadVerts_706B88` (`Draw.cpp`) | un dessin éclairé lit les positions monde après les 4 sommets ; `DrawFigure_5D7EC0` n'en remplit que 4 | les chiffres du score qui explose sont éclairés d'après des globaux sans rapport (lecture hors du tableau) |
 | `sound_obj::RadioEmitter` (`sound_obj.hpp`) | index 102, 103 ou 128 quand `field_54F7[0]` vaut 101, 0x66 ou 127 | lectures et écritures 2 à 3 Ko après `gSound_obj_66F680` ; la voiture de police quittée reçoit un « statut d'émetteur » quelconque |
+| `PublicTransport_181C::SetupTrainAndBusStops_5794B0` (patch natif 0016) | `gStationCount_6FF1CC` jamais remis à zéro : il grossit à chaque district chargé, et au-delà des 100 stations de `field_0_stations` la boucle des arrêts de bus lit hors du tableau | plantage (ou lecture hors de l'objet) après plusieurs chargements de districts dans la même session, par exemple les démos du menu |
 
 ## À reprendre plus tard (64 bits, hors jalon 1)
 
