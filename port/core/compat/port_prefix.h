@@ -31,6 +31,11 @@
 #include <cstdlib>
 #include <cstring>
 #include <cwchar>
+#if defined(__GLIBCXX__)
+/* libstdc++ (native build) names std::vswprintf inside <string> (std::to_wstring):
+ * parsed here, before the redirects below rename it. The web build's libc++ does not. */
+#include <string>
+#endif
 #endif
 
 #ifdef __cplusplus
