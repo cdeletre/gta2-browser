@@ -12,6 +12,14 @@
 // format. Textures are NPOT with CLAMP_TO_EDGE, NEAREST and no mipmaps, which GLES 2.0
 // allows.
 //
+// Texture atlas (native only): the game registers tens of thousands of small textures (one
+// per sprite and palette, about 20x20). Each GL texture costs about 1 ms and 20 KB in the
+// Mali blob of an RK3326 (R36S: 80 s and 800 MB to load Downtown), so images up to 254
+// pixels a side go into 1024x1024 pages instead, on shelves, with a 1-pixel border copied
+// from their edges (sampling at u = 0 or 1 then gives the edge texel, as CLAMP_TO_EDGE on
+// their own texture did). Their UVs are remapped at present, and consecutive batches on
+// the same page and blend mode become one draw.
+//
 // The window and the buffer swap are in port/native/platform/window_sdl.cpp; a GL ES 2.0
 // context is current on this thread before the first call here.
 #if !defined(GTA2_NATIVE_HEADLESS)
@@ -19,10 +27,13 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <time.h>
 
 #include <math.h>
 
 #include <unordered_map>
+#include <vector>
 
 #include "render/frame.h"
 
@@ -56,7 +67,12 @@ void main() {
 
 const char* const kFragmentShader = R"(#version 100
 precision mediump float;
+// Atlas UVs need a texel in 1024: more than mediump's 10-bit mantissa.
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+varying highp vec2 vUv;
+#else
 varying vec2 vUv;
+#endif
 varying vec4 vColour;
 uniform sampler2D uTexture;
 uniform int uBlend;
@@ -77,6 +93,30 @@ enum Attrib : GLuint
     kColour = 3
 };
 
+constexpr int kPage = 1024;   // atlas page size
+constexpr int kMaxInAtlas = 254; // larger images (plus border) get their own texture
+
+struct Shelf
+{
+    int y, h, x;
+};
+
+struct Page
+{
+    GLuint tex = 0;
+    int bottom = 0; // first row below the shelves
+    std::vector<Shelf> shelves;
+};
+
+// Where a game texture is: its own GL texture (page < 0), or a rectangle of an atlas page
+// (x, y: the image's top-left inside the border).
+struct Slot
+{
+    GLuint tex = 0;
+    int page = -1;
+    int x = 0, y = 0, w = 0, h = 0;
+};
+
 struct Renderer
 {
     bool ready = false;
@@ -85,7 +125,11 @@ struct Renderer
     GLint uView = -1;
     GLint uBlend = -1;
     int blend = -1;
-    std::unordered_map<uint32_t, GLuint> textures;
+    std::unordered_map<uint32_t, Slot> textures;
+    std::vector<Page> pages;
+    std::unordered_map<uint32_t, std::vector<Slot>> freeSlots; // by (w << 16 | h)
+    std::vector<uint8_t> padded;                                // upload scratch
+    std::vector<FrameVertex> verts;                             // present scratch
 };
 Renderer gR;
 
@@ -164,6 +208,99 @@ void SetBlend(int mode)
         glBlendFunc(GL_ONE, GL_ONE);
     }
 }
+void SetParams()
+{
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+}
+
+// A free rectangle of (w + 2) x (h + 2) in some page: best-fitting shelf, else a new
+// shelf, else a new page.
+Slot Allocate(int w, int h)
+{
+    const auto f = gR.freeSlots.find(static_cast<uint32_t>(w) << 16 | static_cast<uint32_t>(h));
+    if (f != gR.freeSlots.end() && !f->second.empty())
+    {
+        const Slot s = f->second.back();
+        f->second.pop_back();
+        return s;
+    }
+    const int pw = w + 2;
+    const int ph = h + 2;
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        for (size_t p = 0; p < gR.pages.size(); ++p)
+        {
+            Page& page = gR.pages[p];
+            Shelf* best = nullptr;
+            for (Shelf& sh : page.shelves)
+            {
+                if (sh.h >= ph && sh.h <= ph + ph / 4 + 2 && sh.x + pw <= kPage && (!best || sh.h < best->h))
+                {
+                    best = &sh;
+                }
+            }
+            if (!best && page.bottom + ph <= kPage)
+            {
+                page.shelves.push_back({page.bottom, ph, 0});
+                page.bottom += ph;
+                best = &page.shelves.back();
+            }
+            if (best)
+            {
+                Slot s;
+                s.tex = page.tex;
+                s.page = static_cast<int>(p);
+                s.x = best->x + 1;
+                s.y = best->y + 1;
+                s.w = w;
+                s.h = h;
+                best->x += pw;
+                return s;
+            }
+        }
+        Page page;
+        glGenTextures(1, &page.tex);
+        glBindTexture(GL_TEXTURE_2D, page.tex);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, kPage, kPage, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+        SetParams();
+        gR.pages.push_back(page);
+    }
+    abort(); // a new page always has room
+}
+
+void Release(const Slot& s)
+{
+    if (s.page < 0)
+    {
+        glDeleteTextures(1, &s.tex);
+    }
+    else
+    {
+        gR.freeSlots[static_cast<uint32_t>(s.w) << 16 | static_cast<uint32_t>(s.h)].push_back(s);
+    }
+}
+
+// The image with a copy of its edge rows and columns around it.
+void UploadPadded(const Slot& s, const uint8_t* rgba)
+{
+    const int pw = s.w + 2;
+    const int ph = s.h + 2;
+    gR.padded.resize(static_cast<size_t>(pw) * ph * 4);
+    for (int y = 0; y < ph; ++y)
+    {
+        const int sy = y == 0 ? 0 : y > s.h ? s.h - 1 : y - 1;
+        const uint8_t* src = rgba + static_cast<size_t>(sy) * s.w * 4;
+        uint8_t* dst = gR.padded.data() + static_cast<size_t>(y) * pw * 4;
+        memcpy(dst, src, 4);
+        memcpy(dst + 4, src, static_cast<size_t>(s.w) * 4);
+        memcpy(dst + static_cast<size_t>(pw - 1) * 4, src + static_cast<size_t>(s.w - 1) * 4, 4);
+    }
+    glBindTexture(GL_TEXTURE_2D, s.tex);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, s.x - 1, s.y - 1, pw, ph, GL_RGBA, GL_UNSIGNED_BYTE, gR.padded.data());
+}
 } // namespace
 
 extern "C" {
@@ -171,17 +308,58 @@ extern "C" {
 void gta2_js_upload_texture(int id, int w, int h, const void* rgba)
 {
     Init();
-    GLuint& tex = gR.textures[static_cast<uint32_t>(id)];
-    if (!tex)
+    // GTA2_LOG_TEXTURES=1: a line every 500 uploads (count, live textures, bytes, time).
+    static const bool logUploads = getenv("GTA2_LOG_TEXTURES") && atoi(getenv("GTA2_LOG_TEXTURES")) != 0;
+    static unsigned uploads = 0, fresh = 0;
+    static double bytes = 0.0, seconds = 0.0;
+    timespec t0 = {};
+    if (logUploads)
     {
-        glGenTextures(1, &tex);
+        clock_gettime(CLOCK_MONOTONIC, &t0);
     }
-    glBindTexture(GL_TEXTURE_2D, tex);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    Slot& slot = gR.textures[static_cast<uint32_t>(id)];
+    const bool atlas = w > 0 && h > 0 && w <= kMaxInAtlas && h <= kMaxInAtlas;
+    if (slot.tex && (slot.w != w || slot.h != h || (slot.page >= 0) != atlas))
+    {
+        Release(slot);
+        slot = Slot();
+    }
+    if (!slot.tex)
+    {
+        ++fresh;
+        if (atlas)
+        {
+            slot = Allocate(w, h);
+        }
+        else
+        {
+            glGenTextures(1, &slot.tex);
+            slot.w = w;
+            slot.h = h;
+        }
+    }
+    if (atlas)
+    {
+        UploadPadded(slot, static_cast<const uint8_t*>(rgba));
+    }
+    else
+    {
+        glBindTexture(GL_TEXTURE_2D, slot.tex);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+        SetParams();
+    }
+    if (logUploads)
+    {
+        timespec t1 = {};
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+        seconds += (t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) * 1e-9;
+        bytes += 4.0 * w * h;
+        if (++uploads % 500 == 0)
+        {
+            fprintf(stderr, "gta2: textures: %u uploads (%u new ids, %zu live, %zu atlas pages), %.1f MB, %.2f s uploading, last %dx%d\n",
+                    uploads, fresh, gR.textures.size(), gR.pages.size(), bytes / 1e6, seconds, w, h);
+        }
+    }
 }
 
 void gta2_js_free_texture(int id)
@@ -189,7 +367,7 @@ void gta2_js_free_texture(int id)
     const auto it = gR.textures.find(static_cast<uint32_t>(id));
     if (it != gR.textures.end())
     {
-        glDeleteTextures(1, &it->second);
+        Release(it->second);
         gR.textures.erase(it);
     }
 }
@@ -198,9 +376,18 @@ void gta2_js_free_all_textures()
 {
     for (auto& kv : gR.textures)
     {
-        glDeleteTextures(1, &kv.second);
+        if (kv.second.page < 0)
+        {
+            glDeleteTextures(1, &kv.second.tex);
+        }
+    }
+    for (Page& page : gR.pages)
+    {
+        glDeleteTextures(1, &page.tex);
     }
     gR.textures.clear();
+    gR.pages.clear();
+    gR.freeSlots.clear();
 }
 
 void Gta2Native_SetPresentHeight(int height)
@@ -238,7 +425,31 @@ void gta2_js_present(const void* cmdData, int cmdCount, const void* vertData, in
     glViewport(vpx, vpy, vpw, vph);
     glUseProgram(gR.program);
     glBindBuffer(GL_ARRAY_BUFFER, gR.vbo);
-    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(vertCount) * sizeof(FrameVertex), vertData, GL_STREAM_DRAW);
+    // Atlas UVs: each batch's vertices are moved into its texture's rectangle.
+    const FrameCommand* cmds = static_cast<const FrameCommand*>(cmdData);
+    gR.verts.assign(static_cast<const FrameVertex*>(vertData), static_cast<const FrameVertex*>(vertData) + vertCount);
+    for (int i = 0; i < cmdCount; ++i)
+    {
+        const FrameCommand& c = cmds[i];
+        if (c.kind != 0)
+        {
+            continue;
+        }
+        const auto it = gR.textures.find(c.texture);
+        if (it == gR.textures.end() || it->second.page < 0)
+        {
+            continue;
+        }
+        const Slot& s = it->second;
+        const float su = static_cast<float>(s.w) / kPage, ou = static_cast<float>(s.x) / kPage;
+        const float sv = static_cast<float>(s.h) / kPage, ov = static_cast<float>(s.y) / kPage;
+        for (uint32_t k = c.first; k < c.first + c.count && k < static_cast<uint32_t>(vertCount); ++k)
+        {
+            gR.verts[k].u = ou + gR.verts[k].u * su;
+            gR.verts[k].v = ov + gR.verts[k].v * sv;
+        }
+    }
+    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(vertCount) * sizeof(FrameVertex), gR.verts.data(), GL_STREAM_DRAW);
     glEnableVertexAttribArray(kPos);
     glVertexAttribPointer(kPos, 2, GL_FLOAT, GL_FALSE, sizeof(FrameVertex), reinterpret_cast<const void*>(0));
     glEnableVertexAttribArray(kRhw);
@@ -251,7 +462,7 @@ void gta2_js_present(const void* cmdData, int cmdCount, const void* vertData, in
     glActiveTexture(GL_TEXTURE0);
     gR.blend = -1;
 
-    const FrameCommand* cmds = static_cast<const FrameCommand*>(cmdData);
+    GLuint bound = 0;
     for (int i = 0; i < cmdCount; ++i)
     {
         const FrameCommand& c = cmds[i];
@@ -278,9 +489,32 @@ void gta2_js_present(const void* cmdData, int cmdCount, const void* vertData, in
         {
             continue;
         }
-        glBindTexture(GL_TEXTURE_2D, it->second);
+        // Following batches drawn from the same GL texture with the same blend, with their
+        // vertices right after these, go into the same draw.
+        const GLuint tex = it->second.tex;
+        uint32_t count = c.count;
+        while (i + 1 < cmdCount)
+        {
+            const FrameCommand& n = cmds[i + 1];
+            if (n.kind != 0 || n.blend != c.blend || n.first != c.first + count)
+            {
+                break;
+            }
+            const auto nt = gR.textures.find(n.texture);
+            if (nt == gR.textures.end() || nt->second.tex != tex)
+            {
+                break;
+            }
+            count += n.count;
+            ++i;
+        }
+        if (tex != bound)
+        {
+            glBindTexture(GL_TEXTURE_2D, tex);
+            bound = tex;
+        }
         SetBlend(static_cast<int>(c.blend));
-        glDrawArrays(GL_TRIANGLES, static_cast<GLint>(c.first), static_cast<GLsizei>(c.count));
+        glDrawArrays(GL_TRIANGLES, static_cast<GLint>(c.first), static_cast<GLsizei>(count));
     }
     Gta2Native_EndFrame();
 }
