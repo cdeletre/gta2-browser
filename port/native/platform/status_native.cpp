@@ -5,6 +5,8 @@
 // every game tick (winmain.cpp, patch 0017).
 #include <stdio.h>
 
+#include "Frontend.hpp"
+#include "Game_0x40.hpp"
 #include "GameSession_578.hpp"
 
 extern "C" const s32* gta2_dev_state();
@@ -51,4 +53,11 @@ extern "C" void Gta2Native_StatusLine(char* out, int size)
     // Fix16: 14 fractional bits (1 block = 16384).
     snprintf(out, size, "map \"%s\", tick %d, %d peds, %d cars, player at (%.2f, %.2f, %.2f)%s", map, ticks, peds, cars,
              s[2] / 16384.0, s[3] / 16384.0, s[4] / 16384.0, s[1] ? " in a car" : "");
+}
+
+// True while the player is in the city (not in the front end's menus): the controller's
+// "play" layout applies (input_sdl.cpp), as the web shell's isPlaying.
+extern "C" bool Gta2Native_IsPlaying()
+{
+    return !gFrontend_67DC84 && gGame_0x40_67E008 && gta2_dev_state()[0] != 0;
 }

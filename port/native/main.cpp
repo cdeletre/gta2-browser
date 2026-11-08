@@ -11,6 +11,8 @@
 //   GTA2_RUN_SECONDS  stop cleanly after this many seconds (soak tests)
 //   GTA2_SOAK=1       random play once the player exists (walk, drive, shoot; soak_native.cpp)
 //   GTA2_SOAK_SEED    the soak's random sequence (default 1)
+//   GTA2_SOAK_INPUT   direct (default), keyboard or pad: also for the autostart's presses
+//   GTA2_SOAK_QUIT_AT quit with Select + Start after this many seconds (pad input only)
 // Window, vsync and screenshots: see platform/window_sdl.cpp.
 #include <errno.h>
 #include <limits.h>
@@ -38,6 +40,8 @@ extern "C" int Gta2Native_TickCount(int* peds, int* cars);
 extern "C" void Gta2Native_SoakInit(); // platform/soak_native.cpp
 extern "C" void Gta2Native_SoakStep(double now);
 extern "C" void Gta2Native_SoakSummary(char* out, int size);
+extern "C" void Gta2Native_InputModeInit();
+extern "C" void Gta2Native_AutostartKey(bool down);
 extern "C" int gta2_port_set_view_width(int width); // port/render/vid_web.cpp
 #if !defined(GTA2_NATIVE_HEADLESS)
 extern "C" bool Gta2Native_WindowInit(); // platform/window_sdl.cpp
@@ -153,6 +157,7 @@ int main(int argc, char** argv)
     const double runMs = runEnv ? atof(runEnv) * 1000.0 : 0.0;
     const bool autostart = getenv("GTA2_AUTOSTART") && atoi(getenv("GTA2_AUTOSTART")) != 0;
     Tap taps[] = {{1500, 0}, {3500, 0}};
+    Gta2Native_InputModeInit();
     const bool soak = getenv("GTA2_SOAK") && atoi(getenv("GTA2_SOAK")) != 0;
     if (soak)
     {
@@ -172,12 +177,12 @@ int main(int argc, char** argv)
             {
                 if (t.stage == 0 && now >= t.at)
                 {
-                    gta2_port_key(0x1c, 0x0d, 1, 13);
+                    Gta2Native_AutostartKey(true);
                     t.stage = 1;
                 }
                 else if (t.stage == 1 && now >= t.at + 100)
                 {
-                    gta2_port_key(0x1c, 0x0d, 0, 0);
+                    Gta2Native_AutostartKey(false);
                     t.stage = 2;
                 }
             }

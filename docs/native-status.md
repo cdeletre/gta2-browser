@@ -1,8 +1,39 @@
 # Port natif Linux aarch64 : statut
 
-Mis à jour le 8 novembre 2026. **Jalons 1, 2 et 3 atteints.** Le jeu s'affiche sur la console
-(MANGMI Air X, ROCKNIX 20261101) en 1920×1080 par Wayland, avec le GPU (Adreno 610) : menu,
-puis Downtown, à 60 images/s et 30,3 ticks/s. Jalon suivant : 4 (clavier, puis manette).
+Mis à jour le 8 novembre 2026. **Jalons 1 à 3 atteints ; jalon 4 (clavier et manette) fait et
+vérifié par événements SDL simulés, pas encore essayé à la main sur la console.** Le jeu
+s'affiche sur la console (MANGMI Air X, ROCKNIX 20261101) en 1920×1080 par Wayland, avec le
+GPU (Adreno 610) : menu, puis Downtown, à 60 images/s et 30,3 ticks/s.
+
+## Jalon 4 : clavier et manette
+
+- **Clavier** (`port/native/platform/input_sdl.cpp`) : événements SDL, même table de
+  touches que `web/shell.js` (scancode DirectInput + touche virtuelle), caractère tapé
+  pour les touches imprimables, répétitions ignorées. Les touches du jeu sont celles de
+  l'original : flèches, Ctrl gauche (tirer), Entrée (voiture), Espace (saut/frein à main),
+  Z/X (armes), Tab et Alt gauche (spécial 1/2), Maj droite (statut).
+- **Manette** (`SDL_GameController`, boutons par position : A en bas, B à droite, X à gauche,
+  Y en haut), sur le modèle de `web/gamepad.js` mais avec les touches de l'original :
+  - en ville : croix/stick gauche = flèches, R2 = accélérer, L2 = freiner, A = tirer,
+    Y = monter/descendre, X = saut/frein à main, B = spécial 1, L1/R1 = arme
+    précédente/suivante, L3 = spécial 2, R3 = statut, Start = Échap ;
+  - dans les menus : croix/stick = flèches, A = Entrée, B et Start = Échap ;
+  - les boutons tenus au changement de contexte sont ignorés jusqu'au relâchement ;
+  - **Select + Start quitte** proprement.
+  Correspondances supplémentaires : `SDL_GAMECONTROLLERCONFIG` (PortMaster), ou
+  `gamecontrollerdb.txt` dans le dossier du jeu.
+- **Vérifié dans le conteneur** (`GTA2_SOAK_INPUT=keyboard` ou `pad` : le pilote de soak
+  injecte de vrais événements SDL, qui passent par `input_sdl.cpp`) : 75 s par mode, même
+  graine ; le joueur marche, tire et monte en voiture, avec des trajectoires presque
+  identiques dans les deux modes. En mode `pad`, le démarrage automatique valide le menu
+  avec A (contexte menu), et `GTA2_SOAK_QUIT_AT=40` (Select puis Start) termine le jeu
+  proprement à 40 s (code 0).
+- **Sur la console :** la manette intégrée est exposée par InputPlumber comme une
+  DualSense virtuelle ; SDL la reconnaît (« PS5 Controller ») sans correspondance
+  supplémentaire, mais l'ouvre deux fois (`js1`, `js2`), qui envoient les mêmes boutons.
+  **Pas encore essayé à la main.**
+- **Limite connue :** l'état des manettes ouvertes est fusionné. Deux vraies manettes en même
+  temps se mélangeraient (relâcher sur l'une libère la touche tenue sur l'autre).
 
 ## Jalon 3 : fenêtre SDL2 et renderer GLES 2 (observé)
 
