@@ -8,8 +8,9 @@ en 1920×1080 par Wayland, avec le GPU (Adreno 610) : menu, puis Downtown, à 60
 
 `./scripts/build_native.sh --preset release` produit, en plus de la sortie du linker,
 **`build/native/release/dist/`** :
-- `gta2` : le binaire à distribuer, sans symboles (1,4 Mo) ;
-- `gta2.debug` : ses symboles (14 Mo), liés par `.gnu_debuglink`, pour lire une trace de
+- `gta2.aarch64` : le binaire à distribuer, sans symboles (1,4 Mo), au nom que lance le
+  script PortMaster (`./gta2.${DEVICE_ARCH}`) ;
+- `gta2.aarch64.debug` : ses symboles (14 Mo), liés par `.gnu_debuglink`, pour lire une trace de
   plantage ; à garder, pas à distribuer.
 
 Options : `-O2 -g` sans `NDEBUG`, comme le build web release (les options Release par
@@ -20,9 +21,9 @@ SDL2 est lié par son chemin plutôt qu'avec les options de `sdl2.pc`, qui ajout
 
 - **Dépendances observées :** `libc`, `libm`, `libdl`, `libpthread` (glibc **2.17** au
   plus), `libSDL2-2.0.so.0`, `libGLESv2.so.2`. Aucun `RPATH`/`RUNPATH`.
-  `build_native.sh` refuse un `dist/gta2` qui aurait un `RUNPATH` ou dépendrait de
+  `build_native.sh` refuse un binaire `dist/` qui aurait un `RUNPATH` ou dépendrait de
   `libstdc++`/`libgcc_s`.
-- **Sur la console** (8 novembre 2026, `dist/gta2` à la place du binaire debug) : soak de
+- **Sur la console** (8 novembre 2026, le binaire de `dist/` à la place du binaire debug) : soak de
   300 s à la manette simulée (`GTA2_SOAK_INPUT=pad`, graine 4), Wayland + PulseAudio :
   sortie propre (code 0), 8 810 ticks, 298 actions, 6 voitures ; cadence de **30,1 à
   30,5 ticks/s sur toutes les tranches de 5 s** après le chargement (49 sur 57 à 30,3).

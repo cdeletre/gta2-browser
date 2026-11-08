@@ -74,7 +74,7 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
 elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
   # As the web release build: -O2, and no NDEBUG (CMake's default Release flags are
   # -O3 -DNDEBUG). -g does not change the code; build_native.sh moves the debug info to
-  # dist/gta2.debug and ships a stripped dist/gta2.
+  # dist/gta2.aarch64.debug and ships a stripped dist/gta2.aarch64.
   set(CMAKE_C_FLAGS_RELEASE "")
   set(CMAKE_CXX_FLAGS_RELEASE "")
   set(GTA2_OPT -O2 -g)

@@ -243,20 +243,22 @@ fi
 sdl_dep=$(objdump -p "$BIN" | awk '/NEEDED/ {print $2}' | grep -i sdl || true)
 echo "   SDL : ${sdl_dep:-non lié dynamiquement (attendu : libSDL2-2.0.so.0)}"
 
-# Release : un binaire sans symboles à distribuer (dist/gta2) et ses symboles à part
-# (dist/gta2.debug, pour lire une trace de plantage). La sortie du linker reste intacte.
+# Release : un binaire sans symboles à distribuer et ses symboles à part (pour lire une
+# trace de plantage). Nommé gta2.<arch> (gta2.aarch64), comme le lance le script PortMaster
+# (./gta2.${DEVICE_ARCH}). La sortie du linker reste intacte.
 if [[ "$PRESET" == "release" && $SANITIZE -eq 0 ]]; then
   DIST="$BUILD_DIR/dist"
+  NAME="gta2.$(uname -m)"
   mkdir -p "$DIST"
-  objcopy --only-keep-debug "$BIN" "$DIST/gta2.debug"
-  objcopy --strip-all --add-gnu-debuglink="$DIST/gta2.debug" "$BIN" "$DIST/gta2"
-  needed=$(objdump -p "$DIST/gta2" | awk '/NEEDED/ {print $2}' | tr '\n' ' ')
-  echo "   dist/gta2 : $(du -h "$DIST/gta2" | cut -f1), bibliothèques : $needed"
-  if objdump -p "$DIST/gta2" | grep -qE 'RPATH|RUNPATH'; then
-    die "dist/gta2 a un RPATH/RUNPATH : $(objdump -p "$DIST/gta2" | grep -E 'RPATH|RUNPATH')"
+  objcopy --only-keep-debug "$BIN" "$DIST/$NAME.debug"
+  objcopy --strip-all --add-gnu-debuglink="$DIST/$NAME.debug" "$BIN" "$DIST/$NAME"
+  needed=$(objdump -p "$DIST/$NAME" | awk '/NEEDED/ {print $2}' | tr '\n' ' ')
+  echo "   dist/$NAME : $(du -h "$DIST/$NAME" | cut -f1), bibliothèques : $needed"
+  if objdump -p "$DIST/$NAME" | grep -qE 'RPATH|RUNPATH'; then
+    die "dist/$NAME a un RPATH/RUNPATH : $(objdump -p "$DIST/$NAME" | grep -E 'RPATH|RUNPATH')"
   fi
   if echo "$needed" | grep -qE 'libstdc\+\+|libgcc_s'; then
-    die "dist/gta2 dépend encore de libstdc++/libgcc_s (attendu : liés en statique)"
+    die "dist/$NAME dépend encore de libstdc++/libgcc_s (attendu : liés en statique)"
   fi
   echo "   ok  pas de RPATH, runtime C++ inclus"
 fi
