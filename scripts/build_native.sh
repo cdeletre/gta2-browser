@@ -4,8 +4,8 @@
 # Appelé depuis macOS, il se relance tout seul dans le conteneur Docker
 # ($GTA2_CONTAINER, par défaut gta2-pm), le dépôt étant monté sur /workspace.
 #
-#   ./scripts/build_native.sh [--preset debug|release] [--sanitize] [--prepare]
-#                             [--clean] [--jobs N] [--allow-unpinned]
+#   ./scripts/build_native.sh [--preset debug|release] [--sanitize] [--headless]
+#                             [--prepare] [--clean] [--jobs N] [--allow-unpinned]
 set -euo pipefail
 
 UPSTREAM_PIN="02de8be"
@@ -41,13 +41,14 @@ fi
 # ---------------------------------------------------------------------------
 # Options
 # ---------------------------------------------------------------------------
-PRESET="debug"; SANITIZE=0; FORCE_PREPARE=0; CLEAN=0; ALLOW_UNPINNED=0
+PRESET="debug"; SANITIZE=0; HEADLESS=0; FORCE_PREPARE=0; CLEAN=0; ALLOW_UNPINNED=0
 JOBS="$(nproc 2>/dev/null || echo 4)"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --preset)          PRESET="$2"; shift 2 ;;
     --sanitize)        SANITIZE=1; shift ;;
+    --headless)        HEADLESS=1; shift ;;
     --prepare)         FORCE_PREPARE=1; shift ;;
     --clean)           CLEAN=1; shift ;;
     --jobs|-j)         JOBS="$2"; shift 2 ;;
@@ -73,6 +74,7 @@ UPSTREAM="research/gta2_re"
 WORK="research/native-work/core"
 BUILD_DIR="build/native/$PRESET"
 [[ $SANITIZE -eq 1 ]] && BUILD_DIR="${BUILD_DIR}-san"
+[[ $HEADLESS -eq 1 ]] && BUILD_DIR="${BUILD_DIR}-headless"
 
 log()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m!!\033[0m %s\n' "$*" >&2; }
@@ -191,7 +193,8 @@ cmake -S port/native -B "$BUILD_DIR" -G Ninja \
   -DGTA2_CORE_DIR="$ROOT/$WORK" \
   -DGTA2_PORT_ROOT="$ROOT/port" \
   -DGTA2_CASE_ALIASES="$CASE_ALIASES" \
-  -DGTA2_SANITIZE="$([[ $SANITIZE -eq 1 ]] && echo ON || echo OFF)"
+  -DGTA2_SANITIZE="$([[ $SANITIZE -eq 1 ]] && echo ON || echo OFF)" \
+  -DGTA2_HEADLESS="$([[ $HEADLESS -eq 1 ]] && echo ON || echo OFF)"
 
 ln -sf "$BUILD_DIR/compile_commands.json" compile_commands.json
 

@@ -1,30 +1,17 @@
-// Headless (jalon 1) implementations of the EM_JS bridges the shared port files call.
-// In the browser these reach web/renderer.js, web/audio.js, the save storage and the
-// co-op transport; here nothing is drawn, played or sent.
+// Native implementations of the EM_JS bridges the shared port files call, for the parts
+// the native build does not have yet: in the browser these reach web/audio.js, the save
+// storage, the co-op transport and the Controls screen; here nothing is played or sent.
+// The render bridges are in port/native/render/ (gles_renderer.cpp, or
+// render_headless.cpp for GTA2_HEADLESS builds).
 //
 // The signatures are copied from the EM_JS declarations (port/native/compat/emscripten.h
 // turns each into an extern "C" declaration): C linkage means the linker cannot check
 // them, so keep them identical when a bridge changes.
-#if defined(GTA2_NATIVE_HEADLESS)
 #include <unistd.h>
 
 #include <stdio.h>
 
 extern "C" {
-
-// --- render/frame.cpp, render/gbh_web.cpp --------------------------------------------
-void gta2_js_present(const void*, int, const void*, int, int)
-{
-}
-void gta2_js_upload_texture(int, int, int, const void*)
-{
-}
-void gta2_js_free_texture(int)
-{
-}
-void gta2_js_free_all_textures()
-{
-}
 
 // --- platform/crt_compat.cpp: the shell's save storage (files stay on disk natively) --
 void gta2_js_file_written(const char*)
@@ -90,4 +77,3 @@ void gta2_js_open_options()
 }
 
 } // extern "C"
-#endif

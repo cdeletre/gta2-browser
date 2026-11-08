@@ -27,6 +27,12 @@
 #undef swprintf
 #undef vswprintf
 
+#if defined(GTA2_PORT_NATIVE)
+// The native build's files keep their installed (mixed-case) names on a case-sensitive
+// filesystem: port/native/platform/fs_native.cpp matches each component ignoring case.
+std::string Gta2Native_ResolveCase(const std::string& path);
+#endif
+
 namespace
 {
 std::string NormalisePath(const char* path)
@@ -47,6 +53,9 @@ std::string NormalisePath(const char* path)
     {
         out = "data/gtaudio" + out.substr(10);
     }
+#if defined(GTA2_PORT_NATIVE)
+    out = Gta2Native_ResolveCase(out);
+#endif
     return out;
 }
 
@@ -444,7 +453,12 @@ extern "C" intptr_t _findfirst(const char* pattern, struct _finddata_t* data)
     {
         while (dirent* e = readdir(d))
         {
-            if (strcmp(e->d_name, ".") && strcmp(e->d_name, "..") && fnmatch(mask.c_str(), e->d_name, 0) == 0)
+#if defined(GTA2_PORT_NATIVE)
+            const int matchFlags = FNM_CASEFOLD; // lowercased mask, installed names (fs_native.cpp)
+#else
+            const int matchFlags = 0;
+#endif
+            if (strcmp(e->d_name, ".") && strcmp(e->d_name, "..") && fnmatch(mask.c_str(), e->d_name, matchFlags) == 0)
             {
                 fs->names.push_back(e->d_name);
             }

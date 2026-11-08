@@ -1,8 +1,49 @@
 # Port natif Linux aarch64 : statut
 
-Mis à jour le 8 novembre 2026. **Jalons 1 et 2 atteints, sans fenêtre** : le binaire entre
-dans Downtown, et des parties jouées au hasard tiennent 15 minutes sous ASan/UBSan sans
-erreur ASan. Jalon suivant : 3 (fenêtre SDL2 et renderer GLES 2).
+Mis à jour le 8 novembre 2026. **Jalons 1, 2 et 3 atteints.** Le jeu s'affiche sur la console
+(MANGMI Air X, ROCKNIX 20261101) en 1920×1080 par Wayland, avec le GPU (Adreno 610) : menu,
+puis Downtown, à 60 images/s et 30,3 ticks/s. Jalon suivant : 4 (clavier, puis manette).
+
+## Jalon 3 : fenêtre SDL2 et renderer GLES 2 (observé)
+
+- **Renderer** (`port/native/render/gles_renderer.cpp`) : traduction de `web/renderer.js`.
+  Même liste de dessins (`port/render/frame.cpp`), 3 modes de mélange, UV correctes en
+  perspective (w passé au GPU), textures RGBA venues de `gbh_web.cpp`. Spécifique à
+  GLES 2.0 : GLSL `#version 100`, pas de VAO, textures NPOT en `CLAMP_TO_EDGE`/`NEAREST`
+  sans mipmaps.
+- **Fenêtre** (`port/native/platform/window_sdl.cpp`) : SDL2, contexte GLES 2.0, plein
+  écran à la taille du bureau (`GTA2_WINDOW=LxH` pour une fenêtre), vsync
+  (`GTA2_VSYNC=0` pour l'enlever). La largeur de vue suit l'écran, comme le web :
+  852×480 en 16:9 ; menus en 640×480 avec des bandes noires.
+- **Captures :** `GTA2_SCREENSHOT_AT=3,12,25` enregistre des PNG (`GTA2_SCREENSHOT_DIR`).
+- **Dans le conteneur** (`SDL_VIDEODRIVER=offscreen`, Mesa llvmpipe) : menu et Downtown
+  rendus comme dans le navigateur (départ à l'église, enseigne « JESUS SAVES », HUD
+  ancré aux bords en 16:9). Soak de 120 s sous ASan avec le renderer : aucune erreur.
+- **Sur la console** (`SDL_VIDEODRIVER=wayland`, `XDG_RUNTIME_DIR=/run/0-runtime-dir`,
+  `WAYLAND_DISPLAY=wayland-1`, EmulationStation toujours lancé) : `GL_RENDERER FD610`,
+  Mesa 26.2.4 ; captures identiques à celles du conteneur ; 60 images/s.
+- **Cadence :** 27,3 à 28,7 ticks/s sur la console au premier essai (debug comme release),
+  30,1 à 30,3 ensuite, voir « Choix par défaut » ci-dessous.
+- **KMS/DRM non disponible sur cette console :** la SDL2 système (2.32.10) est compilée sans
+  le pilote `kmsdrm` (« kmsdrm not available », `essway` arrêté pendant l'essai puis
+  relancé). La commande de test de `CLAUDE.md` (`SDL_VIDEODRIVER=kmsdrm`) ne s'applique
+  donc pas ici ; Wayland marche.
+- **Noms de fichiers :** les fichiers du jeu gardent leur casse d'origine sur l'ext4 de la
+  console (`data/Keyboard/eng_kb.cfg`), alors que `crt_compat.cpp` met les chemins en
+  minuscules (Fatal Error 151 au premier essai). `port/native/platform/fs_native.cpp`
+  retrouve chaque composant sans tenir compte de la casse (listes de dossiers en cache),
+  et `_findfirst` compare avec `FNM_CASEFOLD`. Après : le jeu, la musique
+  (`data/GTAudio`) et le clavier se chargent.
+
+## Choix par défaut (natif)
+
+- **`screen\min_frame_rate = 1`** (registre, `port/native/main.cpp`), l'option
+  « fréquence minimale » de l'original, que le jeu impose lui-même aux parties en réseau
+  (`Init_FrameRateLightAndUnknown_5D8EB0`). Chaque tick est dû une image après le
+  précédent (et non après le moment où il a tourné), et la boucle rattrape jusqu'à
+  8 ticks par image. Sans elle, avec la vsync à 60 Hz et une horloge en millisecondes,
+  environ un tick sur quinze glissait d'une image : 27,3 à 28,7 ticks/s mesurés sur la
+  console, puis 30,1 à 30,3 avec.
 
 ## Ce qui marche (observé)
 
@@ -75,8 +116,8 @@ suivait en mémoire, par une valeur fixe :
 ## Ce qui n'est pas encore vérifié
 
 - Que (159,5 ; 139,5 ; 2) est bien le départ à l'église du build web.
-- Le build release (seul le debug, avec et sans sanitizer, a tourné).
-- Le binaire sur la console (jalon 6), dont les chemins sensibles à la casse.
+- Le paquet PortMaster (jalon 6) : pour l'instant, le binaire et les fichiers du jeu sont
+  copiés à la main dans `/roms/ports/gta2/` et lancés par SSH.
 
 ## Corrigé en route
 
@@ -141,7 +182,7 @@ insensible à la casse), mais ils sont nécessaires sur la console.
 2. ~~Le lien~~ : fait (ponts `gta2_js_*` vides, `net_web`/`map_web`/`coop_web`/
    `dev_hooks`/`options_web` compilés tels quels, `--gc-sections` comme le web).
 2b. ~~Les textes `.gxt`, le style, la carte et les troncatures~~ : faits (entrées 6 à 11).
-3. Recherche insensible à la casse des fichiers du jeu (aujourd'hui `crt_compat` met
-   les chemins en minuscules, comme le stockage du shell web).
+3. ~~Recherche insensible à la casse des fichiers du jeu~~ : fait (`fs_native.cpp`,
+   jalon 3).
 4. Registre persisté dans un fichier texte (`$GTA2_SAVE_DIR`, sinon `./player/`).
 5. ~~Lancement sous `--sanitize` jusqu'à Downtown~~ : fait (60 s, 0 erreur ASan).

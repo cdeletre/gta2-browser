@@ -1,4 +1,5 @@
-// Native entry point (Linux aarch64). Jalon 1: headless, no window, no sound.
+// Native entry point (Linux aarch64): SDL2 window + GLES 2 renderer (jalon 3), or no
+// window at all in GTA2_HEADLESS builds. No sound yet.
 //
 // Does what web/shell.js and port/platform/main_web.cpp do in the browser:
 // registry defaults, the original's C runtime start-up (Gta2Port_StaticInit),
@@ -10,6 +11,7 @@
 //   GTA2_RUN_SECONDS  stop cleanly after this many seconds (soak tests)
 //   GTA2_SOAK=1       random play once the player exists (walk, drive, shoot; soak_native.cpp)
 //   GTA2_SOAK_SEED    the soak's random sequence (default 1)
+// Window, vsync and screenshots: see platform/window_sdl.cpp.
 #include <errno.h>
 #include <limits.h>
 #include <sys/stat.h>
@@ -36,6 +38,13 @@ extern "C" int Gta2Native_TickCount(int* peds, int* cars);
 extern "C" void Gta2Native_SoakInit(); // platform/soak_native.cpp
 extern "C" void Gta2Native_SoakStep(double now);
 extern "C" void Gta2Native_SoakSummary(char* out, int size);
+extern "C" int gta2_port_set_view_width(int width); // port/render/vid_web.cpp
+#if !defined(GTA2_NATIVE_HEADLESS)
+extern "C" bool Gta2Native_WindowInit(); // platform/window_sdl.cpp
+extern "C" void Gta2Native_DrawableSize(int* w, int* h);
+extern "C" bool Gta2Native_PumpEvents();
+extern "C" void Gta2Native_WindowShutdown();
+#endif
 
 namespace
 {
@@ -63,6 +72,13 @@ void SeedRegistry()
     const std::string screen = std::string(kRegRoot) + "\\screen";
     gta2_port_reg_set_dword(screen.c_str(), "start_mode", 0);
     gta2_port_reg_set_dword(screen.c_str(), "do_play_movie", 0); // no Bink playback
+    // The original's own "minimum frame rate" option, which network games force on
+    // (Init_FrameRateLightAndUnknown_5D8EB0): each tick is scheduled one frame after the
+    // previous one was due, and the loop catches up (up to 8 ticks per draw). Off, each
+    // tick is due one frame after it ran; with vsync at 60 Hz and a millisecond clock
+    // about one tick in fifteen slips a display frame (27.3-28.7 ticks/s measured on the
+    // console instead of 30).
+    gta2_port_reg_set_dword(screen.c_str(), "min_frame_rate", 1);
     // The 10.5 code is the freeloader.com edition: 2 unlocks all three districts.
     gta2_port_reg_set_dword("hklm\\software\\freeloader.com\\gta2", "cityinstalled", 2);
     gta2_port_reg_set_string((std::string(kRegRoot) + "\\option").c_str(), "language", "e");
@@ -100,6 +116,20 @@ int main(int argc, char** argv)
         fprintf(stderr, "gta2: cannot create %s/player: %s\n", dataDir.c_str(), strerror(errno));
         return 1;
     }
+
+#if !defined(GTA2_NATIVE_HEADLESS)
+    if (!Gta2Native_WindowInit())
+    {
+        return 1;
+    }
+    // Gameplay frames are as wide as the screen's shape, 480 high (web/shell.js
+    // chooseViewWidth: 852 at 16:9); menus stay 640x480, pillarboxed.
+    int dw = 640;
+    int dh = 480;
+    Gta2Native_DrawableSize(&dw, &dh);
+    const int viewWidth = gta2_port_set_view_width(dh > 0 ? static_cast<int>(480.0 * dw / dh) : 640);
+    fprintf(stderr, "gta2: gameplay view %dx480\n", viewWidth);
+#endif
 
     SeedRegistry();
     Gta2Port_StaticInit(); // what the original's C runtime start-up did
@@ -153,6 +183,13 @@ int main(int argc, char** argv)
             }
         }
 
+#if !defined(GTA2_NATIVE_HEADLESS)
+        if (!Gta2Native_PumpEvents())
+        {
+            fprintf(stderr, "gta2: window closed\n");
+            break;
+        }
+#endif
         if (soak)
         {
             Gta2Native_SoakStep(now);
@@ -195,5 +232,8 @@ int main(int argc, char** argv)
             SleepMs(1); // the slice ended on its time budget: nothing to show yet
         }
     }
+#if !defined(GTA2_NATIVE_HEADLESS)
+    Gta2Native_WindowShutdown();
+#endif
     return code;
 }
