@@ -29,7 +29,7 @@ SDL2 est lié par son chemin plutôt qu'avec les options de `sdl2.pc`, qui ajout
   30,5 ticks/s sur toutes les tranches de 5 s** après le chargement (49 sur 57 à 30,3).
   Le soak a joué sur le profil 0 de `saves/` de la console.
 
-## R36S (RK3326, AmberELEC) : étape 1 (observé, 8 novembre 2026)
+## R36S (RK3326, AmberELEC) (observé, 8 novembre 2026)
 
 Console : R36S (arbre de périphériques « Anbernic RG351MP »), 4 Cortex-A35 à 1,3 GHz,
 926 Mo de RAM, Mali-G31 avec le pilote propriétaire (libmali r13p0, GBM), noyau 4.4,
@@ -59,9 +59,33 @@ compositeur ; son ALSA (rk817). Lancé par SSH, EmulationStation arrêté pendan
   la caméra, là où il y a un trottoir ; en 640, ce pourtour ne tombe que sur des toits tant
   que le joueur ne bouge pas. Dans les soaks en 640, ils sont 10 à 17 dès que le joueur
   avance. Que l'original fasse pareil à l'arrêt n'est pas vérifié.
-- Reste à faire (étape 2) : soak long avec conduite, régulateur `performance` contre
-  `powersave`, temps de chargement des autres districts, puis lancement par le script
-  PortMaster de l'utilisateur.
+- **Écran noir pendant les tests par SSH :** l'économiseur d'écran d'EmulationStation
+  coupe le rétroéclairage (`/sys/class/backlight/backlight/bl_power` = 1) quand la console
+  reste sans qu'on la touche ; arrêter EmulationStation à ce moment le laisse éteint, et le
+  jeu dessine sur un écran noir (les captures, lues dans le GPU, ne le montrent pas). Les
+  tests remettent `bl_power` à 0. Un lancement depuis EmulationStation n'est pas concerné.
+- **Partie jouée à la main (13 min, Downtown et Industrial) :** 30,3 ticks/s hors
+  chargements, 60 images/s en moyenne, 408 Mo, son correct. L'utilisateur trouve le jeu
+  fluide ; de légères saccades quand des voitures se percutent avec les points qui
+  s'affichent, jugées acceptables pour une première version de test. Les essais étaient en
+  `powersave` (processeur à 816 MHz, GPU 400 MHz, mémoire 450 MHz), sauf quelques minutes
+  en `performance` : la config d'AmberELEC n'a pas `maxperf` pour les ports
+  (`global.maxperf=0`), un lancement depuis EmulationStation sera donc en `powersave`
+  aussi, sauf réglage du joueur.
+- **Manette :** sans correspondance fournie par le lanceur, SDL prend pour la manette
+  intégrée une correspondance de repli sans Start, Select ni boutons de sticks
+  (`crc:3ebb`) : Start ne faisait rien. Celle de PortMaster (`SDL_GAMECONTROLLERCONFIG`)
+  a tous les boutons, mais nomme les boutons par leur étiquette (son « a » est le bouton
+  marqué A), alors que les correspondances de SDL nomment des positions. Corrigé :
+  `face_buttons = auto` (par défaut) garde les noms de la correspondance quand le lanceur
+  en fournit une, et échange A/B et X/Y sinon, comme avant. Vérifié sur la console avec la
+  correspondance de PortMaster : A valide et tire, B revient, Y monte en voiture.
+- **Quitter à la manette :** pendant la question « quitter ? » (Start), la manette passe
+  sur la disposition des menus : A deux fois quitte (« ARE YOU SURE? »), B ou Start
+  reprend. Vérifié sur la console. `GTA2_LOG_INPUT=1` écrit la correspondance, chaque
+  bouton et les touches envoyées.
+- Reste à faire : lancement par le script PortMaster de l'utilisateur depuis
+  EmulationStation, temps de chargement des autres districts, saccades lors des chocs.
 
 ## Résolutions d'écran (observé, 8 novembre 2026)
 
