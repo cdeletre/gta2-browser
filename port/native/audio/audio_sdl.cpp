@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
 
 #include <deque>
 #include <map>
@@ -72,7 +73,18 @@ struct Voice
 
 struct Stream
 {
-    std::vector<uint8_t> bytes;
+    // The WAV file mapped into memory: the decoder reads it 0.5 s at a time, so opening a
+    // radio track (up to 32 MB) no longer reads it all at once in the game's thread (a
+    // stall of up to 1.5 s from an SD card, TrimUI Smart Pro S).
+    const uint8_t* bytes = nullptr;
+    size_t size = 0;
+    ~Stream()
+    {
+        if (bytes)
+        {
+            munmap(const_cast<uint8_t*>(bytes), size);
+        }
+    }
     WavInfo wav;
     bool radio = false;
     int loops = 1;
@@ -87,7 +99,73 @@ struct Stream
     double readPos = 0;        // fractional frame position in the fifo
     bool underrun = false;     // set by the callback, cleared by the pump
     bool resync = true;        // the pump positions the decoder from the wall clock
+    double waitSince = 0;      // when the pump started waiting for this stream's data
 };
+
+// Byte offset in the file of a stream's next frame to decode.
+size_t CursorOffset(const Stream& st)
+{
+    const WavInfo& wav = st.wav;
+    if (wav.tag == 0x11 && wav.samplesPerBlock > 0)
+    {
+        return wav.data + st.cursorFrame / static_cast<size_t>(wav.samplesPerBlock) * static_cast<size_t>(wav.blockAlign);
+    }
+    return wav.data + st.cursorFrame * 2 * static_cast<size_t>(wav.channels);
+}
+
+// True when the next kResidentBytes from the cursor are in memory (or cannot be checked),
+// so that decoding them will not wait for the SD card.
+bool Resident(const Stream& st)
+{
+    constexpr size_t kResidentBytes = 64 * 1024;
+    const size_t page = 4096;
+    const size_t offset = CursorOffset(st);
+    if (!st.bytes || offset >= st.size)
+    {
+        return true;
+    }
+    const size_t start = offset / page * page;
+    const size_t end = offset + kResidentBytes < st.size ? offset + kResidentBytes : st.size;
+    unsigned char vec[(kResidentBytes / 4096) + 2];
+    if (mincore(const_cast<uint8_t*>(st.bytes) + start, end - start, vec) != 0)
+    {
+        return true;
+    }
+    for (size_t i = 0; i < (end - start + page - 1) / page; ++i)
+    {
+        if (!(vec[i] & 1))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Asks the kernel to read the next part of a mapped stream in the background, so that the
+// decoder (in the game's thread) finds it in memory instead of waiting for the SD card
+// (RG CubeXX: up to 150 ms for one 0.5 s chunk).
+void Prefetch(const Stream& st)
+{
+    constexpr size_t kAheadBytes = 1 << 20;
+    const WavInfo& wav = st.wav;
+    size_t offset = wav.data;
+    if (wav.tag == 0x11 && wav.samplesPerBlock > 0)
+    {
+        offset += st.cursorFrame / static_cast<size_t>(wav.samplesPerBlock) * static_cast<size_t>(wav.blockAlign);
+    }
+    else
+    {
+        offset += st.cursorFrame * 2 * static_cast<size_t>(wav.channels);
+    }
+    if (!st.bytes || offset >= st.size)
+    {
+        return;
+    }
+    const size_t page = 4096;
+    const size_t start = offset / page * page;
+    const size_t end = offset + kAheadBytes < st.size ? offset + kAheadBytes : st.size;
+    madvise(const_cast<uint8_t*>(st.bytes) + start, end - start, MADV_WILLNEED);
+}
 
 std::unordered_map<int, Voice> gVoices;
 std::map<std::string, std::shared_ptr<Pcm>> gBankCache;
@@ -345,6 +423,23 @@ void PumpStream(Stream& st)
             }
             st.cursorFrame = 0;
         }
+        // Data not in memory yet (a radio station starts mid-track, from the wall clock): read
+        // it in the background and decode at a later pump, rather than stall the game; after
+        // 300 ms decode anyway.
+        if (!Resident(st))
+        {
+            const double now = NowMs();
+            if (st.waitSince == 0)
+            {
+                st.waitSince = now;
+                Prefetch(st);
+            }
+            if (now - st.waitSince < 300)
+            {
+                return;
+            }
+        }
+        st.waitSince = 0;
         size_t frames;
         size_t skip = 0;
         if (wav.tag == 0x11)
@@ -358,7 +453,7 @@ void PumpStream(Stream& st)
             size_t count = static_cast<size_t>(ceil(kChunkS * wav.rate / wav.samplesPerBlock));
             count = count < 1 ? 1 : count;
             count = count < wav.blocks - firstBlock ? count : wav.blocks - firstBlock;
-            DecodeImaBlocks(st.bytes.data(), wav, firstBlock, count, &channels);
+            DecodeImaBlocks(st.bytes, wav, firstBlock, count, &channels);
             skip = st.cursorFrame - firstBlock * static_cast<size_t>(wav.samplesPerBlock);
             frames = channels[0].size() - skip;
         }
@@ -367,7 +462,7 @@ void PumpStream(Stream& st)
             frames = wav.frames - st.cursorFrame;
             const size_t chunk = static_cast<size_t>(ceil(kChunkS * wav.rate));
             frames = frames < chunk ? frames : chunk;
-            DecodePcm16(st.bytes.data(), wav, st.cursorFrame, frames, &channels);
+            DecodePcm16(st.bytes, wav, st.cursorFrame, frames, &channels);
         }
         if (!frames)
         {
@@ -386,6 +481,7 @@ void PumpStream(Stream& st)
         }
         st.cursorFrame += frames;
         queued += frames;
+        Prefetch(st);
     }
 }
 } // namespace
@@ -513,16 +609,20 @@ int gta2_js_stream_open(int id, const char* path)
     auto st = std::make_unique<Stream>();
     fseek(f, 0, SEEK_END);
     const long size = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    st->bytes.resize(size > 0 ? static_cast<size_t>(size) : 0);
-    const bool read = size > 0 && fread(st->bytes.data(), 1, st->bytes.size(), f) == st->bytes.size();
-    fclose(f);
-    if (!read || !ParseWav(st->bytes.data(), st->bytes.size(), &st->wav))
+    void* map = size > 0 ? mmap(nullptr, static_cast<size_t>(size), PROT_READ, MAP_PRIVATE, fileno(f), 0) : MAP_FAILED;
+    fclose(f); // the mapping stays valid
+    if (map != MAP_FAILED)
+    {
+        st->bytes = static_cast<const uint8_t*>(map);
+        st->size = static_cast<size_t>(size);
+    }
+    if (!st->bytes || !ParseWav(st->bytes, st->size, &st->wav))
     {
         fprintf(stderr, "gta2: audio: unsupported or unreadable WAV %s\n", path);
         return 0;
     }
     st->durationMs = static_cast<double>(st->wav.frames) / st->wav.rate * 1000.0;
+    Prefetch(*st); // the first megabyte, read in the background
     Lock lock;
     gStreams[id] = std::move(st);
     return 1;
