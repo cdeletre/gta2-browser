@@ -192,6 +192,16 @@ HSAMPLE AILCALL AIL_allocate_sample_handle(HDIGDRIVER)
 }
 void AILCALL AIL_release_sample_handle(HSAMPLE S)
 {
+#if defined(GTA2_PORT_NATIVE)
+    // Miles ignores a null handle, and cSampleManager::Terminate_58DAE0 releases every
+    // slot before the first allocation. In wasm the null access lands in linear memory
+    // (a silent write at address 0x30); natively it is a segfault. The web build is left
+    // unchanged for now (a change to its code strands browser save states).
+    if (!S)
+    {
+        return;
+    }
+#endif
     Stop(AsSample(S));
     Forget(gSamples, AsSample(S));
     delete AsSample(S);

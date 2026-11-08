@@ -38,6 +38,9 @@ set(GTA2_REQUIRED_FLAGS
 set(GTA2_COMMON_FLAGS
   ${GTA2_REQUIRED_FLAGS}
   -fms-extensions -fdeclspec
+  # With --gc-sections at link time: like the web build's linker, unreachable code
+  # (force_link() in winmain.cpp, the CD check) does not need its Win32/COM imports.
+  -ffunction-sections -fdata-sections
   # The web build silences everything with -w; here everything is off except what
   # the 64-bit work needs to see.
   -Wno-everything
@@ -46,6 +49,8 @@ set(GTA2_COMMON_FLAGS
 if(GTA2_64BIT_WARNINGS)
   list(APPEND GTA2_COMMON_FLAGS
     -Wshorten-64-to-32 -Wint-to-pointer-cast -Wpointer-to-int-cast -Wvoid-pointer-to-int-cast)
+  # Note: with -fms-extensions clang accepts (int)pointer and reinterpret_cast<int>(pointer)
+  # with no diagnostic at all; scripts/native/scan_pointer_truncation.py finds them.
 endif()
 
 set(GTA2_DEFINES GTA2_PORT=1 GTA2_PORT_NATIVE=1 _CRT_SECURE_NO_WARNINGS)
@@ -70,6 +75,14 @@ endif()
 
 if(GTA2_SANITIZE)
   set(GTA2_SAN -fsanitize=address,undefined -fno-omit-frame-pointer)
+  # Shared ASan runtime: the engine defines its own operator new/delete (crt_stubs.cpp,
+  # zero-filled through calloc, which the game relies on). The static runtime defines
+  # them too (duplicate symbols); with the shared one the executable's definitions win
+  # and ASan still checks every allocation through calloc/free.
+  set(GTA2_SAN_LINK -shared-libasan)
+  execute_process(COMMAND ${CMAKE_CXX_COMPILER} -print-resource-dir
+                  OUTPUT_VARIABLE GTA2_CLANG_RESOURCE_DIR OUTPUT_STRIP_TRAILING_WHITESPACE)
+  list(APPEND GTA2_SAN_LINK "-Wl,-rpath,${GTA2_CLANG_RESOURCE_DIR}/lib/linux")
 endif()
 
 # ---------------------------------------------------------------------------
@@ -92,14 +105,22 @@ target_include_directories(gta2_core PRIVATE ${GTA2_INCLUDES})
 
 # ---------------------------------------------------------------------------
 # Port: shared files that compile unchanged (EM_JS bridges implemented natively),
-# plus port/native. Left out (browser-only): main_web, savestate_web, dev_hooks,
-# map_web, jobs_web, net_web, coop_web, options_web.
+# plus port/native. Left out (browser-only): main_web (port/native/main.cpp instead),
+# savestate_web (copies the wasm heap), jobs_web (the map screen's job list).
+# net_web is the game's NetPlay/Network_20324 over the shell's transport (single player
+# goes through it too); map_web, coop_web, dev_hooks and options_web define hooks the
+# patched engine calls (HUD arrows, co-op snapshots, sync records, the Options item).
 # ---------------------------------------------------------------------------
 set(GTA2_PORT_SHARED
   "${PORT}/platform/crt_compat.cpp"
   "${PORT}/platform/win32_shim.cpp"
   "${PORT}/platform/dinput_web.cpp"
   "${PORT}/platform/lang_web.cpp"
+  "${PORT}/platform/net_web.cpp"
+  "${PORT}/platform/map_web.cpp"
+  "${PORT}/platform/coop_web.cpp"
+  "${PORT}/platform/dev_hooks.cpp"
+  "${PORT}/platform/options_web.cpp"
   "${PORT}/render/exports.cpp"
   "${PORT}/render/frame.cpp"
   "${PORT}/render/gbh_web.cpp"
@@ -115,5 +136,5 @@ target_compile_options(gta2 PRIVATE ${GTA2_COMMON_FLAGS} ${GTA2_OPT} ${GTA2_SAN}
 target_compile_definitions(gta2 PRIVATE ${GTA2_DEFINES})
 target_include_directories(gta2 PRIVATE ${GTA2_INCLUDES} "${PORT}")
 target_link_libraries(gta2 PRIVATE gta2_core m dl pthread)
-target_link_options(gta2 PRIVATE ${GTA2_SAN})
+target_link_options(gta2 PRIVATE ${GTA2_SAN} ${GTA2_SAN_LINK} -Wl,--gc-sections)
 set_target_properties(gta2 PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")

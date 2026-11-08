@@ -94,5 +94,41 @@ Règle pour les asserts de taille : voir « Stratégie 64 bits » dans `CLAUDE.m
   table « handle inconnu » se déclenche, le jeu lit une case via un membre de l'union
   qui n'y a jamais été écrit comme pointeur.
 - **Reste possible :** d'autres valeurs écrites dans le tampon du script par un autre
-  chemin que les structures `SCR_*` ; aucune n'a été trouvée, et un cast d'un pointeur
-  vers un entier de 4 octets serait de toute façon refusé par clang.
+  chemin que les structures `SCR_*` ; aucune n'a été trouvée par recherche dans le code.
+  *Correction (entrée 6) :* j'avais d'abord écrit que clang refuserait de toute façon un
+  cast d'un pointeur vers un entier de 4 octets. C'est faux avec `-fms-extensions`.
+
+## 6. Troncatures de pointeurs invisibles avec `-fms-extensions` (méthode)
+
+- **Constat (clang 10, `gta2-pm`) :** avec `-fms-extensions`, nécessaire au moteur,
+  `(int)p` et `reinterpret_cast<int>(p)` compilent **sans aucun diagnostic**, même avec
+  `-Weverything`. Sans l'extension, ce sont des erreurs. Les avertissements
+  `-Wpointer-to-int-cast` du CMake ne les voient donc pas, et `-Wmicrosoft-cast` non plus.
+- **Outil :** `scripts/native/scan_pointer_truncation.py build/native/debug` (dans le
+  conteneur). Il relance chaque commande de `compile_commands.json` en `-fsyntax-only`
+  sans `-fms-extensions`, et ne garde que les erreurs « cast from pointer to smaller type ».
+- **Premier passage (7 novembre 2026) : 47 troncatures** dans 17 fichiers. S'y ajoutent
+  14 avertissements `-Wint-to-pointer-cast` dans le sens inverse (un pointeur reconstruit
+  depuis un `s32`/`u32`) : `Car_BC.cpp` (11, `Car_18_Cmd*` et `Generator_2C*`),
+  `Police_38.cpp:1058` (`Ped*`), `gtx_0x106C.cpp:440` (`delta_store_entry*`),
+  `sprite.hpp:46` (`Sprite_4C*`).
+
+  | Fichier | Troncatures | Première lecture |
+  |---|---|---|
+  | `error.cpp` | 25 | pointeurs passés aux messages d'erreur (affichage), à confirmer |
+  | `char.cpp` | 6 | à analyser |
+  | `Bink.cpp`, `KanjiFont_8EC.cpp`, `sound_obj.cpp` | 2, 2, 3 | à analyser |
+  | `text_0x14.cpp:107` | 1 | **critique, voir l'entrée 7** |
+  | `sprite.hpp:51`, `gtx_0x106C.cpp:479` | 1, 1 | pointeur rangé dans un `u32`, probablement critique |
+  | `Car_BC`, `Draw`, `Frontend`, `Police_38`, `memory`, `registry`, `winmain` (×2) | 1 chacun | à analyser |
+
+## 7. Textes `.gxt` : clés lues directement dans une structure à pointeurs (observé)
+
+- **Où :** `text_0x14::TKEY_Load_5B5960` et `TDAT_Offsets2Strings_5B59B0`.
+- **Symptôme (ASan, au démarrage du menu) :** `heap-buffer-overflow`, un `fread` de
+  31 140 octets dans un bloc de 31 128. La section TKEY est un tableau d'enregistrements
+  de 12 octets (offset de la chaîne sur 4 octets, clé sur 8). Le jeu la lit
+  directement dans un tableau de `text_0xC { wchar_t*; const char*; s32; }`, puis
+  remplace chaque offset par un pointeur sur place. En LP64, `text_0xC` fait 24 octets :
+  le nombre d'entrées calculé est faux, la lecture déborde, et les champs sont décalés.
+- **Correctif :** pas encore fait (prochaine étape).

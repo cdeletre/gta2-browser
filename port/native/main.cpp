@@ -8,7 +8,9 @@
 //   GTA2_DATA_DIR     game folder (the one holding data/); default: the binary's folder
 //   GTA2_AUTOSTART=1  press Enter twice like ?autostart=1 (PLAY, then area 1: Downtown)
 //   GTA2_RUN_SECONDS  stop cleanly after this many seconds (soak tests)
+#include <errno.h>
 #include <limits.h>
+#include <sys/stat.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -84,6 +86,13 @@ int main(int argc, char** argv)
         return 1;
     }
     fprintf(stderr, "gta2: game folder %s\n", dataDir.c_str());
+    // The game writes its player data and saves to player\ (the web shell creates it too).
+    // TODO (jalon 1, item 4): $GTA2_SAVE_DIR.
+    if (mkdir("player", 0755) != 0 && errno != EEXIST)
+    {
+        fprintf(stderr, "gta2: cannot create %s/player: %s\n", dataDir.c_str(), strerror(errno));
+        return 1;
+    }
 
     SeedRegistry();
     Gta2Port_StaticInit(); // what the original's C runtime start-up did
