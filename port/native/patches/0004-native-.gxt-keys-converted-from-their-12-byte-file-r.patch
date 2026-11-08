@@ -1,0 +1,103 @@
+From f117fe2c12d66ffad9c654733c8b4ed92f68128a Mon Sep 17 00:00:00 2001
+From: GTA2 port <port@localhost>
+Date: Sat, 7 Nov 2026 20:00:56 -0500
+Subject: [PATCH] native: .gxt keys converted from their 12-byte file records
+
+TKEY_Load_5B5960 read the TKEY chunk (12-byte records: string offset, 8-char key)
+straight into text_0xC, whose first field becomes a pointer in place. On LP64
+text_0xC is 24 bytes: the entry count came out wrong and the read overflowed the
+heap (ASan, at the front end). Natively text_0xC keeps the key inline after an
+8-byte pointer, and each file record is converted.
+---
+ Source/text_0x14.cpp | 28 ++++++++++++++++++++++++++++
+ Source/text_0x14.hpp | 14 ++++++++++++++
+ 2 files changed, 42 insertions(+)
+
+diff --git a/Source/text_0x14.cpp b/Source/text_0x14.cpp
+index 78c74323..1b26067e 100644
+--- a/Source/text_0x14.cpp
++++ b/Source/text_0x14.cpp
+@@ -85,6 +85,29 @@ void text_0x14::RemapExtendedChars_5B5930(wchar_t* pStr)
+ MATCH_FUNC(0x5B5960)
+ void text_0x14::TKEY_Load_5B5960(u32 chunkSize)
+ {
++#if defined(GTA2_PORT_NATIVE)
++    // Native: read the 12-byte file records, then fill the in-memory entries (see text_0xC).
++    field_0_tKey.field_4_tKey_count = chunkSize / GTA2_GXT_TKEY_RECORD_SIZE;
++    field_0_tKey.field_0_tKey = new text_0xC[field_0_tKey.field_4_tKey_count];
++    if (!field_0_tKey.field_0_tKey)
++    {
++        FatalError_4A38C0(Gta2Error::OutOfMemoryNewOperator, "C:\\Splitting\\Gta2\\Source\\text.cpp", 218);
++    }
++
++    u8* pRecords = new u8[chunkSize];
++    File::Global_Read_4A71C0(pRecords, chunkSize);
++    for (u32 i = 0; i < field_0_tKey.field_4_tKey_count; i++)
++    {
++        const u8* pRecord = pRecords + i * GTA2_GXT_TKEY_RECORD_SIZE;
++        u32 offset;
++        memcpy(&offset, pRecord, sizeof(offset));
++        // Still an offset here: TDAT_Offsets2Strings_5B59B0 turns it into a pointer.
++        field_0_tKey.field_0_tKey[i].field_0_pwstr = reinterpret_cast<wchar_t*>(static_cast<uintptr_t>(offset));
++        memcpy(field_0_tKey.field_0_tKey[i].field_4_pKey, pRecord + 4, 8);
++    }
++    delete[] pRecords;
++}
++#else
+     // TODO: probably an inline
+     field_0_tKey.field_4_tKey_count = chunkSize / sizeof(text_0xC);
+     field_0_tKey.field_0_tKey = new text_0xC[field_0_tKey.field_4_tKey_count];
+@@ -95,6 +118,7 @@ void text_0x14::TKEY_Load_5B5960(u32 chunkSize)
+ 
+     File::Global_Read_4A71C0(field_0_tKey.field_0_tKey, chunkSize);
+ }
++#endif
+ 
+ MATCH_FUNC(0x5B59B0)
+ void text_0x14::TDAT_Offsets2Strings_5B59B0(BYTE* pDat)
+@@ -104,7 +128,11 @@ void text_0x14::TDAT_Offsets2Strings_5B59B0(BYTE* pDat)
+     for (u32 idx = 0; idx < field_0_tKey.field_4_tKey_count; idx++)
+     {
+         // The raw file record is an offset, convert it to pos32 to the string data in the TDAT
++#if defined(GTA2_PORT_NATIVE)
++        const s32 offsetInBytes = static_cast<s32>(reinterpret_cast<uintptr_t>(ptKeyIter->field_0_pwstr));
++#else
+         const s32 offsetInBytes = reinterpret_cast<int>(ptKeyIter->field_0_pwstr);
++#endif
+         ptKeyIter->field_0_pwstr = reinterpret_cast<wchar_t*>(&pDat[offsetInBytes]);
+         ptKeyIter++;
+     }
+diff --git a/Source/text_0x14.hpp b/Source/text_0x14.hpp
+index c6ded84e..79dd8c99 100644
+--- a/Source/text_0x14.hpp
++++ b/Source/text_0x14.hpp
+@@ -3,12 +3,26 @@
+ #include "Function.hpp"
+ #include <windows.h>
+ 
++#if defined(GTA2_PORT_NATIVE)
++// TKEY entry. In the .gxt file it is 12 bytes: the string's offset in TDAT (4 bytes),
++// then the key (8 chars). The original reads the file straight into this array and turns
++// each offset into a pointer in place. With 8-byte pointers the array no longer matches
++// the file, so TKEY_Load_5B5960 converts each record (the key is kept inline, as before).
++struct text_0xC
++{
++    wchar_t* field_0_pwstr;
++    char_type field_4_pKey[4]; // first half of the 8-char key
++    char_type field_8[4]; // second half
++};
++#define GTA2_GXT_TKEY_RECORD_SIZE 12
++#else
+ struct text_0xC
+ {
+     wchar_t* field_0_pwstr;
+     const char_type* field_4_pKey;
+     s32 field_8;
+ };
++#endif
+ 
+ class text_tdat
+ {
+-- 
+2.54.0
+

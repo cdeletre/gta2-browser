@@ -1,0 +1,101 @@
+From b02d8c77c7cb9f59ed28f09f33210c59e924132b Mon Sep 17 00:00:00 2001
+From: GTA2 port <port@localhost>
+Date: Sat, 7 Nov 2026 20:00:57 -0500
+Subject: [PATCH] native: pointers kept in 32-bit integers
+
+Memory::Aligned_malloc_4FE510 aligned through (u32)pointer, dropping the upper
+half of the address (SEGV at 0x82590000 while loading the style).
+Car_18::field_0_pScriptCmd and Police_38::field_30 are s32 fields that hold a
+pointer (script command or Generator_2C*, and a Ped*); natively they are
+intptr_t.
+---
+ Source/Car_BC.cpp    | 4 ++++
+ Source/Car_BC.hpp    | 4 ++++
+ Source/Police_38.cpp | 4 ++++
+ Source/Police_38.hpp | 4 ++++
+ Source/memory.cpp    | 5 +++++
+ 5 files changed, 21 insertions(+)
+
+diff --git a/Source/Car_BC.cpp b/Source/Car_BC.cpp
+index c7710a15..88f6a372 100644
+--- a/Source/Car_BC.cpp
++++ b/Source/Car_BC.cpp
+@@ -223,7 +223,11 @@ char_type Car_214::AddThreadTrigger_5C86C0(const s32& type, const s32& param, SC
+         {
+             pIter->field_8_type = type;
+             pIter->field_C = param;
++#if defined(GTA2_PORT_NATIVE)
++            pIter->field_0_pScriptCmd = (intptr_t)pScriptThread;
++#else
+             pIter->field_0_pScriptCmd = (s32)pScriptThread;
++#endif
+             pIter->field_14_enable_state = 1;
+             pIter->field_4_O2C = gObject_5C_6F8F84->NewTouchPoint_529950(objects::savepoint_161,
+                                                                          xpos,
+diff --git a/Source/Car_BC.hpp b/Source/Car_BC.hpp
+index 49463a00..dfcb1e91 100644
+--- a/Source/Car_BC.hpp
++++ b/Source/Car_BC.hpp
+@@ -82,7 +82,11 @@ struct car_rng_list
+ class Car_18
+ {
+   public:
++#if defined(GTA2_PORT_NATIVE)
++    intptr_t field_0_pScriptCmd; // holds a pointer (script command or Generator_2C*): 8 bytes on LP64
++#else
+     s32 field_0_pScriptCmd;
++#endif
+     Object_2C* field_4_O2C;
+     s32 field_8_type;
+     s32 field_C;
+diff --git a/Source/Police_38.cpp b/Source/Police_38.cpp
+index 1ac5c63c..8efef712 100644
+--- a/Source/Police_38.cpp
++++ b/Source/Police_38.cpp
+@@ -1076,7 +1076,11 @@ void PoliceCrew_38::State5_PursueOrChase_572920()
+                     {
+                         if (pPed->get_objective_target_ped_403AD0() == pPed->GetInternalTargetPed_403AF0())
+                         {
++#if defined(GTA2_PORT_NATIVE)
++                            field_30 = (intptr_t)pPed->get_objective_target_ped_403AD0();
++#else
+                             field_30 = (s32)pPed->get_objective_target_ped_403AD0();
++#endif
+                             gCurrentCrewPed_6FEDDC->SetInternalTargetPed_403AE0(field_14_pPursuitTarget->field_0_criminal_ped);
+                         }
+                         gCurrentCrewPed_6FEDDC->set_objective_target_ped_403AC0(field_14_pPursuitTarget->field_0_criminal_ped);
+diff --git a/Source/Police_38.hpp b/Source/Police_38.hpp
+index adce5fe9..6aee10a1 100644
+--- a/Source/Police_38.hpp
++++ b/Source/Police_38.hpp
+@@ -87,7 +87,11 @@ class PoliceCrew_38
+     s16 field_2C;
+     char_type field_2E;
+     char_type field_2F;
++#if defined(GTA2_PORT_NATIVE)
++    intptr_t field_30; // holds a Ped* (Police_38.cpp): 8 bytes on LP64
++#else
+     s32 field_30;
++#endif
+     char_type field_34_is_dismissed;
+     u8 field_35;
+     char_type field_36;
+diff --git a/Source/memory.cpp b/Source/memory.cpp
+index 77547b60..2875702d 100644
+--- a/Source/memory.cpp
++++ b/Source/memory.cpp
+@@ -33,5 +33,10 @@ void* __stdcall Memory::Aligned_malloc_4FE510(s32 requestedSize, void** pUnAlign
+     }
+ 
+     // Return aligned pointer
++#if defined(GTA2_PORT_NATIVE)
++    // (u32) would drop the upper half of a 64-bit address.
++    return (void*)(((uintptr_t)*pUnAlignedPtr + 0xFFFF) & ~(uintptr_t)0xFFFF);
++#else
+     return (void*)(((u32)*pUnAlignedPtr + 0xFFFF) & 0xFFFF0000);
++#endif
+ }
+\ No newline at end of file
+-- 
+2.54.0
+

@@ -29,6 +29,7 @@ extern "C" void gta2_port_key(int scancode, int vk, int down, int ch);
 extern "C" void gta2_port_reg_set_dword(const char* path, const char* name, DWORD value);
 extern "C" void gta2_port_reg_set_string(const char* path, const char* name, const char* value);
 extern "C" unsigned int gta2_port_present_count();
+extern "C" void Gta2Native_StatusLine(char* out, int size); // platform/status_native.cpp
 
 namespace
 {
@@ -151,7 +152,9 @@ int main(int argc, char** argv)
         if (now - (lastReport - start) >= 5000)
         {
             lastReport = start + now;
-            fprintf(stderr, "gta2: %.0f s, %u frames presented\n", now / 1000.0, gta2_port_present_count());
+            char status[256];
+            Gta2Native_StatusLine(status, sizeof(status));
+            fprintf(stderr, "gta2: %.0f s, %u frames presented, %s\n", now / 1000.0, gta2_port_present_count(), status);
         }
         if (runMs > 0 && now >= runMs)
         {

@@ -1,0 +1,239 @@
+From 74cb7f214d575f3d64c32b1d7023fc6a4b29de09 Mon Sep 17 00:00:00 2001
+From: GTA2 port <port@localhost>
+Date: Sat, 7 Nov 2026 20:00:56 -0500
+Subject: [PATCH] native: style sprite index and sprite deltas sized for 8-byte
+ pointers
+
+The SPRX chunk (8-byte records) was read straight into sprite_index, whose first
+field becomes a pointer; it is now converted record by record. The in-memory
+delta buffer and delta container used 32-bit sizes (8 * count + 4, 4 * maxSprite
++ 8) and SetDeltaDataPtrs_5AABF0 added the store base through u32 punning; the
+native versions use offsetof/sizeof and uintptr_t.
+---
+ Source/gtx_0x106C.cpp | 147 ++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 147 insertions(+)
+
+diff --git a/Source/gtx_0x106C.cpp b/Source/gtx_0x106C.cpp
+index 8a281e98..752249db 100644
+--- a/Source/gtx_0x106C.cpp
++++ b/Source/gtx_0x106C.cpp
+@@ -24,6 +24,12 @@ DEFINE_GLOBAL(s16, word_703BAA, 0x703BAA);
+ DEFINE_GLOBAL(s16, word_703D98, 0x703D98);
+ DEFINE_GLOBAL(s16, word_703C9C, 0x703C9C);
+ 
++#if defined(GTA2_PORT_NATIVE)
++#include <stddef.h>
++// Native size of one sprite_deltas entry in field_50_delta_buffer (the original: 8 * count + 4).
++#define GTA2_NATIVE_DELTAS_SIZE(count) ((u32)(offsetof(sprite_deltas, field_4_deltas) + (count) * sizeof(sprite_delta)))
++#endif
++
+ MATCH_FUNC(0x5AA3B0)
+ car_info* gtx_0x106C::get_car_info_5AA3B0(u8 idx)
+ {
+@@ -410,6 +416,46 @@ void gtx_0x106C::BuildCarInfoContainer_5AA9A0(s32 chunk_size)
+ 
+ MATCH_FUNC(0x5AAB30)
+ void gtx_0x106C::load_delx_5AAB30(u32 delx_chunk_size)
++#if defined(GTA2_PORT_NATIVE)
++{
++    // Native: field_50_delta_buffer is built here, in memory only; its entries hold
++    // pointers, so their size comes from the structures instead of the 32-bit
++    // "8 * count + 4". The file side (delta_entry, 2 * count + 4) is unchanged.
++    delta_entry* pIter = field_4C_delta_index;
++    u32 off = 0;
++    u32 total = 0;
++    field_60_delta_len = 0;
++    for (; off < delx_chunk_size;)
++    {
++        u32 size = 2 * pIter->field_2_delta_count + 4;
++        field_60_delta_len += GTA2_NATIVE_DELTAS_SIZE(pIter->field_2_delta_count);
++        pIter = (delta_entry*)((u8*)pIter + size);
++        off += size;
++    }
++
++    field_50_delta_buffer = (sprite_deltas*)Memory::malloc_4FE4D0(field_60_delta_len);
++    delta_entry* pSrc = field_4C_delta_index;
++    u32 off2 = 0;
++    sprite_deltas* pDst = (sprite_deltas*)field_50_delta_buffer;
++    for (; off2 < delx_chunk_size;)
++    {
++        pDst->field_0_which_sprite = pSrc->field_0_which_sprite;
++        pDst->field_2_count = pSrc->field_2_delta_count;
++        pDst->field_3_pad = 0;
++        for (u32 i = 0; i < pSrc->field_2_delta_count; i++)
++        {
++            pDst->field_4_deltas[i].field_4_len = pSrc->field_4_delta[i];
++            // An offset into the delta store until SetDeltaDataPtrs_5AABF0.
++            pDst->field_4_deltas[i].field_0_pData = (delta_store_entry*)(uintptr_t)total;
++            total += pDst->field_4_deltas[i].field_4_len;
++        }
++        u32 size = 2 * pSrc->field_2_delta_count + 4;
++        pDst = (sprite_deltas*)((u8*)pDst + GTA2_NATIVE_DELTAS_SIZE(pDst->field_2_count));
++        off2 += size;
++        pSrc = (delta_entry*)((u8*)pSrc + size);
++    }
++}
++#else
+ {
+     delta_entry* pIter = field_4C_delta_index;
+     u32 off = 0;
+@@ -447,10 +493,29 @@ void gtx_0x106C::load_delx_5AAB30(u32 delx_chunk_size)
+         pSrc = (delta_entry*)((u8*)pSrc + size);
+     }
+ }
++#endif
+ 
+ // https://decomp.me/scratch/vwSG1 TODO: fix this hack
+ MATCH_FUNC(0x5AABF0)
+ void gtx_0x106C::SetDeltaDataPtrs_5AABF0()
++#if defined(GTA2_PORT_NATIVE)
++{
++    // Native: the same as the original's u32 arithmetic (each delta's store offset plus
++    // the store's address), on the native entry layout.
++    sprite_deltas* pIter = (sprite_deltas*)field_50_delta_buffer;
++    for (u32 off = 0; off < (u32)field_60_delta_len;)
++    {
++        for (u32 i = 0; i < pIter->field_2_count; i++)
++        {
++            sprite_delta& delta = pIter->field_4_deltas[i];
++            delta.field_0_pData = (delta_store_entry*)((u8*)field_48_delta_store + (uintptr_t)delta.field_0_pData);
++        }
++        const u32 size = GTA2_NATIVE_DELTAS_SIZE(pIter->field_2_count);
++        pIter = (sprite_deltas*)((u8*)pIter + size);
++        off += size;
++    }
++}
++#else
+ {
+     s32 size;
+     delta_entry* i = (delta_entry*)field_50_delta_buffer;
+@@ -465,9 +530,20 @@ void gtx_0x106C::SetDeltaDataPtrs_5AABF0()
+         i = (delta_entry*)((char_type*)i + size);
+     }
+ }
++#endif
+ 
+ MATCH_FUNC(0x5AAC40)
+ void gtx_0x106C::SetSpriteIndexDataPtrs_5AAC40()
++#if defined(GTA2_PORT_NATIVE)
++{
++    // Native: field_0_pData holds the offset load_sprite_index_5AAF80 stored.
++    for (u32 i = 0; i < (u16)this->field_4_sprite_index_count; i++)
++    {
++        sprite_index* pIndex = &this->field_20_sprite_index[i];
++        pIndex->field_0_pData = &this->field_34_sprite_graphics[(uintptr_t)pIndex->field_0_pData];
++    }
++}
++#else
+ {
+     u8* field_0_pData;
+     sprite_index* v4;
+@@ -479,6 +555,7 @@ void gtx_0x106C::SetSpriteIndexDataPtrs_5AAC40()
+         v4->field_0_pData = &this->field_34_sprite_graphics[(u32)field_0_pData];
+     }
+ }
++#endif
+ 
+ /*
+  //gtx_0x106C *this_; // edi
+@@ -573,6 +650,46 @@ void gtx_0x106C::SetSpriteIndexDataPtrs_5AAC40()
+ 
+ MATCH_FUNC(0x5AAC70)
+ void gtx_0x106C::build_delta_container_5AAC70()
++#if defined(GTA2_PORT_NATIVE)
++{
++    // Native: entry sizes as in load_delx_5AAB30, and room for 8-byte entry pointers
++    // (the original allocates 4 * maxSprite + 8).
++    u32 off = 0;
++    sprite_deltas* pIter = (sprite_deltas*)field_50_delta_buffer;
++    u16 maxSprite = 0;
++    for (; off < (u32)field_60_delta_len;)
++    {
++        if (pIter->field_0_which_sprite >= maxSprite)
++        {
++            maxSprite = pIter->field_0_which_sprite;
++        }
++        u32 size = GTA2_NATIVE_DELTAS_SIZE(pIter->field_2_count);
++        off += size;
++        pIter = (sprite_deltas*)((u8*)pIter + size);
++    }
++
++    field_54_del = (delta_container*)Memory::malloc_4FE4D0(offsetof(delta_container, field_4_entries) +
++                                                           sizeof(sprite_deltas*) * (maxSprite + 1));
++    field_54_del->field_0_count = maxSprite + 1;
++    for (u32 i = 0; i < field_54_del->field_0_count; i++)
++    {
++        field_54_del->field_4_entries[i] = 0;
++    }
++
++    pIter = (sprite_deltas*)field_50_delta_buffer;
++    for (u32 off2 = 0; off2 < (u32)field_60_delta_len;)
++    {
++        if (field_54_del->field_4_entries[pIter->field_0_which_sprite])
++        {
++            FatalError_4A38C0(Gta2Error::MultipleSpriteDeltas, "C:\\Splitting\\Gta2\\Source\\style.cpp", 996, pIter->field_0_which_sprite);
++        }
++        field_54_del->field_4_entries[pIter->field_0_which_sprite] = pIter;
++        u32 size = GTA2_NATIVE_DELTAS_SIZE(pIter->field_2_count);
++        pIter = (sprite_deltas*)((u8*)pIter + size);
++        off2 += size;
++    }
++}
++#else
+ {
+     u32 off = 0;
+     sprite_deltas* pIter = (sprite_deltas*)field_50_delta_buffer;
+@@ -619,6 +736,7 @@ void gtx_0x106C::build_delta_container_5AAC70()
+         off2 += size;
+     }
+ }
++#endif
+ 
+ MATCH_FUNC(0x5AAD50)
+ void gtx_0x106C::load_car_info_5AAD50(u32 cari_chunk_size)
+@@ -720,6 +838,34 @@ void gtx_0x106C::load_map_object_info_5AAF00(u32 obji_chunk_len)
+ 
+ MATCH_FUNC(0x5AAF80)
+ void gtx_0x106C::load_sprite_index_5AAF80(u32 sprx_chunk_size)
++#if defined(GTA2_PORT_NATIVE)
++{
++    // Native: the SPRX chunk is 8-byte records (offset into the sprite graphics, width,
++    // height, pad). The original reads them straight into sprite_index, whose first
++    // field becomes a pointer later; with 8-byte pointers the array no longer matches
++    // the file, so each record is converted. As in the original, one extra zeroed entry.
++    if ((sprx_chunk_size & ~7u) > 524280)
++    {
++        FatalError_4A38C0(Gta2Error::TooManySprites, "C:\\Splitting\\Gta2\\Source\\style.cpp", 1198, (u32)sprx_chunk_size >> 3);
++    }
++    const u32 count = ((u32)sprx_chunk_size >> 3) + 1;
++    field_20_sprite_index = (sprite_index*)Memory::malloc_4FE4D0(count * sizeof(sprite_index)); // zero-filled
++    u8* pRecords = (u8*)Memory::malloc_4FE4D0(sprx_chunk_size + 8);
++    File::Global_Read_4A71C0(pRecords, sprx_chunk_size);
++    for (u32 i = 0; i + 1 < count; i++)
++    {
++        const u8* pRecord = pRecords + 8 * i;
++        u32 offset;
++        memcpy(&offset, pRecord, sizeof(offset));
++        field_20_sprite_index[i].field_0_pData = (BYTE*)(uintptr_t)offset;
++        field_20_sprite_index[i].field_4_width = pRecord[4];
++        field_20_sprite_index[i].field_5_height = pRecord[5];
++        memcpy(&field_20_sprite_index[i].field_6_pad, pRecord + 6, 2);
++    }
++    crt::free(pRecords);
++    field_4_sprite_index_count = count;
++}
++#else
+ {
+     field_20_sprite_index = (sprite_index*)Memory::malloc_4FE4D0(sprx_chunk_size + 8);
+     File::Global_Read_4A71C0(field_20_sprite_index, sprx_chunk_size);
+@@ -729,6 +875,7 @@ void gtx_0x106C::load_sprite_index_5AAF80(u32 sprx_chunk_size)
+     }
+     field_4_sprite_index_count = ((u32)sprx_chunk_size >> 3) + 1;
+ }
++#endif
+ 
+ MATCH_FUNC(0x5AAFE0)
+ void gtx_0x106C::InitFontTypes_5AAFE0(u16 fontCount)
+-- 
+2.54.0
+

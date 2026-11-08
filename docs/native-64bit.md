@@ -118,9 +118,19 @@ Règle pour les asserts de taille : voir « Stratégie 64 bits » dans `CLAUDE.m
   | `error.cpp` | 25 | pointeurs passés aux messages d'erreur (affichage), à confirmer |
   | `char.cpp` | 6 | à analyser |
   | `Bink.cpp`, `KanjiFont_8EC.cpp`, `sound_obj.cpp` | 2, 2, 3 | à analyser |
-  | `text_0x14.cpp:107` | 1 | **critique, voir l'entrée 7** |
-  | `sprite.hpp:51`, `gtx_0x106C.cpp:479` | 1, 1 | pointeur rangé dans un `u32`, probablement critique |
-  | `Car_BC`, `Draw`, `Frontend`, `Police_38`, `memory`, `registry`, `winmain` (×2) | 1 chacun | à analyser |
+  | `text_0x14.cpp:107` | 1 | **corrigé**, entrée 7 |
+  | `gtx_0x106C.cpp:479` | 1 | **corrigé**, entrée 8 |
+  | `memory.cpp:36`, `Car_BC.cpp:226`, `Police_38.cpp:1079` | 1 chacun | **corrigés**, entrée 10 |
+  | `sprite.hpp:51` | 1 | sans effet : `mpNext` y sert d'identifiant 32 bits (`SetCollisionId_446920`), la troncature ne perd rien |
+  | `Draw.cpp:127` | 1 | sans effet : l'adresse de la surface logicielle remplit `gScreenTable`, que rien ne relit (le renderer est sur GPU) |
+  | `registry.cpp:471` | 1 | sans effet en little-endian : `lpValueName` sert de tampon de 4 octets, les 4 octets bas contiennent la valeur lue |
+  | `Frontend.cpp:102` | 1 | sans effet : relaie une valeur de registre de 32 bits |
+  | `winmain.cpp:952` | 1 | sans effet : `net_web.cpp` ignore ce callback |
+  | `winmain.cpp:2278` | 1 | sans effet : code de retour de `ShellExecuteA` |
+  | `sound_obj.cpp:5246`, `:5522` | 2 | sans effet : l'adresse sert de nombre pseudo-aléatoire (hauteur, parité) |
+  | `sound_obj.cpp:1398` | 1 | à revoir : `Car_BC*` rangé dans `field_4` (`u32`), jamais relu comme pointeur dans `sound_obj.cpp` |
+  | `Bink.cpp` | 2 | sans effet tant que Bink est désactivé (`bink_web.cpp` : « cannot open ») |
+  | `KanjiFont_8EC.cpp` | 2 | à corriger avant d'activer le japonais (pointeur passé en `s32` à `OutlineGlyph_4D2150`) |
 
 ## 7. Textes `.gxt` : clés lues directement dans une structure à pointeurs (observé)
 
@@ -131,4 +141,56 @@ Règle pour les asserts de taille : voir « Stratégie 64 bits » dans `CLAUDE.m
   directement dans un tableau de `text_0xC { wchar_t*; const char*; s32; }`, puis
   remplace chaque offset par un pointeur sur place. En LP64, `text_0xC` fait 24 octets :
   le nombre d'entrées calculé est faux, la lecture déborde, et les champs sont décalés.
-- **Correctif :** pas encore fait (prochaine étape).
+- **Correctif (patch natif 0004) :** en natif, `text_0xC` garde un pointeur de 8 octets
+  suivi de la clé en ligne (`field_4_pKey[4]` puis `field_8[4]`, contigus, donc
+  `TKeySearch_5B5A10` et son `strcmp` marchent sans changement). `TKEY_Load_5B5960` lit
+  les enregistrements de 12 octets dans un tampon et les convertit un par un.
+- **Après :** plus de débordement ; le menu se crée.
+
+## 8. Style `.sty` : index des sprites et deltas (patch natif 0005)
+
+- **Où :** `gtx_0x106C::load_sprite_index_5AAF80`, `SetSpriteIndexDataPtrs_5AAC40`,
+  `load_delx_5AAB30`, `build_delta_container_5AAC70`, `SetDeltaDataPtrs_5AABF0`.
+- **Symptôme (lu dans le code, après le correctif de l'entrée 10) :**
+  - SPRX est une suite d'enregistrements de 8 octets (offset dans les graphismes,
+    largeur, hauteur), lus directement dans `sprite_index`, dont le premier champ devient
+    un pointeur : même problème que l'entrée 7.
+  - Le tampon des deltas (`field_50_delta_buffer`), construit en mémoire, est parcouru
+    avec la taille 32 bits « `8 * count + 4` », alors que ses entrées contiennent des
+    pointeurs ; le conteneur alloue `4 * maxSprite + 8` pour un tableau de pointeurs ;
+    `SetDeltaDataPtrs_5AABF0` ajoute la base par jeu de types sur des `u32`.
+- **Correctif :** versions natives de ces cinq fonctions, avec `offsetof`/`sizeof`
+  (`GTA2_NATIVE_DELTAS_SIZE`) et `uintptr_t`. Le côté fichier (`delta_entry`,
+  `2 * count + 4`) ne change pas.
+
+## 9. Carte `.gmp` : colonnes et zones (patch natif 0006)
+
+- **Colonnes, critique et silencieux :** `field_40008_pColumn` contient les « column
+  words » du fichier (4 octets chacun), mais il était typé `u16**` et indexé directement
+  (`&field_40008_pColumn[base]`). Le pas de l'index était donc la taille d'un pointeur :
+  en LP64, chaque colonne aurait été lue 2 fois trop loin, sans aucun diagnostic. En
+  natif, le champ est `u32*`. Trouvé en passant en revue les quatre champs `T**` du
+  moteur ; les trois autres sont sans problème (`STexture**` est alloué avec `sizeof`,
+  `car_info**` n'est lu que comme des octets, `SpriteTreeNode_C**` est un pointeur
+  simple).
+- **Zones :** `build_zone_list_4E90E0` allouait `4 * n + 4` pour un tableau de pointeurs
+  (ASan : `heap-buffer-overflow`).
+- **Ajouté :** asserts natifs sur `Map_sub` (0x324) et `gmp_block_info` (0xC), écrites
+  dans la sauvegarde `.svg` à la suite de `SaveData_748`. Elles passent.
+
+## 10. Pointeurs rangés dans des entiers de 32 bits (patch natif 0007)
+
+- `Memory::Aligned_malloc_4FE510` alignait l'adresse avec `(u32)pointeur` : les 32 bits
+  hauts disparaissaient (ASan : SEGV à `0x82590000` au chargement du style). En natif,
+  le calcul se fait en `uintptr_t`.
+- `Car_18::field_0_pScriptCmd` (une commande de script ou un `Generator_2C*`) et
+  `Police_38::field_30` (un `Ped*`) sont des `s32` qui contiennent un pointeur ; en natif,
+  ce sont des `intptr_t`. Les 11 relectures de `Car_BC.cpp` et celle de `Police_38.cpp`
+  (avertissements `-Wint-to-pointer-cast`) compilent sans changement.
+
+## 11. Tableaux de pointeurs alloués en octets 32 bits (patch natif 0008)
+
+- `LightGrid::AllocGrid_4D6E00` allouait `0x4000` octets pour 4 096 `Light_28*`
+  (ASan : `heap-buffer-overflow`). En natif : `4096 * sizeof(Light_28*)`.
+- Recherche des autres allocations `4 * n` dans le moteur : il n'y avait que celles des
+  entrées 8 et 9.

@@ -1,0 +1,29 @@
+From fa02ec37bfa33f0860d91df7368635f8c45f0640 Mon Sep 17 00:00:00 2001
+From: GTA2 port <port@localhost>
+Date: Sat, 7 Nov 2026 20:00:57 -0500
+Subject: [PATCH] native: light grid sized for 8-byte pointers
+
+LightGrid::AllocGrid_4D6E00 allocated 0x4000 bytes for 4096 Light_28 pointers.
+---
+ Source/Light_28.cpp | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/Source/Light_28.cpp b/Source/Light_28.cpp
+index 20c372d6..d4f56270 100644
+--- a/Source/Light_28.cpp
++++ b/Source/Light_28.cpp
+@@ -77,7 +77,11 @@ Light_28* Light_28::RemoveFromGrid_4D6DC0()
+ MATCH_FUNC(0x4D6E00)
+ void __stdcall LightGrid::AllocGrid_4D6E00()
+ {
++#if defined(GTA2_PORT_NATIVE)
++    gLightGrid_6F5400 = (Light_28**)crt::malloc(4096 * sizeof(Light_28*)); // 0x4000 is 4096 4-byte pointers
++#else
+     gLightGrid_6F5400 = (Light_28**)crt::malloc(0x4000u);
++#endif
+     for (s32 i = 0; i < 4096; i++)
+     {
+         gLightGrid_6F5400[i] = 0;
+-- 
+2.54.0
+
