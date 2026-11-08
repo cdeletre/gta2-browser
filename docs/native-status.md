@@ -295,6 +295,14 @@ reporter l'un d'eux, il suffit de retirer sa garde `#if defined(GTA2_PORT_NATIVE
   `fix16.hpp` s'ouvrent tous les deux) : les alias ne sont donc pas créés ici, mais le
   seraient sur un système de fichiers sensible à la casse.
 
+## Multijoueur (jalon 7, à faire)
+
+Pas encore commencé : les ponts réseau `gta2_js_net_*` sont vides en natif
+(`js_bridge_null.cpp`), mais `net_web.cpp`, `coop_web.cpp` et les patches `port_coop.cpp`
+sont déjà compilés. Le plan est dans `CLAUDE.md` (« Multijoueur ») : transport WebSocket vers
+le relais de `server/` (compatible avec le build web), lobby à la manette, vérification du
+déterminisme aarch64 ↔ wasm32, puis tests entre deux consoles et avec un navigateur.
+
 ## Reste à faire
 
 Points 1 à 5 : le jalon 1. Les points 3 et 4 ne le bloquent pas dans le conteneur (montage

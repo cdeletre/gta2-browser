@@ -161,6 +161,29 @@ ssh "$DEVICE" 'cd /roms/ports/gta2 && SDL_VIDEODRIVER=kmsdrm ./gta2 2>&1 | tee l
 
 Toujours écrire les logs sur stdout/stderr pour pouvoir les lire par SSH.
 
+## Multijoueur
+
+Le build web a déjà tout le côté moteur (voir `docs/multiplayer.md`) : lockstep à 30 ticks/s
+où seules les touches circulent, délai d'entrée choisi par l'hôte, contrôle de
+synchronisation toutes les 90 ticks, modes Free roam / Gang Wars / Free-for-all, 2 à 6 joueurs.
+En natif, `gta2_js_net_*` sont aujourd'hui des ponts vides (`js_bridge_null.cpp`).
+Ce qui manque :
+- **Transport.** Pas de WebRTC/Trystero en natif. Cible : client WebSocket vers le relais
+  `/relay` de `server/server.mjs` (même protocole que `ServerTransport` dans `web/net.js`,
+  ce qui permet de jouer avec des navigateurs), et éventuellement une partie directe en réseau
+  local entre consoles, sans serveur.
+- **Lobby.** Celui du web est en HTML (`CoopLobby`). En natif : un lobby jouable à la manette
+  (rejoindre ou héberger, nom, salle, mode, district), qui parle le même protocole
+  (`hello`, `crew`, `side`, `roster`, `start`, `loaded`, `go`). Les réglages par défaut
+  (serveur, nom) dans un fichier de `conf/`.
+- **Déterminisme entre architectures.** Le lockstep suppose une simulation identique au bit
+  près entre aarch64 et wasm32. Vérifier les options flottantes (`-ffp-contract=off` : pas de
+  FMA fusionnés sur ARM) et s'appuyer sur les contrôles de synchronisation pour le prouver.
+- **Manette.** Tableau des scores (Tab), chat (T, saisie de texte sans clavier : messages
+  prédéfinis ou clavier à l'écran), points de passage sur la carte.
+- **Tests observés** : deux instances dans le conteneur, puis deux consoles, puis console +
+  navigateur, avec des contrôles de synchronisation identiques sur des milliers de ticks.
+
 ## Jalons
 
 1. Build natif headless (pas de fenêtre) qui charge les données et entre dans Downtown sans crash,
@@ -170,3 +193,6 @@ Toujours écrire les logs sur stdout/stderr pour pouvoir les lire par SSH.
 4. Clavier, puis manette.
 5. Audio : effets, voix, radio.
 6. Paquet PortMaster (`packaging/portmaster/`), test sur au moins une console.
+7. Multijoueur en réseau : le lockstep du build web (`net_web.cpp`, `coop_web.cpp`,
+   `port_coop.cpp`) avec un transport natif, d'abord console ↔ console, puis console ↔ navigateur.
+   Voir « Multijoueur » plus haut.
