@@ -19,6 +19,17 @@
 // from their edges (sampling at u = 0 or 1 then gives the edge texel, as CLAMP_TO_EDGE on
 // their own texture did). Their UVs are remapped at present, and consecutive batches on
 // the same page and blend mode become one draw.
+// Each small upload into a page still costs about 0.28 ms with Panfrost (TrimUI Smart Pro S:
+// 15 s of the 21 s to reach Downtown), so recent pages keep a copy in memory (up to
+// kMaxShadows of them): images are written there, and the changed rows go to the GPU in one
+// call per page before the next frame is drawn (GLES 2.0 only uploads whole rows). A copy
+// is dropped after kShadowIdle frames without writes, or when a newer page needs it; later
+// writes to that page are uploaded directly.
+// With other drivers small uploads are cheap and whole-page uploads cost more than they
+// save (RG CubeXX, Mali blob: 0.04 ms an upload, Downtown 8 s direct, 17 s batched), so the
+// first kCalibrationUploads are made directly and timed: batching starts only if their
+// median is above kBatchAboveMs (the median, as the first upload into a new page can take
+// far longer on some drivers). GTA2_ATLAS_BATCH=0 or 1 forces the choice.
 //
 // The window and the buffer swap are in port/native/platform/window_sdl.cpp; a GL ES 2.0
 // context is current on this thread before the first call here.
@@ -32,6 +43,7 @@
 
 #include <math.h>
 
+#include <algorithm>
 #include <unordered_map>
 #include <vector>
 
@@ -101,11 +113,20 @@ struct Shelf
     int y, h, x;
 };
 
+constexpr int kMaxShadows = 8;      // pages with a copy in memory (4 MB each)
+constexpr unsigned kCalibrationUploads = 1000;
+constexpr double kBatchAboveMs = 0.15;
+constexpr unsigned kShadowIdle = 300; // frames without writes before a copy is dropped
+
 struct Page
 {
     GLuint tex = 0;
     int bottom = 0; // first row below the shelves
     std::vector<Shelf> shelves;
+    std::vector<uint8_t> shadow; // the page's pixels, while it has a copy
+    int dirtyTop = kPage;        // rows changed in the copy since the last upload
+    int dirtyBottom = -1;
+    unsigned lastWrite = 0;      // frame of the last write
 };
 
 // Where a game texture is: its own GL texture (page < 0), or a rectangle of an atlas page
@@ -130,8 +151,30 @@ struct Renderer
     std::unordered_map<uint32_t, std::vector<Slot>> freeSlots; // by (w << 16 | h)
     std::vector<uint8_t> padded;                                // upload scratch
     std::vector<FrameVertex> verts;                             // present scratch
+    unsigned frame = 0;                                         // presents so far
+    int shadows = 0;                                            // pages with a copy
+    int batch = -1;                                             // batched page uploads: -1 not decided yet
+    std::vector<float> timedMs;                                 // calibration samples
 };
 Renderer gR;
+
+// GTA2_LOG_TEXTURES=1 also logs slow frames: more than 100 ms between two presents, with the
+// texture uploads made in between and the time spent in the buffer swap.
+struct FrameStats
+{
+    unsigned uploads = 0;
+    double uploadSeconds = 0.0;
+    double flushSeconds = 0.0; // page uploads (FlushPages)
+    double lastPresent = 0.0;
+};
+FrameStats gStats;
+
+double NowSeconds()
+{
+    timespec t = {};
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return t.tv_sec + t.tv_nsec * 1e-9;
+}
 
 GLuint Compile(GLenum type, const char* source)
 {
@@ -182,6 +225,11 @@ void Init()
     glDisable(GL_CULL_FACE);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     fprintf(stderr, "gta2: GL_RENDERER %s, GL_VERSION %s\n", glGetString(GL_RENDERER), glGetString(GL_VERSION));
+    if (const char* batch = getenv("GTA2_ATLAS_BATCH"))
+    {
+        gR.batch = atoi(batch) != 0 ? 1 : 0;
+        fprintf(stderr, "gta2: atlas: %s (GTA2_ATLAS_BATCH)\n", gR.batch ? "batched page uploads" : "direct uploads");
+    }
     gR.ready = true;
 }
 
@@ -216,6 +264,69 @@ void SetParams()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 }
 
+// Uploads the rows of a page's copy changed since the last upload.
+void FlushPage(Page& page)
+{
+    if (page.dirtyBottom < page.dirtyTop)
+    {
+        return;
+    }
+    glBindTexture(GL_TEXTURE_2D, page.tex);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, page.dirtyTop, kPage, page.dirtyBottom - page.dirtyTop + 1, GL_RGBA,
+                    GL_UNSIGNED_BYTE, page.shadow.data() + static_cast<size_t>(page.dirtyTop) * kPage * 4);
+    page.dirtyTop = kPage;
+    page.dirtyBottom = -1;
+}
+
+void DropShadow(Page& page)
+{
+    FlushPage(page);
+    std::vector<uint8_t>().swap(page.shadow);
+    --gR.shadows;
+}
+
+// A new page starts with a copy in memory (all zero, as the texture), at the cost of the
+// least recently written page's copy when kMaxShadows are in use.
+void GiveShadow(size_t index)
+{
+    if (gR.shadows >= kMaxShadows)
+    {
+        Page* oldest = nullptr;
+        for (Page& page : gR.pages)
+        {
+            if (!page.shadow.empty() && (!oldest || page.lastWrite < oldest->lastWrite))
+            {
+                oldest = &page;
+            }
+        }
+        if (oldest)
+        {
+            DropShadow(*oldest);
+        }
+    }
+    gR.pages[index].shadow.assign(static_cast<size_t>(kPage) * kPage * 4, 0);
+    gR.pages[index].lastWrite = gR.frame;
+    ++gR.shadows;
+}
+
+// Before a frame is drawn: the changed rows of every copy go to the GPU, and copies left
+// alone for kShadowIdle frames are dropped.
+void FlushPages()
+{
+    for (Page& page : gR.pages)
+    {
+        if (page.shadow.empty())
+        {
+            continue;
+        }
+        FlushPage(page);
+        if (gR.frame - page.lastWrite > kShadowIdle)
+        {
+            DropShadow(page);
+        }
+    }
+}
+
 // A free rectangle of (w + 2) x (h + 2) in some page: best-fitting shelf, else a new
 // shelf, else a new page.
 Slot Allocate(int w, int h)
@@ -229,11 +340,16 @@ Slot Allocate(int w, int h)
     }
     const int pw = w + 2;
     const int ph = h + 2;
-    for (int pass = 0; pass < 2; ++pass)
+    for (int pass = 0; pass < 3; ++pass)
     {
         for (size_t p = 0; p < gR.pages.size(); ++p)
         {
             Page& page = gR.pages[p];
+            // Pass 0: pages with a copy in memory; then any page; pass 2 after a new page.
+            if (pass == 0 && page.shadow.empty())
+            {
+                continue;
+            }
             Shelf* best = nullptr;
             for (Shelf& sh : page.shelves)
             {
@@ -261,12 +377,19 @@ Slot Allocate(int w, int h)
                 return s;
             }
         }
-        Page page;
-        glGenTextures(1, &page.tex);
-        glBindTexture(GL_TEXTURE_2D, page.tex);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, kPage, kPage, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-        SetParams();
-        gR.pages.push_back(page);
+        if (pass == 1)
+        {
+            Page page;
+            glGenTextures(1, &page.tex);
+            glBindTexture(GL_TEXTURE_2D, page.tex);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, kPage, kPage, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+            SetParams();
+            gR.pages.push_back(std::move(page));
+            if (gR.batch == 1)
+            {
+                GiveShadow(gR.pages.size() - 1);
+            }
+        }
     }
     abort(); // a new page always has room
 }
@@ -298,8 +421,36 @@ void UploadPadded(const Slot& s, const uint8_t* rgba)
         memcpy(dst + 4, src, static_cast<size_t>(s.w) * 4);
         memcpy(dst + static_cast<size_t>(pw - 1) * 4, src + static_cast<size_t>(s.w - 1) * 4, 4);
     }
-    glBindTexture(GL_TEXTURE_2D, s.tex);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, s.x - 1, s.y - 1, pw, ph, GL_RGBA, GL_UNSIGNED_BYTE, gR.padded.data());
+    Page& page = gR.pages[static_cast<size_t>(s.page)];
+    if (page.shadow.empty())
+    {
+        const bool timing = gR.batch < 0;
+        const double t0 = timing ? NowSeconds() : 0.0;
+        glBindTexture(GL_TEXTURE_2D, s.tex);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, s.x - 1, s.y - 1, pw, ph, GL_RGBA, GL_UNSIGNED_BYTE, gR.padded.data());
+        if (timing)
+        {
+            gR.timedMs.push_back(static_cast<float>((NowSeconds() - t0) * 1000.0));
+            if (gR.timedMs.size() == kCalibrationUploads)
+            {
+                std::nth_element(gR.timedMs.begin(), gR.timedMs.begin() + kCalibrationUploads / 2, gR.timedMs.end());
+                const double ms = gR.timedMs[kCalibrationUploads / 2];
+                gR.batch = ms > kBatchAboveMs ? 1 : 0;
+                fprintf(stderr, "gta2: atlas: median %.3f ms an upload, %s\n", ms,
+                        gR.batch ? "batched page uploads" : "direct uploads");
+                std::vector<float>().swap(gR.timedMs);
+            }
+        }
+        return;
+    }
+    for (int y = 0; y < ph; ++y)
+    {
+        memcpy(page.shadow.data() + (static_cast<size_t>(s.y - 1 + y) * kPage + (s.x - 1)) * 4,
+               gR.padded.data() + static_cast<size_t>(y) * pw * 4, static_cast<size_t>(pw) * 4);
+    }
+    page.dirtyTop = s.y - 1 < page.dirtyTop ? s.y - 1 : page.dirtyTop;
+    page.dirtyBottom = s.y - 2 + ph > page.dirtyBottom ? s.y - 2 + ph : page.dirtyBottom;
+    page.lastWrite = gR.frame;
 }
 } // namespace
 
@@ -352,7 +503,10 @@ void gta2_js_upload_texture(int id, int w, int h, const void* rgba)
     {
         timespec t1 = {};
         clock_gettime(CLOCK_MONOTONIC, &t1);
-        seconds += (t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) * 1e-9;
+        const double dt = (t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) * 1e-9;
+        seconds += dt;
+        ++gStats.uploads;
+        gStats.uploadSeconds += dt;
         bytes += 4.0 * w * h;
         if (++uploads % 500 == 0)
         {
@@ -388,6 +542,7 @@ void gta2_js_free_all_textures()
     gR.textures.clear();
     gR.pages.clear();
     gR.freeSlots.clear();
+    gR.shadows = 0;
 }
 
 void Gta2Native_SetPresentHeight(int height)
@@ -425,6 +580,16 @@ void gta2_js_present(const void* cmdData, int cmdCount, const void* vertData, in
     glViewport(vpx, vpy, vpw, vph);
     glUseProgram(gR.program);
     glBindBuffer(GL_ARRAY_BUFFER, gR.vbo);
+    ++gR.frame;
+    {
+        static const bool logFlush = getenv("GTA2_LOG_TEXTURES") && atoi(getenv("GTA2_LOG_TEXTURES")) != 0;
+        const double t0 = logFlush ? NowSeconds() : 0.0;
+        FlushPages();
+        if (logFlush)
+        {
+            gStats.flushSeconds += NowSeconds() - t0;
+        }
+    }
     // Atlas UVs: each batch's vertices are moved into its texture's rectangle.
     const FrameCommand* cmds = static_cast<const FrameCommand*>(cmdData);
     gR.verts.assign(static_cast<const FrameVertex*>(vertData), static_cast<const FrameVertex*>(vertData) + vertCount);
@@ -516,7 +681,23 @@ void gta2_js_present(const void* cmdData, int cmdCount, const void* vertData, in
         SetBlend(static_cast<int>(c.blend));
         glDrawArrays(GL_TRIANGLES, static_cast<GLint>(c.first), static_cast<GLsizei>(count));
     }
+    static const bool logFrames = getenv("GTA2_LOG_TEXTURES") && atoi(getenv("GTA2_LOG_TEXTURES")) != 0;
+    const double beforeSwap = logFrames ? NowSeconds() : 0.0;
     Gta2Native_EndFrame();
+    if (logFrames)
+    {
+        const double now = NowSeconds();
+        if (gStats.lastPresent > 0.0 && now - gStats.lastPresent > 0.1)
+        {
+            fprintf(stderr, "gta2: slow frame: %.0f ms since the last, %u texture uploads in %.0f ms, page uploads %.0f ms, swap %.0f ms\n",
+                    (now - gStats.lastPresent) * 1000.0, gStats.uploads, gStats.uploadSeconds * 1000.0,
+                    gStats.flushSeconds * 1000.0, (now - beforeSwap) * 1000.0);
+        }
+        gStats.lastPresent = now;
+        gStats.uploads = 0;
+        gStats.uploadSeconds = 0.0;
+        gStats.flushSeconds = 0.0;
+    }
 }
 
 } // extern "C"
