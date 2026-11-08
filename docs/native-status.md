@@ -29,6 +29,40 @@ SDL2 est lié par son chemin plutôt qu'avec les options de `sdl2.pc`, qui ajout
   30,5 ticks/s sur toutes les tranches de 5 s** après le chargement (49 sur 57 à 30,3).
   Le soak a joué sur le profil 0 de `saves/` de la console.
 
+## R36S (RK3326, AmberELEC) : étape 1 (observé, 8 novembre 2026)
+
+Console : R36S (arbre de périphériques « Anbernic RG351MP »), 4 Cortex-A35 à 1,3 GHz,
+926 Mo de RAM, Mali-G31 avec le pilote propriétaire (libmali r13p0, GBM), noyau 4.4,
+AmberELEC prerelease-20250515, glibc 2.38, SDL 2.32.4. Écran 640×480 par KMS/DRM, sans
+compositeur ; son ALSA (rk817). Lancé par SSH, EmulationStation arrêté pendant l'essai.
+
+- **KMS/DRM, ALSA et la manette intégrée marchent du premier coup** : `SDL KMSDRM video
+  driver, drawable 640x480`, `GL_RENDERER Mali-G31`, `SDL alsa audio driver, 44100 Hz`,
+  manette « GO-Super Gamepad » reconnue.
+- **Premier essai : 80 s pour charger Downtown, et la mémoire montait à 800 Mo** (il ne
+  restait que 47 Mo de libres). Cause mesurée (`GTA2_LOG_TEXTURES=1`) : le jeu enregistre
+  environ 52 000 textures pendant le chargement, une par sprite et par palette, la plupart
+  d'environ 20×20 ; avec ce pilote, chaque texture GL coûte environ 1 ms et une vingtaine
+  de Ko. Sur la Air X (Mesa), le même chargement prend 4 s et 212 Mo.
+- **Corrigé par un atlas** (`port/native/render/gles_renderer.cpp`) : les images jusqu'à
+  254 pixels de côté vont dans des pages de 1024×1024 (50 pages pour Downtown), avec une
+  bordure d'un pixel recopiée des bords ; les UV sont remappées à l'affichage et les lots
+  consécutifs sur la même page sont dessinés en un appel. **Après : Downtown en 11 s,
+  323 Mo stables, 30,3 ticks/s et 60 images/s**, menu et jeu affichés correctement (captures
+  sur la console). Dans le conteneur, image identique à l'ancienne hors animations ; soak de
+  60 s sans erreur ASan.
+- Le menu met environ 10 s à s'afficher (contre 1 s sur la Air X). Les appuis automatiques
+  des tests (`GTA2_AUTOSTART`, `GTA2_MENU_KEYS`) partent maintenant une fois le menu affiché.
+- **Pas un défaut :** au départ, joueur immobile devant l'église, une vue de 640 de large
+  ne fait apparaître aucun passant (2 « peds » : le joueur et un autre), une vue de 720 ou
+  plus en fait apparaître une dizaine. Les passants naissent sur le pourtour des limites de
+  la caméra, là où il y a un trottoir ; en 640, ce pourtour ne tombe que sur des toits tant
+  que le joueur ne bouge pas. Dans les soaks en 640, ils sont 10 à 17 dès que le joueur
+  avance. Que l'original fasse pareil à l'arrêt n'est pas vérifié.
+- Reste à faire (étape 2) : soak long avec conduite, régulateur `performance` contre
+  `powersave`, temps de chargement des autres districts, puis lancement par le script
+  PortMaster de l'utilisateur.
+
 ## Résolutions d'écran (observé, 8 novembre 2026)
 
 Dix tailles de fenêtre dans le conteneur (`GTA2_WINDOW`, binaire release, llvmpipe), avec
