@@ -48,12 +48,8 @@ const Key kEnter{0x1C, 0x0D, 40, 3};
 const Key kJump{0x39, 0x20, 44, 2};
 const Key kPrevWeapon{0x2C, 0x5A, 29, 9};
 const Key kNextWeapon{0x2D, 0x58, 27, 10};
-// Menus: A confirms (input_sdl.cpp's menu layout). Back (4) + Start (6) quit.
+// Menus: A confirms (input_sdl.cpp's menu layout).
 const Key kMenuOk{0x1C, 0x0D, 40, 0};
-const Key kPadBack{0, 0, 0, 4};
-const Key kPadStart{0x01, 0x1B, 41, 6};
-double gQuitAt = -1; // GTA2_SOAK_QUIT_AT (ms), controller only
-int gQuitStage = 0;
 
 enum InputMode
 {
@@ -194,10 +190,6 @@ extern "C" void Gta2Native_InputModeInit()
     {
         gMode = !strcmp(mode, "keyboard") ? kKeyboard : !strcmp(mode, "pad") ? kPad : kDirect;
     }
-    if (const char* quit = getenv("GTA2_SOAK_QUIT_AT"))
-    {
-        gQuitAt = atof(quit) * 1000.0;
-    }
 }
 
 // The autostart's Return in the menus (A on the controller).
@@ -222,21 +214,6 @@ extern "C" void Gta2Native_SoakInit()
 extern "C" void Gta2Native_SoakStep(double now)
 {
     ReleaseDue(now);
-    if (gMode == kPad && gQuitAt >= 0 && now >= gQuitAt && gQuitStage < 2)
-    {
-        // Select, then Start a little later: input_sdl.cpp quits on the pair.
-        if (gQuitStage == 0)
-        {
-            Send(kPadBack, true);
-            gQuitStage = 1;
-        }
-        else if (now >= gQuitAt + 200)
-        {
-            Send(kPadStart, true);
-            gQuitStage = 2;
-        }
-        return;
-    }
     const int* s = gta2_dev_state();
     if (!s[0])
     {

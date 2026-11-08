@@ -12,33 +12,60 @@ GPU (Adreno 610) : menu, puis Downtown, à 60 images/s et 30,3 ticks/s.
   pour les touches imprimables, répétitions ignorées. Les touches du jeu sont celles de
   l'original : flèches, Ctrl gauche (tirer), Entrée (voiture), Espace (saut/frein à main),
   Z/X (armes), Tab et Alt gauche (spécial 1/2), Maj droite (statut).
-- **Manette** (`SDL_GameController`), sur le modèle de `web/gamepad.js` mais avec les touches
-  de l'original. A, B, X, Y ci-dessous sont les **étiquettes** des boutons : SDL ne connaît
-  que les positions, et les portables sont en général étiquetés à la Nintendo (A à droite,
-  B en bas, X en haut, Y à gauche ; c'est le cas de la MANGMI Air X). Par défaut
-  `GTA2_FACE_BUTTONS=nintendo` ; `=xbox` pour des étiquettes Xbox (A en bas, B à droite).
-  Premier essai à la main sur la console avec la lecture par position : le bouton marqué
-  A faisait Échap, donc il quittait le menu ; corrigé ainsi.
-  - en ville : croix/stick gauche = flèches, R2 = accélérer, L2 = freiner, A = tirer,
-    Y = monter/descendre, X = saut/frein à main, B = spécial 1, L1/R1 = arme
-    précédente/suivante, L3 = spécial 2, R3 = statut, Start = Échap ;
-  - dans les menus : croix/stick = flèches, A = Entrée, B et Start = Échap ;
-  - les boutons tenus au changement de contexte sont ignorés jusqu'au relâchement ;
-  - **Select + Start quitte** proprement.
-  Correspondances supplémentaires : `SDL_GAMECONTROLLERCONFIG` (PortMaster), ou
-  `gamecontrollerdb.txt` dans le dossier du jeu.
+- **Manette** (`SDL_GameController`) : disposition lue dans **`conf/controls.ini`**, écrit
+  avec les valeurs par défaut et ses commentaires au premier lancement. Format INI, en
+  anglais : `[options]` (`face_buttons = nintendo|xbox`, `left_stick = dpad|off`,
+  `stick_deadzone`), `[city]` et `[menu]` avec une ligne `bouton = action` par bouton
+  (`a b x y l1 r1 l2 r2 l3 r3 up down left right start select`). Les actions de `[city]`
+  sont les 12 commandes du jeu (`forward backward left right attack enter_exit jump
+  prev_weapon next_weapon special1 special2 status`, plus `pause`) : la touche envoyée est
+  celle que le registre du jeu associe à la commande (`control\0` à `11`, relu à chaque
+  entrée en ville), si bien qu'une touche changée dans les réglages du jeu suit son
+  bouton. `[menu]` : `up down left right confirm back`. Les deux acceptent `none` et
+  `key:<nom SDL>`. Une ligne invalide est signalée dans le journal avec son numéro, puis
+  ignorée ; une ligne absente garde la valeur par défaut.
+  - Valeurs par défaut : en ville, croix/stick = déplacement, R2/L2 = accélérer/freiner,
+    A = tirer, Y = voiture, X = saut/frein à main, B = spécial 1, L1/R1 = armes,
+    L3 = spécial 2, R3 = statut, Start = pause ; dans les menus, A = valider, B et
+    Start = retour. Les étiquettes a, b, x, y suivent `face_buttons` : SDL ne connaît que
+    les positions, et les portables sont en général étiquetés à la Nintendo (A à droite,
+    B en bas ; c'est le cas de la MANGMI Air X). `GTA2_FACE_BUTTONS` remplace le fichier.
+  - Les boutons tenus au changement de contexte sont ignorés jusqu'au relâchement.
+  - `conf/gamecontrollerdb.txt` (s'il existe) et `SDL_GAMECONTROLLERCONFIG` ajoutent des
+    correspondances SDL.
+- **Quitter** est l'affaire du script de lancement (gptokeyb arrête le jeu) : le jeu ne
+  détecte plus Select + Start. `SIGTERM`/`SIGINT` deviennent `SDL_QUIT` ; le jeu s'arrête
+  proprement et enregistre le registre (observé : `kill -TERM` à 15 s, code 0,
+  `conf/registry.txt` écrit). **Pour le script :** gptokeyb doit seulement gérer la sortie,
+  sans traduire les boutons en touches, sinon chaque appui arriverait deux fois.
 - **Vérifié dans le conteneur** (`GTA2_SOAK_INPUT=keyboard` ou `pad` : le pilote de soak
-  injecte de vrais événements SDL, qui passent par `input_sdl.cpp`) : 75 s par mode, même
-  graine ; le joueur marche, tire et monte en voiture, avec des trajectoires presque
-  identiques dans les deux modes. En mode `pad`, le démarrage automatique valide le menu
-  avec A (contexte menu), et `GTA2_SOAK_QUIT_AT=40` (Select puis Start) termine le jeu
-  proprement à 40 s (code 0).
+  injecte de vrais événements SDL) : marche, tirs et montée en voiture au clavier et à
+  la manette ; démarrage validé avec A. Avec `y = jump` et `x = enter_exit` dans
+  `controls.ini`, le soak (qui monte en voiture avec Y) ne monte plus dans aucune voiture
+  (0 ligne d'état « in a car » en 40 s, contre 4 avec le fichier par défaut).
 - **Sur la console :** la manette intégrée est exposée par InputPlumber comme une
-  DualSense virtuelle ; SDL la reconnaît (« PS5 Controller ») sans correspondance
-  supplémentaire, mais l'ouvre deux fois (`js1`, `js2`), qui envoient les mêmes boutons.
-  **Pas encore essayé à la main.**
+  DualSense virtuelle (« PS5 Controller », ouverte deux fois, `js1` et `js2`, qui envoient
+  les mêmes boutons). **Essayé à la main** (8 novembre 2026) : marcher, prendre une voiture,
+  conduire 20 à 30 s. Au premier essai, la lecture par position faisait du bouton marqué
+  A un Échap (il quittait le menu) ; corrigé avec les étiquettes Nintendo par défaut.
 - **Limite connue :** l'état des manettes ouvertes est fusionné. Deux vraies manettes en même
   temps se mélangeraient (relâcher sur l'une libère la touche tenue sur l'autre).
+
+## Dossiers du portage (`roms/ports/gta2/`)
+
+| Dossier | Contenu | Variable |
+|---|---|---|
+| `gta2` | le binaire | |
+| `gamedata/` | les fichiers du jeu installés (le contenu de `game/`) ; le jeu y tourne | `GTA2_DATA_DIR` |
+| `saves/` | ce que le jeu écrit dans `player\` : profils `plyslot*.dat`, parties à l'église `plyslot*.svg`, `hiscores.hsc` | `GTA2_SAVE_DIR` |
+| `conf/` | `registry.txt` (le registre du jeu), `controls.ini`, `gamecontrollerdb.txt` | `GTA2_CONF_DIR` |
+
+- `saves/` et `conf/` sont créés s'ils manquent. Les profils de départ (`game/player/`)
+  sont copiés dans `saves/` par le script d'installation, jamais écrasés ensuite.
+- `conf/registry.txt` : une valeur par ligne (`chemin|nom|d|nombre` ou `chemin|nom|s|texte`),
+  lu après les valeurs par défaut, réécrit quand il change (toutes les 5 s et à la sortie,
+  via un fichier temporaire). Observé : 37 valeurs écrites au premier lancement, toutes
+  relues au suivant ; `game/player/` intact quand `saves/` est un autre dossier.
 
 ## Jalon 3 : fenêtre SDL2 et renderer GLES 2 (observé)
 
@@ -220,5 +247,5 @@ insensible à la casse), mais ils sont nécessaires sur la console.
 2b. ~~Les textes `.gxt`, le style, la carte et les troncatures~~ : faits (entrées 6 à 11).
 3. ~~Recherche insensible à la casse des fichiers du jeu~~ : fait (`fs_native.cpp`,
    jalon 3).
-4. Registre persisté dans un fichier texte (`$GTA2_SAVE_DIR`, sinon `./player/`).
+4. ~~Registre persisté dans un fichier texte~~ : fait (`conf/registry.txt`).
 5. ~~Lancement sous `--sanitize` jusqu'à Downtown~~ : fait (60 s, 0 erreur ASan).

@@ -87,6 +87,29 @@ int Gta2Native_RegistryLoad(const char* path)
     return count;
 }
 
+// A DWORD value of the registry, or fallback when it is not set. path and name are
+// lowercase, as the registry keeps them (win32_shim.cpp). Reads the export, so it is meant
+// for occasional use (input_sdl.cpp reads the 12 control keys when entering the city).
+unsigned int Gta2Native_RegistryDword(const char* path, const char* name, unsigned int fallback)
+{
+    const std::string want = std::string(path) + "|" + name + "|d|";
+    const std::string all = gta2_port_reg_export();
+    for (size_t pos = 0; pos < all.size();)
+    {
+        size_t end = all.find('\n', pos);
+        if (end == std::string::npos)
+        {
+            end = all.size();
+        }
+        if (all.compare(pos, want.size(), want) == 0)
+        {
+            return static_cast<unsigned int>(strtoul(all.c_str() + pos + want.size(), nullptr, 10));
+        }
+        pos = end + 1;
+    }
+    return fallback;
+}
+
 // Writes the registry if it changed since the last write. Returns false on a write error.
 bool Gta2Native_RegistrySave()
 {

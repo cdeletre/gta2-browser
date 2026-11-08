@@ -25,8 +25,8 @@
 #undef fopen
 #undef fclose
 
-extern "C" void Gta2Native_InputInit(const char* gameDir); // input_sdl.cpp
-extern "C" bool Gta2Native_InputEvent(const SDL_Event& e);
+extern "C" void Gta2Native_InputInit(); // input_sdl.cpp
+extern "C" void Gta2Native_InputEvent(const SDL_Event& e);
 extern "C" void Gta2Native_InputFrame();
 
 namespace
@@ -232,7 +232,7 @@ bool Gta2Native_WindowInit()
     fprintf(stderr, "gta2: SDL %s video driver, window %dx%d, drawable %dx%d, swap interval %d\n",
             SDL_GetCurrentVideoDriver(), w, h, dw, dh, SDL_GL_GetSwapInterval());
     ParseShots();
-    Gta2Native_InputInit("."); // main.cpp has already moved to the game folder
+    Gta2Native_InputInit();
     gStartMs = emscripten_get_now();
     return true;
 }
@@ -257,17 +257,19 @@ void Gta2Native_EndFrame()
     SDL_GL_SwapWindow(gWindow);
 }
 
-// Once per loop iteration. Returns false when the window is closed or the player quits
-// with the controller (Select + Start, input_sdl.cpp).
+// Once per loop iteration. Returns false when the window is closed, or when the game is
+// asked to stop (SIGTERM or SIGINT, which SDL turns into SDL_QUIT; PortMaster's gptokeyb
+// ends the game that way).
 bool Gta2Native_PumpEvents()
 {
     SDL_Event e;
     while (SDL_PollEvent(&e))
     {
-        if (e.type == SDL_QUIT || !Gta2Native_InputEvent(e))
+        if (e.type == SDL_QUIT)
         {
             return false;
         }
+        Gta2Native_InputEvent(e);
     }
     Gta2Native_InputFrame();
     return true;

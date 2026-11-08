@@ -17,7 +17,6 @@
 //   GTA2_SOAK=1       random play once the player exists (walk, drive, shoot; soak_native.cpp)
 //   GTA2_SOAK_SEED    the soak's random sequence (default 1)
 //   GTA2_SOAK_INPUT   direct (default), keyboard or pad: also for the autostart's presses
-//   GTA2_SOAK_QUIT_AT quit with Select + Start after this many seconds (pad input only)
 // Window, vsync and screenshots: see platform/window_sdl.cpp.
 #include <errno.h>
 #include <limits.h>
@@ -53,6 +52,7 @@ extern "C" bool Gta2Native_RegistrySave();
 extern "C" int gta2_port_set_view_width(int width); // port/render/vid_web.cpp
 #if !defined(GTA2_NATIVE_HEADLESS)
 extern "C" bool Gta2Native_WindowInit(); // platform/window_sdl.cpp
+extern "C" void Gta2Native_SetConfDir(const char* dir); // platform/input_sdl.cpp
 extern "C" void Gta2Native_DrawableSize(int* w, int* h);
 extern "C" bool Gta2Native_PumpEvents();
 extern "C" void Gta2Native_WindowShutdown();
@@ -160,6 +160,7 @@ int main(int argc, char** argv)
     Gta2Native_SetSaveDir(saveDir.c_str());
 
 #if !defined(GTA2_NATIVE_HEADLESS)
+    Gta2Native_SetConfDir(confDir.c_str()); // controls.ini, gamecontrollerdb.txt
     if (!Gta2Native_WindowInit())
     {
         return 1;
@@ -233,7 +234,7 @@ int main(int argc, char** argv)
 #if !defined(GTA2_NATIVE_HEADLESS)
         if (!Gta2Native_PumpEvents())
         {
-            fprintf(stderr, "gta2: window closed\n");
+            fprintf(stderr, "gta2: asked to quit (window closed or signal)\n");
             break;
         }
 #endif
