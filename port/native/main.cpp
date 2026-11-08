@@ -272,8 +272,11 @@ int main(int argc, char** argv)
     const char* statusEnv = getenv("GTA2_STATUS_SECONDS");
     const double statusMs = (statusEnv ? atof(statusEnv) : 60.0) * 1000.0;
     int code = 0;
+    // GTA2_LOG_TEXTURES=1: a loop iteration over 100 ms is logged with the time of each step.
+    const bool logStalls = getenv("GTA2_LOG_TEXTURES") && atoi(getenv("GTA2_LOG_TEXTURES")) != 0;
     for (;;)
     {
+        const double loopStart = emscripten_get_now();
         const double now = emscripten_get_now() - start;
         // The menu presses start once the menu has drawn 30 frames (half a second of it
         // running), not at a fixed time: loading takes 1 s on the Air X, 10 s on an R36S.
@@ -298,6 +301,7 @@ int main(int argc, char** argv)
             }
         }
 
+        const double tEvents = emscripten_get_now();
 #if !defined(GTA2_NATIVE_HEADLESS)
         if (!Gta2Native_PumpEvents())
         {
@@ -311,10 +315,21 @@ int main(int argc, char** argv)
         }
         Gta2Native_ScenarioStep(now);
 
+        const double tAudio = emscripten_get_now();
         Gta2Native_AudioPump(); // streams decoded ahead of the audio callback
+        const double tGame = emscripten_get_now();
 
         const unsigned before = gta2_port_present_count();
         const int slice = Gta2Port_RunLoopSlice();
+        if (logStalls)
+        {
+            const double end = emscripten_get_now();
+            if (end - loopStart > 100.0)
+            {
+                fprintf(stderr, "gta2: slow loop: %.0f ms (before events %.0f, events and test drivers %.0f, audio %.0f, game %.0f)\n",
+                        end - loopStart, tEvents - loopStart, tAudio - tEvents, tGame - tAudio, end - tGame);
+            }
+        }
         if (slice != -1)
         {
             code = slice;
