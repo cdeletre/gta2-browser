@@ -145,6 +145,22 @@ EmulationStation arrêté (`sudo systemctl stop emulationstation.service`), cach
 - Soak de 4 min avec conduite : 30,3 ticks/s, 60 images/s, aucune boucle lente après le
   chargement, 364 Mo au plus, sortie propre.
 
+## RG34XX-H et RG40XX-H (H700, muOS) (observé, 8 novembre 2026)
+
+Deux autres consoles H700 sous muOS 2606, avec le même pilote Mali r20p0 que la CubeXX. Port
+installé et lancé par l'utilisateur sur les deux.
+
+- **RG34XX-H, 720×480 (3:2) :** vue de jeu 720×480, HUD aux bords, menus en 4:3 avec deux
+  bandes de 40 px, écran Options lisible (captures).
+- **Calibration de l'atlas et gouverneur CPU :** avec ce pilote, le coût d'un envoi suit la
+  vitesse du CPU. RG34XX-H en `schedutil` : médiane 0,021 ms sur 4 essais. RG40XX-H en
+  `powersave` : 0,129 à 0,162 ms, au-dessus du seuil, donc envoi groupé. muOS change le
+  gouverneur selon ce qui tourne (en `powersave` après `FRONTEND stop`).
+- **Le choix compte peu ici :** RG40XX-H, cache vidé, Downtown à 7 s en direct et 6 s en
+  envoi groupé. Les 17 s mesurées en envoi groupé sur la CubeXX venaient d'une version
+  antérieure de l'envoi groupé.
+- Le log de calibration donne maintenant aussi les déciles et quartiles (10, 25, 75, 90 %).
+
 ## G350 (dArkOS) et RG353VS sous ROCKNIX (observé, 8 novembre 2026)
 
 - **G350 :** la console s'identifie comme « BatleXP G350 ». 4 cœurs à 1,51 GHz, 895 Mo de RAM,

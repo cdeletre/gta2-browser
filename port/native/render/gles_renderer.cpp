@@ -501,11 +501,12 @@ void UploadPadded(const Slot& s, const uint8_t* rgba)
             gR.timedMs.push_back(static_cast<float>((NowSeconds() - t0) * 1000.0));
             if (gR.timedMs.size() == kCalibrationUploads)
             {
-                std::nth_element(gR.timedMs.begin(), gR.timedMs.begin() + kCalibrationUploads / 2, gR.timedMs.end());
-                const double ms = gR.timedMs[kCalibrationUploads / 2];
+                std::sort(gR.timedMs.begin(), gR.timedMs.end());
+                const auto at = [](unsigned per100) { return gR.timedMs[kCalibrationUploads * per100 / 100]; };
+                const double ms = at(50);
                 gR.batch = ms > kBatchAboveMs ? 1 : 0;
-                fprintf(stderr, "gta2: atlas: median %.3f ms an upload, %s\n", ms,
-                        gR.batch ? "batched page uploads" : "direct uploads");
+                fprintf(stderr, "gta2: atlas: median %.3f ms an upload (10%%: %.3f, 25%%: %.3f, 75%%: %.3f, 90%%: %.3f), %s\n",
+                        ms, at(10), at(25), at(75), at(90), gR.batch ? "batched page uploads" : "direct uploads");
                 std::vector<float>().swap(gR.timedMs);
             }
         }
