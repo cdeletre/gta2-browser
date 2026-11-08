@@ -17,6 +17,7 @@
 //                     ok, up, down, left, right, back ("ok,right,ok": area 2;
 //                     "ok,up,up,ok": resume the saved game)
 //   GTA2_RUN_SECONDS  stop cleanly after this many seconds (soak tests)
+//   GTA2_STATUS_SECONDS  seconds between status lines in the log (default 60, 0: none)
 //   GTA2_SOAK=1       random play once the player exists (walk, drive, shoot; soak_native.cpp)
 //   GTA2_SOAK_SEED    the soak's random sequence (default 1)
 //   GTA2_SOAK_INPUT   direct (default), keyboard or pad: also for the autostart's presses
@@ -265,6 +266,9 @@ int main(int argc, char** argv)
 
     const double start = emscripten_get_now();
     double lastReport = start;
+    double lastRegistrySave = 0.0;
+    const char* statusEnv = getenv("GTA2_STATUS_SECONDS");
+    const double statusMs = (statusEnv ? atof(statusEnv) : 60.0) * 1000.0;
     int code = 0;
     for (;;)
     {
@@ -308,7 +312,12 @@ int main(int argc, char** argv)
             fprintf(stderr, "gta2: game ended (%d)\n", slice);
             break;
         }
-        if (now - (lastReport - start) >= 5000)
+        if (now - lastRegistrySave >= 5000)
+        {
+            lastRegistrySave = now;
+            Gta2Native_RegistrySave(); // only writes when something changed
+        }
+        if (statusMs > 0 && now - (lastReport - start) >= statusMs)
         {
             const double elapsed = now - (lastReport - start);
             lastReport = start + now;
@@ -320,7 +329,6 @@ int main(int argc, char** argv)
             fprintf(stderr, "gta2: %.0f s, %.1f ticks/s, %u frames, %s\n", now / 1000.0,
                     (ticks - lastTicks) * 1000.0 / elapsed, gta2_port_present_count(), status);
             lastTicks = ticks;
-            Gta2Native_RegistrySave(); // only writes when something changed
         }
         if (runMs > 0 && now >= runMs)
         {
