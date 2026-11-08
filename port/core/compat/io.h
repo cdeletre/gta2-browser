@@ -6,7 +6,11 @@ struct _finddata_t
 {
     unsigned attrib;
     time_t time_create, time_access, time_write;
+#if defined(__LP64__)
+    unsigned int size; /* 4 bytes, as MSVC's `unsigned long` (8 on LP64 Linux) */
+#else
     unsigned long size;
+#endif
     char name[260];
 };
 #define _A_NORMAL 0x00

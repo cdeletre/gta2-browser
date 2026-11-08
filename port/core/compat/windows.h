@@ -44,11 +44,23 @@ extern "C" {
 typedef int BOOL;
 typedef unsigned char BYTE;
 typedef unsigned short WORD;
+/* Win32 and Win64 both keep DWORD/LONG/ULONG/HRESULT at 4 bytes. `long` is 4 bytes on
+ * wasm32 but 8 on LP64 Linux (native aarch64 build), so LP64 uses int instead. The
+ * wasm32 build keeps `long`, unchanged. */
+#if defined(__LP64__)
+typedef unsigned int DWORD;
+#else
 typedef unsigned long DWORD; /* 4 bytes on wasm32, as on Win32 */
+#endif
 typedef unsigned int UINT;
 typedef int INT;
+#if defined(__LP64__)
+typedef int LONG;
+typedef unsigned int ULONG;
+#else
 typedef long LONG;
 typedef unsigned long ULONG;
+#endif
 typedef short SHORT;
 typedef unsigned short USHORT;
 typedef char CHAR;
@@ -61,13 +73,31 @@ typedef int64_t LONGLONG;
 typedef uint64_t ULONGLONG;
 typedef int64_t __int64_t_compat;
 typedef BYTE BOOLEAN;
+#if defined(__LP64__)
+typedef int HRESULT;
+#else
 typedef long HRESULT;
+#endif
 typedef intptr_t INT_PTR, LONG_PTR;
 typedef uintptr_t UINT_PTR, ULONG_PTR, DWORD_PTR;
 typedef ULONG_PTR SIZE_T;
 typedef UINT_PTR WPARAM;
 typedef LONG_PTR LPARAM;
 typedef LONG_PTR LRESULT;
+
+#if defined(__LP64__)
+#ifdef __cplusplus
+#define GTA2_COMPAT_SIZE_CHECK(t, n) static_assert(sizeof(t) == n, "sizeof(" #t ") must be " #n " as on Win32")
+#else
+#define GTA2_COMPAT_SIZE_CHECK(t, n) _Static_assert(sizeof(t) == n, "sizeof(" #t ") must be " #n " as on Win32")
+#endif
+GTA2_COMPAT_SIZE_CHECK(DWORD, 4);
+GTA2_COMPAT_SIZE_CHECK(LONG, 4);
+GTA2_COMPAT_SIZE_CHECK(ULONG, 4);
+GTA2_COMPAT_SIZE_CHECK(HRESULT, 4);
+GTA2_COMPAT_SIZE_CHECK(BOOL, 4);
+GTA2_COMPAT_SIZE_CHECK(WCHAR, 2); /* -fshort-wchar */
+#endif
 typedef WORD ATOM;
 typedef DWORD COLORREF;
 

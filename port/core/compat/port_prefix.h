@@ -9,6 +9,15 @@
 #pragma once
 #define __NT__ 1 /* selects the Win32 branch of 3rdParty/mss.h only */
 
+/* 3rdParty/mss.h (Miles) defines U32/S32/REALFAR as `long` unless they are already
+ * defined: 4 bytes on Win32 and wasm32, 8 on LP64 Linux (native aarch64 build). Only
+ * mss.h and port/audio/miles_web.cpp use these names. */
+#if defined(__LP64__)
+#define U32 unsigned int
+#define S32 signed int
+#define REALFAR unsigned int
+#endif
+
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdio.h>
