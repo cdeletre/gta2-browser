@@ -29,6 +29,49 @@ SDL2 est lié par son chemin plutôt qu'avec les options de `sdl2.pc`, qui ajout
   30,5 ticks/s sur toutes les tranches de 5 s** après le chargement (49 sur 57 à 30,3).
   Le soak a joué sur le profil 0 de `saves/` de la console.
 
+## TrimUI Smart Pro S (REG Linux) et chargements (observé, 8 novembre 2026)
+
+Console : TrimUI Smart Pro S, 8 cœurs Cortex-A55, 959 Mo de RAM, Mali-G57 MC1 avec
+**Panfrost** (Mesa 26.2), REG Linux 26.10-dev (noyau 6.18), Wayland (sway) en 1280×720,
+son PipeWire, glibc 2.41. Port installé et lancé par l'utilisateur avec son lanceur ;
+essais mesurés par SSH, binaire dans `/tmp`, cache disque vidé avant chaque essai.
+
+- **Chargements longs, cause mesurée :** pas la carte (15,4 Mo des fichiers de Downtown lus
+  à froid en 0,7 s), mais l'envoi des textures. Avec Panfrost, chaque petit envoi dans une
+  page d'atlas coûte environ 0,28 ms : 15 s sur les 21 s jusqu'à Downtown (menu à 6,0 s).
+- **Corrigé par l'envoi groupé des pages** (`gles_renderer.cpp`) : les pages récentes
+  gardent une copie en mémoire (au plus 8, 32 Mo), les lignes modifiées partent au GPU en un
+  appel par page avant l'image suivante. Sur le pilote Mali de la CubeXX, c'est l'inverse
+  (petits envois à 0,04 ms, Downtown 8 s en direct, 17 s groupé) : les 1 000 premiers envois
+  sont chronométrés et l'envoi groupé n'est choisi que si leur médiane dépasse 0,15 ms
+  (`GTA2_ATLAS_BATCH=0/1` force le choix).
+- **Blocages en jeu de 0,3 à 1,4 s, environ toutes les 30 s en voiture :** l'ouverture d'une
+  piste de radio lisait tout le WAV (jusqu'à 32 Mo) dans le fil du jeu. Corrigé : le fichier
+  est projeté en mémoire, la suite est lue d'avance en arrière-plan, et quand les données à
+  décoder ne sont pas encore en mémoire (une station reprend au milieu d'une piste), le
+  décodeur attend jusqu'à 300 ms au lieu de bloquer le jeu.
+- **Après correction, cache vidé, soak avec conduite :**
+
+| Console | Choix de l'atlas (médiane) | Downtown atteint | Blocages en jeu |
+|---|---|---|---|
+| TrimUI Smart Pro S (Panfrost) | groupé (0,217 ms) | 7,0 s (21,7 s avant) | aucun sur 2 min 20 |
+| RG CubeXX (Mali r20p0) | direct (0,041 ms) | 9,6 s | aucun |
+| R36S (Mali r13p0) | direct (0,050 ms) | 12,7 s | aucun |
+| MANGMI Air X (freedreno) | direct (0,024 ms) | 6,0 s | aucun |
+
+  Sur la R36S, l'envoi groupé forcé donnait 10,0 s : le seuil de 0,15 ms la laisse en direct,
+  au prix de 2,7 s, pour ne pas risquer le cas de la CubeXX (0,041 ms) ; à revoir si besoin.
+- `GTA2_LOG_TEXTURES=1` écrit aussi les images de plus de 100 ms (envois de textures, envois
+  de pages, attente de l'affichage) et les tours de boucle de plus de 100 ms avec le temps de
+  chaque étape (événements, son, jeu). Soak de 90 s sous ASan, son actif et envoi groupé
+  forcé : aucune erreur.
+- **MANGMI Air X, installation neuve par le paquet de l'utilisateur :** fonctionne
+  (observé par l'utilisateur).
+- Par SSH, `get_controls` de PortMaster sur REG Linux met toute la base de manettes dans
+  `SDL_GAMECONTROLLERCONFIG` (« Argument list too long ») : depuis l'interface, `regmsgd`
+  fournit seulement les manettes branchées. Les essais par SSH passent la base par
+  `SDL_GAMECONTROLLERCONFIG_FILE`.
+
 ## RG CubeXX (H700, muOS) (observé, 8 novembre 2026)
 
 Console : Anbernic RG CubeXX, Allwinner H700 (4 Cortex-A53, jusqu'à 1,8 GHz), 973 Mo de
