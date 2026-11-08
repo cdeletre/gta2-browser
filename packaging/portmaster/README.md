@@ -20,6 +20,9 @@ The settings are in `ports/gta2/conf/`: `registry.txt` holds the game's own opti
   scaled. A wider screen (16:9) shows more of the city on the sides, and a taller one (1:1, as on the
   RG CubeXX) shows more above and below. Menus stay 4:3, with black bars.
 - The intro movies are not played.
+- Options (main menu) opens a simple settings screen instead of the original's separate GTA2
+  Manager program: music and radio volume, sound effects volume, text speed, exploding scores,
+  lighting, and the A/B layout (`face_buttons`).
 - Quitting: Start opens the game's pause and quit prompt, then A twice quits (the second press
   confirms "ARE YOU SURE?"), B or Start carries on.
 

@@ -47,6 +47,8 @@ extern "C" void gta2_port_release_all_keys();
 extern "C" bool Gta2Native_IsPlaying();       // status_native.cpp
 extern "C" bool Gta2Native_QuitPromptShown(); // status_native.cpp
 extern "C" unsigned int Gta2Native_RegistryDword(const char* path, const char* name, unsigned int fallback);
+extern "C" bool Gta2Native_OptionsOpen();             // options_native.cpp
+extern "C" void Gta2Native_OptionsInput(int action);  // options_native.cpp
 
 namespace
 {
@@ -193,6 +195,9 @@ Key gSlotKeys[12]; // current key of each slot (registry), refreshed on entering
 
 bool gNintendoLabels = true;
 int gFaceMode = 0; // face_buttons: 0 auto, 1 nintendo, 2 xbox
+bool gFromLauncher = false; // SDL_GAMECONTROLLERCONFIG set (face_buttons = auto)
+bool gOptionsShown = false; // the Options screen had the input at the last frame
+bool gOptionsHeld[kInputCount] = {}; // inputs down at the last frame, for the screen's presses
 bool gLogInput = false; // GTA2_LOG_INPUT
 bool gStickAsDpad = true;
 int gStickDeadzone = static_cast<int>(0.35 * 32767); // web/gamepad.js
@@ -619,6 +624,76 @@ int Gta2Native_PadButtonForLabel(int sdlButtonAsLabel)
     return kNintendo[sdlButtonAsLabel];
 }
 
+// options_native.cpp: face_buttons (0 auto, 1 nintendo, 2 xbox), changed at once and
+// written to controls.ini (only that line: the rest of the file stays as it is).
+int Gta2Native_FaceButtons()
+{
+    return gFaceMode;
+}
+
+void Gta2Native_SetFaceButtons(int mode)
+{
+    static const char* const kNames[] = {"auto", "nintendo", "xbox"};
+    gFaceMode = mode < 0 || mode > 2 ? 0 : mode;
+    gNintendoLabels = gFaceMode == 1 || (gFaceMode == 0 && !gFromLauncher);
+    const std::string path = gConfDir + "/controls.ini";
+    std::string text;
+    if (FILE* f = fopen(path.c_str(), "r"))
+    {
+        char buf[4096];
+        size_t n;
+        while ((n = fread(buf, 1, sizeof(buf), f)) > 0)
+        {
+            text.append(buf, n);
+        }
+        fclose(f);
+    }
+    else
+    {
+        text = kDefaultControls;
+    }
+    const std::string line = std::string("face_buttons = ") + kNames[gFaceMode];
+    std::string out;
+    bool inOptions = false;
+    bool done = false;
+    for (size_t pos = 0; pos < text.size();)
+    {
+        size_t end = text.find('\n', pos);
+        end = end == std::string::npos ? text.size() : end + 1;
+        std::string row = text.substr(pos, end - pos);
+        pos = end;
+        const std::string t = LowerStr(Trim(row));
+        if (!t.empty() && t[0] == '[')
+        {
+            if (inOptions && !done)
+            {
+                out += line + "\n";
+                done = true;
+            }
+            inOptions = t.compare(0, 9, "[options]") == 0;
+        }
+        else if (inOptions && !done && t.compare(0, 12, "face_buttons") == 0)
+        {
+            row = line + "\n";
+            done = true;
+        }
+        out += row;
+    }
+    if (!done)
+    {
+        out += (out.empty() || out.back() == '\n' ? "" : "\n") + std::string(inOptions ? "" : "[options]\n") + line + "\n";
+    }
+    if (FILE* w = fopen(path.c_str(), "w"))
+    {
+        fputs(out.c_str(), w);
+        fclose(w);
+    }
+    else
+    {
+        fprintf(stderr, "gta2: cannot write %s\n", path.c_str());
+    }
+}
+
 void Gta2Native_InputInit()
 {
     LoadControls();
@@ -629,6 +704,7 @@ void Gta2Native_InputInit()
     }
     const char* launcherMapping = getenv("SDL_GAMECONTROLLERCONFIG");
     const bool fromLauncher = launcherMapping && *launcherMapping;
+    gFromLauncher = fromLauncher;
     gNintendoLabels = gFaceMode == 1 || (gFaceMode == 0 && !fromLauncher);
     fprintf(stderr, "gta2: controller face buttons: %s%s, left stick %s\n",
             gNintendoLabels ? "Nintendo (A right, B bottom) labels" : "as the mapping names them",
@@ -656,6 +732,20 @@ void Gta2Native_InputEvent(const SDL_Event& e)
             if (const Key* k = KeyFor(e.key.keysym.scancode))
             {
                 const bool down = e.type == SDL_KEYDOWN;
+                if (Gta2Native_OptionsOpen() && down)
+                {
+                    // The Options screen takes the presses (key releases still reach the game,
+                    // so the Return that opened the screen does not stay down there).
+                    const SDL_Scancode sc = e.key.keysym.scancode;
+                    const int action = sc == SDL_SCANCODE_UP ? 0 : sc == SDL_SCANCODE_DOWN ? 1 : sc == SDL_SCANCODE_LEFT ? 2
+                                     : sc == SDL_SCANCODE_RIGHT ? 3 : sc == SDL_SCANCODE_RETURN || sc == SDL_SCANCODE_KP_ENTER ? 4
+                                     : sc == SDL_SCANCODE_ESCAPE || sc == SDL_SCANCODE_BACKSPACE ? 5 : -1;
+                    if (action >= 0)
+                    {
+                        Gta2Native_OptionsInput(action);
+                    }
+                    break;
+                }
                 if (down && e.key.repeat)
                 {
                     break; // as web/shell.js: the game sees one press
@@ -715,6 +805,46 @@ void Gta2Native_InputEvent(const SDL_Event& e)
 // Once per loop iteration, after the events: turns the controller's state into keys.
 void Gta2Native_InputFrame()
 {
+    // The Options screen: new presses of the d-pad (or stick), A, B and Start go to it, and
+    // the game gets none; buttons still down when it closes stay blocked until released.
+    if (Gta2Native_OptionsOpen())
+    {
+        if (!gOptionsShown)
+        {
+            Apply({});
+            for (int b = 0; b < kInputCount; ++b)
+            {
+                gOptionsHeld[b] = gPressed[b]; // the A that chose Options
+            }
+            gOptionsShown = true;
+        }
+        static const struct
+        {
+            int input, action;
+        } kMap[] = {{kPadUp, 0},   {kStickUp, 0},   {kPadDown, 1},  {kStickDown, 1},  {kPadLeft, 2},
+                    {kStickLeft, 2}, {kPadRight, 3}, {kStickRight, 3}, {kA, 4},       {kB, 5},
+                    {kStart, 5}};
+        for (const auto& m : kMap)
+        {
+            if (gPressed[m.input] && !gOptionsHeld[m.input])
+            {
+                Gta2Native_OptionsInput(m.action);
+            }
+        }
+        for (int b = 0; b < kInputCount; ++b)
+        {
+            gOptionsHeld[b] = gPressed[b];
+        }
+        return;
+    }
+    if (gOptionsShown)
+    {
+        gOptionsShown = false;
+        for (int b = 0; b < kInputCount; ++b)
+        {
+            gBlocked[b] = gPressed[b]; // the B that closed the screen
+        }
+    }
     // The quit prompt takes the menu layout: A quits, B or Start carries on.
     const int playing = Gta2Native_IsPlaying() && !Gta2Native_QuitPromptShown() ? 1 : 0;
     if (playing != gPlaying)

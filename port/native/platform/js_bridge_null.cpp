@@ -1,6 +1,7 @@
 // Native implementations of the EM_JS bridges the shared port files call, for the parts
 // the native build does not have yet: in the browser these reach web/audio.js, the save
-// storage, the co-op transport and the Controls screen; here nothing is sent.
+// storage, the co-op transport and the Controls screen; here nothing is sent (the
+// Options item: platform/options_native.cpp).
 // The render bridges are in port/native/render/ (gles_renderer.cpp, or render_headless.cpp
 // for GTA2_HEADLESS builds), the audio ones in port/native/audio/ (audio_sdl.cpp, or
 // audio_null.cpp).
@@ -28,10 +29,13 @@ void gta2_js_net_send(int, const void*, int)
 }
 
 // --- platform/options_web.cpp: the front end's Options item ---------------------------
-// The browser opens its Controls screen; natively there is none yet, so the menu stays.
+// With a window, platform/options_native.cpp shows the port's Options screen; headless
+// builds have none.
+#if defined(GTA2_NATIVE_HEADLESS)
 void gta2_js_open_options()
 {
-    fprintf(stderr, "gta2: Options (controls screen) not available in the native build yet\n");
+    fprintf(stderr, "gta2: Options not available in headless builds\n");
 }
+#endif
 
 } // extern "C"

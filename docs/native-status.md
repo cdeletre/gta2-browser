@@ -76,6 +76,38 @@ essais mesurés par SSH, binaire dans `/tmp`, cache disque vidé avant chaque es
   fournit seulement les manettes branchées. Les essais par SSH passent la base par
   `SDL_GAMECONTROLLERCONFIG_FILE`.
 
+## Écran Options (observé, 8 novembre 2026)
+
+L'entrée « Options » du menu principal lançait GTA2 Manager, un programme Windows séparé. Le
+web montre à la place son écran Contrôles (patch 0024). En natif, elle ouvre un écran simple
+dessiné par-dessus le menu (`platform/options_native.cpp`), avec une police 5×7 intégrée
+(`render/overlay_font.h`) et des rectangles dessinés après l'image du jeu
+(`gles_renderer.cpp`). Il n'y a pas de thème GTA2.
+
+| Ligne | Registre / fichier | Appliqué |
+|---|---|---|
+| Musique et radio | `sound\cdvol` (0 à 127, pas de 10 %) | tout de suite |
+| Effets sonores | `sound\sfxvol` | tout de suite |
+| Vitesse du texte | `option\text_speed` (1 à 5, 3 = normal) | à la partie suivante (`Hud_2B00::GetTextSpeed_5D6A90`) |
+| Points qui explosent | `screen\exploding_on` | tout de suite (`Init_FrameRateLightAndUnknown_5D8EB0`) |
+| Éclairage | `screen\lighting` | tout de suite (même fonction) |
+| Boutons A/B | `controls.ini`, ligne `face_buttons` seulement | tout de suite |
+
+- **Commandes :** haut et bas choisissent une ligne, gauche et droite changent la valeur (A
+  aussi), B ou Start ferment. Au clavier : les flèches, Entrée, Échap. Tant que l'écran est
+  ouvert, le jeu ne reçoit aucune touche. Les boutons encore enfoncés à la fermeture restent
+  bloqués jusqu'à leur relâchement : le B qui ferme ne fait pas « retour » dans le menu du jeu.
+- **Observé, piloté par des événements manette (`GTA2_SOAK_INPUT=pad`) :**
+  - R36S (640×480), Air X (1920×1080), CubeXX (720×720) : texte lisible, et chaque
+    changement se retrouve dans `registry.txt` et `controls.ini` ;
+  - fermeture par A sur « Back » comme par B : le menu du jeu répond ensuite normalement ;
+  - build ASan/UBSan sur la Air X, de Options jusqu'à 30 s dans Downtown : aucune erreur
+    mémoire. Les rapports UBSan sont ceux déjà connus du moteur (noms de zone, tableaux de
+    taille 1 ou 2), et les fuites de fin (4,7 Ko) sont les mêmes avec ou sans Options.
+- **Pas encore vérifié :** l'effet des volumes à l'oreille et de l'éclairage à l'écran.
+  F8 en ville appelle aussi cet écran (comme GTA2 Manager dans l'original) ; le jeu continue
+  derrière, sans entrées.
+
 ## RG353VS (dArkOS) (observé, 8 novembre 2026)
 
 Console : Anbernic RG353VS, RK3566 (4 Cortex-A55 à 1,99 GHz, gouverneur `performance`),
