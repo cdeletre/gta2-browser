@@ -13,6 +13,10 @@
 // plus the port's own controller setting:
 //   face buttons             controls.ini face_buttons      at once (input_sdl.cpp)
 //
+// It opens from the main menu's Options, and in the city from the pause (Start, then Select:
+// input_sdl.cpp) or F8 (the original's GTA2 Manager key). The original's quit prompt does
+// not pause, so the screen pauses a single-player game while it is open (Game_0x40's pause,
+// as F6); a network game runs on, as the other players' do.
 // Up/down choose a line, left/right change it (A too), B or Start close; with a keyboard,
 // the arrows, Return and Escape. input_sdl.cpp sends the presses here while the screen is
 // open, and none to the game.
@@ -23,7 +27,10 @@
 
 #include <algorithm>
 
+#include "Game_0x40.hpp"
+#include "cSampleManager.hpp"
 #include "debug.hpp"
+#include "winmain.hpp"
 #include "root_sound.hpp"
 #include "sound_obj.hpp"
 
@@ -33,6 +40,7 @@ extern "C" void gta2_port_reg_set_dword(const char* path, const char* name, DWOR
 extern "C" unsigned int Gta2Native_RegistryDword(const char* path, const char* name, unsigned int fallback);
 extern "C" void Gta2Native_OverlayRect(float x, float y, float w, float h, uint32_t rgba);
 extern "C" void Gta2Native_OverlayText(float x, float y, float px, uint32_t rgba, const char* text);
+extern "C" bool Gta2Native_IsPlaying();          // status_native.cpp
 extern "C" int Gta2Native_FaceButtons();          // input_sdl.cpp: 0 auto, 1 nintendo, 2 xbox
 extern "C" void Gta2Native_SetFaceButtons(int mode); // input_sdl.cpp, also writes controls.ini
 
@@ -58,6 +66,7 @@ const char* const kLabels[kLineCount] = {"Music and radio", "Sound effects", "Te
 
 bool gOpen = false;
 int gLine = 0;
+bool gPausedGame = false; // the screen paused the city (and unpauses it on closing)
 
 // Volumes in steps of 10%: 0..10.
 int VolumeStep(int vol)
@@ -112,6 +121,12 @@ void Change(int line, int dir)
             const int vol = StepVolume(std::clamp(VolumeStep(Music()) + dir, 0, 10));
             gRoot_sound_66B038.SetCDVol_40F0F0(static_cast<u8>(vol));
             gta2_port_reg_set_dword(kSound, "cdvol", vol);
+            if (!Gta2Native_IsPlaying())
+            {
+                // The menu's music takes the volume when its stream opens (sound_obj.cpp,
+                // 6/10 of cdvol): the playing one is changed here too.
+                gSampManager_6FFF00.StreamSetVolume_58E2F0(static_cast<u8>(6 * vol / 10));
+            }
             break;
         }
         case kEffects:
@@ -146,6 +161,11 @@ void Change(int line, int dir)
 void Close()
 {
     gOpen = false;
+    if (gPausedGame && gGame_0x40_67E008 && gGame_0x40_67E008->Is_game_state_Paused_2_416BC0())
+    {
+        gGame_0x40_67E008->Unpause_4B96C0();
+    }
+    gPausedGame = false;
     fprintf(stderr, "gta2: options closed\n");
 }
 } // namespace
@@ -159,6 +179,13 @@ void gta2_js_open_options()
     {
         gOpen = true;
         gLine = 0;
+        gPausedGame = false;
+        if (Gta2Native_IsPlaying() && gGame_0x40_67E008 && !bStartNetworkGame_7081F0 &&
+            gGame_0x40_67E008->field_0_game_state == GameState::Running_1)
+        {
+            gGame_0x40_67E008->Pause_4B96B0();
+            gPausedGame = true;
+        }
         fprintf(stderr, "gta2: options opened\n");
     }
 }

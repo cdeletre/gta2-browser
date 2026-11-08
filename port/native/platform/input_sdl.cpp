@@ -49,6 +49,7 @@ extern "C" bool Gta2Native_QuitPromptShown(); // status_native.cpp
 extern "C" unsigned int Gta2Native_RegistryDword(const char* path, const char* name, unsigned int fallback);
 extern "C" bool Gta2Native_OptionsOpen();             // options_native.cpp
 extern "C" void Gta2Native_OptionsInput(int action);  // options_native.cpp
+extern "C" void gta2_js_open_options();              // options_native.cpp
 
 namespace
 {
@@ -228,6 +229,7 @@ const char* const kDefaultControls = R"(# GTA2 controller layout
 #   (key:Escape, key:Return, key:F1, key:Tab ...).
 #
 # Quitting: Start (pause) opens the quit prompt, then A twice quits, B carries on.
+# Options (volumes, text speed...): Select during the pause, or Options in the main menu.
 # The PortMaster launcher can also end the game.
 
 [options]
@@ -844,6 +846,16 @@ void Gta2Native_InputFrame()
         {
             gBlocked[b] = gPressed[b]; // the B that closed the screen
         }
+    }
+    // In the city, Select during the pause (Start: the quit prompt) opens the Options screen.
+    static bool selectWas = false;
+    const bool selectNow = gPressed[kSelect] && !gBlocked[kSelect];
+    const bool openOptions = selectNow && !selectWas && Gta2Native_IsPlaying() && Gta2Native_QuitPromptShown();
+    selectWas = selectNow;
+    if (openOptions)
+    {
+        gta2_js_open_options();
+        return;
     }
     // The quit prompt takes the menu layout: A quits, B or Start carries on.
     const int playing = Gta2Native_IsPlaying() && !Gta2Native_QuitPromptShown() ? 1 : 0;

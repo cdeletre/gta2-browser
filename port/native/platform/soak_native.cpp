@@ -51,6 +51,9 @@ const Key kNextWeapon{0x2D, 0x58, 27, 10};
 // Menus: A confirms, B goes back, the d-pad moves (input_sdl.cpp's menu layout).
 const Key kMenuOk{0x1C, 0x0D, 40, 0};
 const Key kMenuBack{0x01, 0x1B, 41, 1};
+// Start (Escape: the pause) and Select (F8 on a keyboard: the Options screen in the city).
+const Key kStartButton{0x01, 0x1B, 41, 6};
+const Key kSelectButton{0x42, 0x77, 65, 4};
 
 enum InputMode
 {
@@ -196,9 +199,9 @@ extern "C" void Gta2Native_InputModeInit()
 // The autostart's Return in the menus (A on the controller).
 extern "C" void Gta2Native_AutostartKey(int which, bool down)
 {
-    // main.cpp's menu key names: ok, up, down, left, right, back.
-    static const Key* const kKeys[] = {&kMenuOk, &kForward, &kBack, &kLeft, &kRight, &kMenuBack};
-    if (which >= 0 && which < 6)
+    // main.cpp's menu key names: ok, up, down, left, right, back, start, select.
+    static const Key* const kKeys[] = {&kMenuOk, &kForward, &kBack, &kLeft, &kRight, &kMenuBack, &kStartButton, &kSelectButton};
+    if (which >= 0 && which < 8)
     {
         Send(*kKeys[which], down);
     }

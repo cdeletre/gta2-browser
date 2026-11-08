@@ -86,7 +86,7 @@ dessiné par-dessus le menu (`platform/options_native.cpp`), avec une police 5×
 
 | Ligne | Registre / fichier | Appliqué |
 |---|---|---|
-| Musique et radio | `sound\cdvol` (0 à 127, pas de 10 %) | tout de suite |
+| Musique et radio | `sound\cdvol` (0 à 127, pas de 10 %) | tout de suite, musique du menu comprise |
 | Effets sonores | `sound\sfxvol` | tout de suite |
 | Vitesse du texte | `option\text_speed` (1 à 5, 3 = normal) | à la partie suivante (`Hud_2B00::GetTextSpeed_5D6A90`) |
 | Points qui explosent | `screen\exploding_on` | tout de suite (`Init_FrameRateLightAndUnknown_5D8EB0`) |
@@ -104,9 +104,15 @@ dessiné par-dessus le menu (`platform/options_native.cpp`), avec une police 5×
   - build ASan/UBSan sur la Air X, de Options jusqu'à 30 s dans Downtown : aucune erreur
     mémoire. Les rapports UBSan sont ceux déjà connus du moteur (noms de zone, tableaux de
     taille 1 ou 2), et les fuites de fin (4,7 Ko) sont les mêmes avec ou sans Options.
-- **Pas encore vérifié :** l'effet des volumes à l'oreille et de l'éclairage à l'écran.
-  F8 en ville appelle aussi cet écran (comme GTA2 Manager dans l'original) ; le jeu continue
-  derrière, sans entrées.
+- **En ville :** Start (l'invite de sortie du jeu) puis Select, ou F8 au clavier (la touche
+  de GTA2 Manager dans l'original). L'invite de sortie d'origine ne met pas le jeu en pause
+  (`Player.cpp`, `DIK_ESCAPE`) : l'écran Options met donc en pause une partie solo tant
+  qu'il est ouvert (`Game_0x40::Pause_4B96B0`, la pause de F6) ; une partie en réseau
+  continue. Observé sur la Air X : Start, Select, la musique à 70 %, B ferme, B reprend.
+- **Musique du menu :** son volume n'est fixé qu'à l'ouverture du flux (`sound_obj.cpp`,
+  6/10 de `cdvol`). Vu par l'utilisateur : le réglage ne changeait la musique du menu qu'après
+  une partie. Corrigé : hors de la ville, le flux en cours reçoit aussi le nouveau volume.
+- **Pas encore vérifié :** l'effet de l'éclairage à l'écran.
 
 ## RG353VS (dArkOS) (observé, 8 novembre 2026)
 

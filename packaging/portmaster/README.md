@@ -20,7 +20,7 @@ The settings are in `ports/gta2/conf/`: `registry.txt` holds the game's own opti
   scaled. A wider screen (16:9) shows more of the city on the sides, and a taller one (1:1, as on the
   RG CubeXX) shows more above and below. Menus stay 4:3, with black bars.
 - The intro movies are not played.
-- Options (main menu) opens a simple settings screen instead of the original's separate GTA2
+- Options (main menu, or Select during the pause in the city) opens a simple settings screen instead of the original's separate GTA2
   Manager program: music and radio volume, sound effects volume, text speed, exploding scores,
   lighting, and the A/B layout (`face_buttons`).
 - Quitting: Start opens the game's pause and quit prompt, then A twice quits (the second press
@@ -49,7 +49,7 @@ TrimUI Smart Pro S (REG Linux).
 | L1 / R1 | Previous / next weapon |
 | L3 (hold) | Look around with the D-pad |
 | R3 | Status |
-| Start | Pause, quit prompt |
+| Start | Pause, quit prompt (then Select: Options) |
 | Select | Next radio station (in a car) |
 | Menus: A / B | Confirm / Back |
 

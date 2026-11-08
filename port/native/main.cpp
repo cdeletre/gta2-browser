@@ -15,7 +15,7 @@
 //   GTA2_AUTOSTART=1  press Enter twice like ?autostart=1 (PLAY, then area 1: Downtown)
 //   GTA2_MENU_KEYS    the menu presses instead, comma-separated, 1 s apart, from 0.5 s after
 //                     the menu has drawn 30 frames:
-//                     ok, up, down, left, right, back ("ok,right,ok": area 2;
+//                     ok, up, down, left, right, back, start, select ("ok,right,ok": area 2;
 //                     "ok,up,up,ok": resume the saved game)
 //   GTA2_RUN_SECONDS  stop cleanly after this many seconds (soak tests)
 //   GTA2_STATUS_SECONDS  seconds between status lines in the log (default 60, 0: none)
@@ -232,7 +232,7 @@ int main(int argc, char** argv)
         {
             keys = "ok,ok";
         }
-        static const char* const kNames[] = {"ok", "up", "down", "left", "right", "back"};
+        static const char* const kNames[] = {"ok", "up", "down", "left", "right", "back", "start", "select"};
         std::string list = keys ? keys : "";
         size_t pos = 0;
         while (pos < list.size())
@@ -241,7 +241,7 @@ int main(int argc, char** argv)
             end = end == std::string::npos ? list.size() : end;
             const std::string name = list.substr(pos, end - pos);
             int which = -1;
-            for (int k = 0; k < 6; ++k)
+            for (int k = 0; k < 8; ++k)
             {
                 which = name == kNames[k] ? k : which;
             }
