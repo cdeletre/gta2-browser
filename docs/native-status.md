@@ -14,23 +14,18 @@ Downtown sous ASan/UBSan). Pas encore de binaire.
 - **En-têtes de compat en LP64** : `DWORD`/`LONG`/`HRESULT` à 4 octets, `RECT` 16,
   `GUID` 16 (voir `docs/native-64bit.md`, entrée 1).
 
-## Ce qui ne marche pas encore (observé au premier build complet, `ninja -k 0`)
+## Ce qui ne marche pas encore (observé)
 
-82 fichiers sur 120 ne compilent pas, pour deux raisons :
-
-- **Asserts de taille 64 bits** (structures contenant des pointeurs), à traiter une par
-  une selon la règle de `CLAUDE.md` (sérialisée ou non) :
-  - renderer : `STexture` (`d3ddll.hpp`) ; `SVideo`, `SDevice`, `SDisplayMode`
-    (`DmaVideo.hpp`) ;
-  - moteur : `Sprite_Pool`, `Ped`, `Ped_List_4`, `Car_Door_10`, `Car_BC`, `Camera_0xBC`,
-    `CarInfo_808`, `miss2_0x11C`, `miss2_8`, `ScriptStackFrame_C`,
-    `ScriptStackFramePool_25C`.
-- **Miles** : `cSampleManager.cpp` (lignes 1037 et 1048) passe un `long*` à
-  `AIL_stream_ms_position`, qui attend maintenant un `S32*` (4 octets).
-
-Le build affiche aussi 120 avertissements de troncature (`-Wshorten-64-to-32` et
-autres), pas encore triés. Le lien n'a pas encore été tenté : les symboles des fichiers
-web non compilés (co-op, réseau, options, jobs) manqueront.
+- **Compilation : tout passe.** Après `--prepare --clean`, les 120 unités compilent
+  (25 patches web + 3 patches natifs, voir `docs/native-64bit.md`, entrées 2 à 5).
+  117 avertissements de troncature (`-Wshorten-64-to-32` et autres), pas encore triés.
+- **Lien : 123 références indéfinies**, dans trois groupes :
+  - les ponts `gta2_js_*` (textures, `present`, sons, fichiers) : à implémenter en natif,
+    vides au jalon 1 ;
+  - le réseau du jeu (`NetPlay::*`, `Network_20324::*`, `gNetPlay_7071E8`,
+    `gGta2PortNetInputDelay`) et `gGta2PortHideHudArrows`, définis dans des fichiers
+    web non compilés ;
+  - quelques fonctions Win32 (`WideCharToMultiByte`, `lstrcatA`) et `ImGuiDebugDraw`.
 
 ## Comment c'est construit
 
@@ -58,8 +53,7 @@ web non compilés (co-op, réseau, options, jobs) manqueront.
 
 ## Reste à faire pour le jalon 1
 
-1. Les asserts de taille et l'appel Miles ci-dessus (une entrée chacun dans
-   `docs/native-64bit.md`).
+1. ~~Les asserts de taille et l'appel Miles~~ : fait.
 2. Le lien : implémentations natives des `gta2_js_*` (no-op en headless) et stubs pour
    les symboles des fichiers web non compilés.
 3. Recherche insensible à la casse des fichiers du jeu (aujourd'hui `crt_compat` met

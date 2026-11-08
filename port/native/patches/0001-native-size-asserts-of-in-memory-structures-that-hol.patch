@@ -1,0 +1,209 @@
+From ca477c9029b98d6890708cf8ec762fa6a72304a7 Mon Sep 17 00:00:00 2001
+From: GTA2 port <port@localhost>
+Date: Sat, 7 Nov 2026 19:32:57 -0500
+Subject: [PATCH] native: size asserts of in-memory structures that hold
+ pointers; asserts on the save formats
+
+Under GTA2_PORT_NATIVE (LP64, 8-byte pointers) these structures grow and
+their 32-bit size asserts cannot hold. None is read from or written to a
+file or the network as bytes, and no code uses their size as a literal,
+so only their asserts are left out: Camera_0xBC, Car_BC, Car_Door_10,
+CarInfo_808, Ped, Ped_List_4, ScriptStackFrame_C, ScriptStackFramePool_25C,
+miss2_0x11C, miss2_8, Sprite_Pool.
+
+The two structures written to disk as bytes gain a native size assert:
+SaveData_748 (.svg save) and PlyDat_2BC0 (player data).
+---
+ Source/Camera.hpp                   | 2 ++
+ Source/CarInfo_808.hpp              | 2 ++
+ Source/Car_10.hpp                   | 4 +++-
+ Source/Car_BC.hpp                   | 2 ++
+ Source/Ped.hpp                      | 2 ++
+ Source/Ped_List_4.hpp               | 2 ++
+ Source/PlyDat_2BC0.hpp              | 5 +++++
+ Source/ScriptManager_C1EA8.hpp      | 5 +++++
+ Source/ScriptStackFramePool_25C.hpp | 4 ++++
+ Source/miss2_0x11C.hpp              | 2 ++
+ Source/miss2_8.hpp                  | 4 +++-
+ Source/sprite.hpp                   | 2 ++
+ 12 files changed, 34 insertions(+), 2 deletions(-)
+
+diff --git a/Source/Camera.hpp b/Source/Camera.hpp
+index 36e738d3..7e65ad46 100644
+--- a/Source/Camera.hpp
++++ b/Source/Camera.hpp
+@@ -235,7 +235,9 @@ class Camera_0xBC
+     Fix16 field_A8_ui_scale;
+     CameraPos field_AC_cam_velocity;
+ };
++#if !defined(GTA2_PORT_NATIVE) // holds pointers, in memory only: see docs/native-64bit.md
+ GTA2_ASSERT_SIZEOF_ALWAYS(Camera_0xBC, 0xBC)
++#endif
+ 
+ EXTERN_GLOBAL(Camera_0xBC*, gViewCamera_676978);
+ 
+diff --git a/Source/CarInfo_808.hpp b/Source/CarInfo_808.hpp
+index 21bfcdf1..a74a6f92 100644
+--- a/Source/CarInfo_808.hpp
++++ b/Source/CarInfo_808.hpp
+@@ -138,7 +138,9 @@ class CarInfo_808
+     ModelPhysics_48* field_404_model_physics_array[256];
+     ModelPhysics_48* field_804_raw_data;
+ };
++#if !defined(GTA2_PORT_NATIVE) // holds pointers, in memory only: see docs/native-64bit.md
+ GTA2_ASSERT_SIZEOF_ALWAYS(CarInfo_808, 0x808);
++#endif
+ 
+ EXTERN_GLOBAL(CarInfo_808*, gCarInfo_808_678098);
+ 
+diff --git a/Source/Car_10.hpp b/Source/Car_10.hpp
+index 20a3bf42..6e6c12ba 100644
+--- a/Source/Car_10.hpp
++++ b/Source/Car_10.hpp
+@@ -63,4 +63,6 @@ class Car_Door_10
+     s8 field_E;
+     s8 field_F;
+ };
+-GTA2_ASSERT_SIZEOF_ALWAYS(Car_Door_10, 0x10)
+\ No newline at end of file
++#if !defined(GTA2_PORT_NATIVE) // holds pointers, in memory only: see docs/native-64bit.md
++GTA2_ASSERT_SIZEOF_ALWAYS(Car_Door_10, 0x10)
++#endif
+diff --git a/Source/Car_BC.hpp b/Source/Car_BC.hpp
+index 2f7c2bbf..49463a00 100644
+--- a/Source/Car_BC.hpp
++++ b/Source/Car_BC.hpp
+@@ -1390,7 +1390,9 @@ class Car_BC
+     char_type field_BA_pad;
+     char_type field_BB_pad;
+ };
++#if !defined(GTA2_PORT_NATIVE) // holds pointers, in memory only: see docs/native-64bit.md
+ GTA2_ASSERT_SIZEOF_ALWAYS(Car_BC, 0xBC)
++#endif
+ 
+ struct Car_BC_Pool
+ {
+diff --git a/Source/Ped.hpp b/Source/Ped.hpp
+index ef20f40f..5441edf8 100644
+--- a/Source/Ped.hpp
++++ b/Source/Ped.hpp
+@@ -959,7 +959,9 @@ class Ped
+     s32 field_28C_threat_reaction;
+     s32 field_290_death_cause; // ped_death_cause
+ };
++#if !defined(GTA2_PORT_NATIVE) // holds pointers, in memory only: see docs/native-64bit.md
+ GTA2_ASSERT_SIZEOF_ALWAYS(Ped, 0x294)
++#endif
+ 
+ EXPORT void __stdcall CarDoorAlignmentSolver_545AF0(u8 a1, Car_BC* a2, u8 a3, Fix16& a4, Fix16& a5, Ang16& a6);
+ 
+diff --git a/Source/Ped_List_4.hpp b/Source/Ped_List_4.hpp
+index c7453049..f0f9a2d1 100644
+--- a/Source/Ped_List_4.hpp
++++ b/Source/Ped_List_4.hpp
+@@ -51,6 +51,8 @@ class Ped_List_4
+ 
+     Char_8* field_0_pFirstPed;
+ };
++#if !defined(GTA2_PORT_NATIVE) // holds pointers, in memory only: see docs/native-64bit.md
+ GTA2_ASSERT_SIZEOF_ALWAYS(Ped_List_4, 0x4)
++#endif
+ 
+ EXTERN_GLOBAL(Ped_List_4, gThreateningPedsList_678468);
+diff --git a/Source/PlyDat_2BC0.hpp b/Source/PlyDat_2BC0.hpp
+index a1e21044..b17cd1bf 100644
+--- a/Source/PlyDat_2BC0.hpp
++++ b/Source/PlyDat_2BC0.hpp
+@@ -106,4 +106,9 @@ struct PlyDat_2BC0
+     EXPORT static void Destroy_56C340();
+ };
+ 
++#if defined(GTA2_PORT_NATIVE)
++// The player data file is this structure as bytes (PlyDat_2BC0.cpp writes `this`): its size must not change.
++GTA2_ASSERT_SIZEOF_ALWAYS(PlyDat_2BC0, 0x2BC0)
++#endif
++
+ EXTERN_GLOBAL(PlyDat_2BC0*, gPlyDat_6FEAC0);
+diff --git a/Source/ScriptManager_C1EA8.hpp b/Source/ScriptManager_C1EA8.hpp
+index ff78f596..d613db6c 100644
+--- a/Source/ScriptManager_C1EA8.hpp
++++ b/Source/ScriptManager_C1EA8.hpp
+@@ -590,6 +590,11 @@ class SaveData_748
+     SavedObjectData_164 field_5E4_object_data;
+ };
+ 
++#if defined(GTA2_PORT_NATIVE)
++// The .svg save file is this structure as bytes (ScriptManager_C1EA8.cpp): its size must not change.
++GTA2_ASSERT_SIZEOF_ALWAYS(SaveData_748, 0x748)
++#endif
++
+ EXTERN_GLOBAL(SaveData_748, gGameSave_6F78C8);
+ 
+ struct WeaponCheckTable
+diff --git a/Source/ScriptStackFramePool_25C.hpp b/Source/ScriptStackFramePool_25C.hpp
+index 483f8ad9..fc416256 100644
+--- a/Source/ScriptStackFramePool_25C.hpp
++++ b/Source/ScriptStackFramePool_25C.hpp
+@@ -20,7 +20,9 @@ class ScriptStackFrame_C
+     s16 field_4_return_cmd;
+     ScriptStackFrame_C* mpNext;
+ };
++#if !defined(GTA2_PORT_NATIVE) // holds pointers, in memory only: see docs/native-64bit.md
+ GTA2_ASSERT_SIZEOF_ALWAYS(ScriptStackFrame_C, 0xC)
++#endif
+ 
+ // Pool of the stack frames (GOSUB return info) of all script threads (miss2_8)
+ class ScriptStackFramePool_25C
+@@ -46,6 +48,8 @@ class ScriptStackFramePool_25C
+ 
+     PoolBasic<ScriptStackFrame_C, k_max_frames> field_0_pool;
+ };
++#if !defined(GTA2_PORT_NATIVE) // holds pointers, in memory only: see docs/native-64bit.md
+ GTA2_ASSERT_SIZEOF_ALWAYS(ScriptStackFramePool_25C, 0x25C)
++#endif
+ 
+ EXTERN_GLOBAL(ScriptStackFramePool_25C*, gScriptStackFramePool_6F8068);
+diff --git a/Source/miss2_0x11C.hpp b/Source/miss2_0x11C.hpp
+index 798b5204..7915bb8d 100644
+--- a/Source/miss2_0x11C.hpp
++++ b/Source/miss2_0x11C.hpp
+@@ -1166,7 +1166,9 @@ class miss2_0x11C
+     char_type field_119;
+     s16 field_11A_thread_id;
+ };
++#if !defined(GTA2_PORT_NATIVE) // holds pointers, in memory only: see docs/native-64bit.md
+ GTA2_ASSERT_SIZEOF_ALWAYS(miss2_0x11C, 0x11C)
++#endif
+ 
+ class miss2_0x11C_Pool
+ {
+diff --git a/Source/miss2_8.hpp b/Source/miss2_8.hpp
+index 6aa94be6..609b1a8b 100644
+--- a/Source/miss2_8.hpp
++++ b/Source/miss2_8.hpp
+@@ -26,4 +26,6 @@ class miss2_8
+     u8 field_6_pad;
+     u8 field_7_pad;
+ };
+-GTA2_ASSERT_SIZEOF_ALWAYS(miss2_8, 0x8)
+\ No newline at end of file
++#if !defined(GTA2_PORT_NATIVE) // holds pointers, in memory only: see docs/native-64bit.md
++GTA2_ASSERT_SIZEOF_ALWAYS(miss2_8, 0x8)
++#endif
+diff --git a/Source/sprite.hpp b/Source/sprite.hpp
+index 56688f84..7b25a0ba 100644
+--- a/Source/sprite.hpp
++++ b/Source/sprite.hpp
+@@ -799,7 +799,9 @@ class Sprite_Pool
+ 
+     PoolBasic<Sprite, 5031> field_0_pool;
+ };
++#if !defined(GTA2_PORT_NATIVE) // holds pointers, in memory only: see docs/native-64bit.md
+ GTA2_ASSERT_SIZEOF_ALWAYS(Sprite_Pool, 0x49B28)
++#endif
+ 
+ EXTERN_GLOBAL(Sprite_8*, gSprite_8_703820);
+ 
+-- 
+2.54.0
+

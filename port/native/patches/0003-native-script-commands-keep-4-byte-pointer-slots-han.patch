@@ -1,0 +1,268 @@
+From 1c805f440a53122de93d6d1592cf3b7040fab48e Mon Sep 17 00:00:00 2001
+From: GTA2 port <port@localhost>
+Date: Sat, 7 Nov 2026 19:35:23 -0500
+Subject: [PATCH] native: script commands keep 4-byte pointer slots (handles on
+ LP64)
+
+The .scr script is loaded as bytes and its commands are read in place
+through the SCR_* structures, ten of which hold a run-time pointer in a
+4-byte slot (SCR_POINTER, SCR_PLAYER_PED, SCR_CHAR_DATA_DEC, SCR_OBJ_DATA,
+SCR_THREAD, SCR_CHAR_AREA_ANY, SCR_CRANE_TARGET_DEC, SCR_CRANE_BASIC_DEC,
+SCR_DOOR_DATA_DEC, SCR_ARROW_ENTITY). With 8-byte pointers every later
+field would move (SCR_PLAYER_PED's position would be read from 0x10
+instead of 0xC) and each store would overwrite the next command's bytes;
+no size assert covered them.
+
+These slots are now GTA2_SCR_PTR(T) (Source/port_scr_ptr.hpp): a plain T*
+outside the native LP64 build, a 4-byte handle into a pointer table there
+(port/native/platform/scr_handles.cpp), handle 0 being nullptr. Native
+offsetof asserts check each command's fields against the offsets in their
+names. One C-style cast that went straight from the slot to another
+pointer type converts to the slot's own type first.
+---
+ Source/ScriptManager_C1EA8.cpp |  4 ++
+ Source/miss2_0x11C.hpp         | 78 ++++++++++++++++++++++++----------
+ Source/port_scr_ptr.hpp        | 44 +++++++++++++++++++
+ 3 files changed, 104 insertions(+), 22 deletions(-)
+ create mode 100644 Source/port_scr_ptr.hpp
+
+diff --git a/Source/ScriptManager_C1EA8.cpp b/Source/ScriptManager_C1EA8.cpp
+index f8e22473..2f3c03c7 100644
+--- a/Source/ScriptManager_C1EA8.cpp
++++ b/Source/ScriptManager_C1EA8.cpp
+@@ -102,7 +102,11 @@ char_type ScriptManager_C1EA8::AddCranePowerupTrigger_511B10(s16 idx)
+     SCR_POINTER* pGenerator = (SCR_POINTER*)GetBasePointer_512770(pCmd->field_A_generator);
+     return gCar_214_705F20->AddThreadTrigger_5C86C0(1,
+                                        3,
++#if defined(GTA2_PORT_NATIVE) // the 4-byte slot converts to its own pointer type first
++                                       (SCR_THREAD*)(Generator_2C*)pGenerator->field_8_generator,
++#else
+                                        (SCR_THREAD*)pGenerator->field_8_generator,
++#endif
+                                        Fix16(pCmd->field_C_pos.field_0_x) + kFpHalf_6F75F0,
+                                        Fix16(pCmd->field_C_pos.field_1_y) + kFpHalf_6F75F0,
+                                        Fix16(pCmd->field_C_pos.field_2_z),
+diff --git a/Source/miss2_0x11C.hpp b/Source/miss2_0x11C.hpp
+index 7915bb8d..c4690e37 100644
+--- a/Source/miss2_0x11C.hpp
++++ b/Source/miss2_0x11C.hpp
+@@ -6,6 +6,7 @@
+ #include "ang16.hpp"
+ #include "fix16.hpp"
+ #include "miss2_xyz.hpp"
++#include "port_scr_ptr.hpp"
+ 
+ class Ped;
+ class Generator_2C;
+@@ -38,7 +39,7 @@ struct SCR_ONEVAR_RECT : SCR_CMD_HEADER
+ struct SCR_PLAYER_PED
+ {
+     SCR_CMD_HEADER field_0_header;
+-    Ped* field_8_ped;
++    GTA2_SCR_PTR(Ped) field_8_ped;
+     SCR_XYZ_f field_C_pos;
+     Ang16 field_18_rot;
+     s16 field_1A_remap;
+@@ -57,7 +58,7 @@ struct SCR_CAR_DATA_DEC : SCR_CMD_HEADER
+ 
+ struct SCR_CHAR_DATA_DEC : SCR_CMD_HEADER
+ {
+-    Ped* field_8_char;
++    GTA2_SCR_PTR(Ped) field_8_char;
+     SCR_XYZ_f field_C_pos;
+     Ang16 field_18_rot;
+     s16 field_1A_remap;
+@@ -67,7 +68,7 @@ struct SCR_CHAR_DATA_DEC : SCR_CMD_HEADER
+ 
+ struct SCR_OBJ_DATA : SCR_CMD_HEADER
+ {
+-    Object_2C* field_8_obj;
++    GTA2_SCR_PTR(Object_2C) field_8_obj;
+     SCR_XYZ_f field_C_pos;
+     u16 field_18_obj_id;
+     Ang16 field_1A_rot;
+@@ -129,13 +130,13 @@ struct SCR_POINTER : SCR_CMD_HEADER
+ {
+     union
+     {
+-        Ped* field_8_char;
+-        Car_BC* field_8_car;
+-        Object_2C* field_8_obj;
+-        Crane_15C* field_8_crane;
+-        Light_28* field_8_light;
+-        Door_38* field_8_door;
+-        Crusher_30* field_8_crusher;
++        GTA2_SCR_PTR(Ped) field_8_char;
++        GTA2_SCR_PTR(Car_BC) field_8_car;
++        GTA2_SCR_PTR(Object_2C) field_8_obj;
++        GTA2_SCR_PTR(Crane_15C) field_8_crane;
++        GTA2_SCR_PTR(Light_28) field_8_light;
++        GTA2_SCR_PTR(Door_38) field_8_door;
++        GTA2_SCR_PTR(Crusher_30) field_8_crusher;
+         s32 field_8_counter;
+         u16 field_8_index;
+         union
+@@ -143,9 +144,9 @@ struct SCR_POINTER : SCR_CMD_HEADER
+             u16 field_6;
+             u16 field_8;
+         } words;
+-        Generator_2C* field_8_generator;
+-        Hud_Arrow_7C* field_8_arrow;
+-        Sprite_18* field_8_sprite;
++        GTA2_SCR_PTR(Generator_2C) field_8_generator;
++        GTA2_SCR_PTR(Hud_Arrow_7C) field_8_arrow;
++        GTA2_SCR_PTR(Sprite_18) field_8_sprite;
+     };
+ };
+ 
+@@ -166,7 +167,7 @@ struct SCR_LOC_SEC_CHAR : SCR_CMD_HEADER
+ 
+ struct SCR_THREAD : SCR_CMD_HEADER
+ {
+-    miss2_0x11C* field_8_script_thread;
++    GTA2_SCR_PTR(miss2_0x11C) field_8_script_thread;
+     s16 field_C_thread_id;
+     u16 field_E_thread_start_cmd;
+     union
+@@ -190,7 +191,7 @@ struct SCR_THREAD : SCR_CMD_HEADER
+ 
+ struct SCR_CHAR_AREA_ANY : SCR_CMD_HEADER
+ {
+-    miss2_0x11C* field_8_script_thread;
++    GTA2_SCR_PTR(miss2_0x11C) field_8_script_thread;
+     s16 field_C;
+     u16 field_E;
+     Fix16 field_10_x;
+@@ -273,7 +274,7 @@ struct SCR_RADIOSTATION_DEC : SCR_CMD_HEADER
+ 
+ struct SCR_CRANE_TARGET_DEC : SCR_CMD_HEADER
+ {
+-    Crane_15C* field_8_crane;
++    GTA2_SCR_PTR(Crane_15C) field_8_crane;
+     u32 field_C_homecrane;
+     SCR_XY_f field_10_pos;
+     u16 field_18_home_rotation;
+@@ -285,7 +286,7 @@ struct SCR_CRANE_TARGET_DEC : SCR_CMD_HEADER
+ 
+ struct SCR_CRANE_BASIC_DEC : SCR_CMD_HEADER
+ {
+-    Crane_15C* field_8_crane;
++    GTA2_SCR_PTR(Crane_15C) field_8_crane;
+     u32 field_C_homecrane;
+     SCR_XY_f field_10_pos;
+     u16 field_18_home_rotation;
+@@ -449,7 +450,7 @@ struct SCR_IF_JUMP : SCR_CMD_HEADER
+ 
+ struct SCR_DOOR_DATA_DEC : SCR_CMD_HEADER
+ {
+-    Door_38* field_8_door;
++    GTA2_SCR_PTR(Door_38) field_8_door;
+     SCR_XYZ_uc field_C_block;
+     u8 field_F_face;
+     u8 field_10_gr_id;
+@@ -822,9 +823,9 @@ struct SCR_ARROW_ENTITY : SCR_CMD_HEADER
+ {
+     union
+     {
+-        Car_BC* field_8_car;
+-        Ped* field_8_char;
+-        Object_2C* field_8_obj;
++        GTA2_SCR_PTR(Car_BC) field_8_car;
++        GTA2_SCR_PTR(Ped) field_8_char;
++        GTA2_SCR_PTR(Object_2C) field_8_obj;
+     };
+ };
+ 
+@@ -1203,4 +1204,37 @@ class miss2_0x11C_Pool
+     Pool<miss2_0x11C, 8> field_0_pool;
+ };
+ 
+-EXTERN_GLOBAL(miss2_0x11C_Pool*, miss2_0x11C_Pool_6F8064);
+\ No newline at end of file
++EXTERN_GLOBAL(miss2_0x11C_Pool*, miss2_0x11C_Pool_6F8064);
++#if defined(GTA2_PORT_NATIVE)
++// The SCR_* commands are read in place from the .scr file's bytes, so their fields must
++// sit where the file has them (the offset is in each field's name). With 8-byte pointers
++// they would not; GTA2_SCR_PTR keeps those slots at 4 bytes (port_scr_ptr.hpp).
++#include <stddef.h>
++#define GTA2_SCR_OFFSET(type, field, offset) \
++    static_assert(offsetof(type, field) == offset, #type "::" #field " must be at " #offset " as in the .scr file");
++GTA2_SCR_OFFSET(SCR_PLAYER_PED, field_8_ped, 0x8)
++GTA2_SCR_OFFSET(SCR_PLAYER_PED, field_C_pos, 0xC)
++GTA2_SCR_OFFSET(SCR_PLAYER_PED, field_1A_remap, 0x1A)
++GTA2_SCR_OFFSET(SCR_CHAR_DATA_DEC, field_C_pos, 0xC)
++GTA2_SCR_OFFSET(SCR_CHAR_DATA_DEC, field_1E_padding, 0x1E)
++GTA2_SCR_OFFSET(SCR_OBJ_DATA, field_C_pos, 0xC)
++GTA2_SCR_OFFSET(SCR_OBJ_DATA, field_1C_value_shop_type, 0x1C)
++GTA2_SCR_OFFSET(SCR_POINTER, field_8_char, 0x8)
++GTA2_SCR_OFFSET(SCR_THREAD, field_C_thread_id, 0xC)
++GTA2_SCR_OFFSET(SCR_THREAD, field_10_char_idx, 0x10)
++GTA2_SCR_OFFSET(SCR_THREAD, field_16_flag, 0x16)
++GTA2_SCR_OFFSET(SCR_CHAR_AREA_ANY, field_C, 0xC)
++GTA2_SCR_OFFSET(SCR_CHAR_AREA_ANY, field_10_x, 0x10)
++GTA2_SCR_OFFSET(SCR_CHAR_AREA_ANY, field_27_flag, 0x27)
++GTA2_SCR_OFFSET(SCR_CRANE_TARGET_DEC, field_C_homecrane, 0xC)
++GTA2_SCR_OFFSET(SCR_CRANE_TARGET_DEC, field_26_unk6, 0x26)
++GTA2_SCR_OFFSET(SCR_CRANE_BASIC_DEC, field_C_homecrane, 0xC)
++GTA2_SCR_OFFSET(SCR_CRANE_BASIC_DEC, field_28_second_pos, 0x28)
++GTA2_SCR_OFFSET(SCR_DOOR_DATA_DEC, field_C_block, 0xC)
++GTA2_SCR_OFFSET(SCR_DOOR_DATA_DEC, field_14_check, 0x14)
++GTA2_SCR_OFFSET(SCR_DOOR_DATA_DEC, field_28_flip, 0x28)
++GTA2_SCR_OFFSET(SCR_ARROW_ENTITY, field_8_car, 0x8)
++static_assert(sizeof(SCR_POINTER) == 0xC, "SCR_POINTER is 12 bytes in the .scr file");
++static_assert(sizeof(SCR_ARROW_ENTITY) == 0xC, "SCR_ARROW_ENTITY is 12 bytes in the .scr file");
++#undef GTA2_SCR_OFFSET
++#endif
+diff --git a/Source/port_scr_ptr.hpp b/Source/port_scr_ptr.hpp
+new file mode 100644
+index 00000000..5f27b77d
+--- /dev/null
++++ b/Source/port_scr_ptr.hpp
+@@ -0,0 +1,44 @@
++#pragma once
++// Pointers kept inside mission-script commands (native port, LP64).
++//
++// The .scr script is loaded as bytes (ScriptManager_C1EA8::field_334C_script_data) and its
++// commands are read in place through the SCR_* structures. The game stores run-time
++// pointers (the Ped, car, object... a command declared) in a 4-byte slot of the command
++// itself. On LP64 an 8-byte pointer would move every later field of the command and
++// overwrite the next command's bytes.
++//
++// GTA2_SCR_PTR(T) is a plain T* everywhere else. In the native LP64 build it is a 4-byte
++// handle into a table of pointers (port/native/platform/scr_handles.cpp); handle 0 is the
++// null pointer, so a zeroed slot (as in the file) still reads as "no object".
++#include "types.hpp"
++
++#if defined(GTA2_PORT_NATIVE) && defined(__LP64__)
++extern "C" u32 Gta2Native_ScrHandleFromPtr(void* p);
++extern "C" void* Gta2Native_ScrPtrFromHandle(u32 handle);
++
++template <typename T>
++struct ScrPtr32
++{
++    // No constructors: the structure stays trivial, as the unions holding it require.
++    u32 mHandle;
++
++    operator T*() const
++    {
++        return static_cast<T*>(Gta2Native_ScrPtrFromHandle(mHandle));
++    }
++    T* operator->() const
++    {
++        return *this;
++    }
++    ScrPtr32& operator=(T* p)
++    {
++        mHandle = Gta2Native_ScrHandleFromPtr(p);
++        return *this;
++    }
++};
++static_assert(sizeof(ScrPtr32<void>) == 4, "script pointer slots are 4 bytes");
++
++#define GTA2_SCR_PTR(T) ScrPtr32<T>
++#else
++#define GTA2_SCR_PTR(T) T*
++#endif
+-- 
+2.54.0
+
