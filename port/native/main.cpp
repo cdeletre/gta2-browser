@@ -13,10 +13,14 @@
 //   GTA2_CONF_DIR     settings: registry.txt (the game's registry), controls.ini (default conf/)
 // Other:
 //   GTA2_AUTOSTART=1  press Enter twice like ?autostart=1 (PLAY, then area 1: Downtown)
+//   GTA2_MENU_KEYS    the menu presses instead, comma-separated, 1 s apart from 1.5 s:
+//                     ok, up, down, left, right, back ("ok,right,ok": area 2;
+//                     "ok,up,up,ok": resume the saved game)
 //   GTA2_RUN_SECONDS  stop cleanly after this many seconds (soak tests)
 //   GTA2_SOAK=1       random play once the player exists (walk, drive, shoot; soak_native.cpp)
 //   GTA2_SOAK_SEED    the soak's random sequence (default 1)
 //   GTA2_SOAK_INPUT   direct (default), keyboard or pad: also for the autostart's presses
+//   GTA2_TEST         save or phone: test scenarios (platform/scenario_native.cpp)
 // Window, vsync and screenshots: see platform/window_sdl.cpp.
 #include <errno.h>
 #include <limits.h>
@@ -28,6 +32,7 @@
 #include <unistd.h>
 
 #include <string>
+#include <vector>
 
 #include <emscripten.h>
 #include <windows.h>
@@ -45,7 +50,9 @@ extern "C" void Gta2Native_SoakInit(); // platform/soak_native.cpp
 extern "C" void Gta2Native_SoakStep(double now);
 extern "C" void Gta2Native_SoakSummary(char* out, int size);
 extern "C" void Gta2Native_InputModeInit();
-extern "C" void Gta2Native_AutostartKey(bool down);
+extern "C" void Gta2Native_AutostartKey(int which, bool down);
+extern "C" void Gta2Native_ScenarioInit(); // platform/scenario_native.cpp
+extern "C" void Gta2Native_ScenarioStep(double now);
 extern "C" void Gta2Native_SetSaveDir(const char* dir);       // platform/fs_native.cpp
 extern "C" int Gta2Native_RegistryLoad(const char* path);    // platform/registry_native.cpp
 extern "C" bool Gta2Native_RegistrySave();
@@ -140,6 +147,7 @@ struct Tap
 {
     double at;
     int stage;
+    int which; // GTA2_MENU_KEYS key
 };
 } // namespace
 
@@ -202,14 +210,44 @@ int main(int argc, char** argv)
 
     const char* runEnv = getenv("GTA2_RUN_SECONDS");
     const double runMs = runEnv ? atof(runEnv) * 1000.0 : 0.0;
-    const bool autostart = getenv("GTA2_AUTOSTART") && atoi(getenv("GTA2_AUTOSTART")) != 0;
-    Tap taps[] = {{1500, 0}, {3500, 0}};
+    std::vector<Tap> taps;
+    {
+        const char* keys = getenv("GTA2_MENU_KEYS");
+        if (!keys && getenv("GTA2_AUTOSTART") && atoi(getenv("GTA2_AUTOSTART")) != 0)
+        {
+            keys = "ok,ok";
+        }
+        static const char* const kNames[] = {"ok", "up", "down", "left", "right", "back"};
+        std::string list = keys ? keys : "";
+        size_t pos = 0;
+        while (pos < list.size())
+        {
+            size_t end = list.find(',', pos);
+            end = end == std::string::npos ? list.size() : end;
+            const std::string name = list.substr(pos, end - pos);
+            int which = -1;
+            for (int k = 0; k < 6; ++k)
+            {
+                which = name == kNames[k] ? k : which;
+            }
+            if (which < 0)
+            {
+                fprintf(stderr, "gta2: GTA2_MENU_KEYS: unknown key \"%s\"\n", name.c_str());
+            }
+            else
+            {
+                taps.push_back({1500.0 + 1000.0 * taps.size(), 0, which});
+            }
+            pos = end + 1;
+        }
+    }
     Gta2Native_InputModeInit();
     const bool soak = getenv("GTA2_SOAK") && atoi(getenv("GTA2_SOAK")) != 0;
     if (soak)
     {
         Gta2Native_SoakInit();
     }
+    Gta2Native_ScenarioInit();
     int lastTicks = 0;
 
     const double start = emscripten_get_now();
@@ -218,18 +256,17 @@ int main(int argc, char** argv)
     for (;;)
     {
         const double now = emscripten_get_now() - start;
-        if (autostart)
         {
             for (Tap& t : taps)
             {
                 if (t.stage == 0 && now >= t.at)
                 {
-                    Gta2Native_AutostartKey(true);
+                    Gta2Native_AutostartKey(t.which, true);
                     t.stage = 1;
                 }
                 else if (t.stage == 1 && now >= t.at + 100)
                 {
-                    Gta2Native_AutostartKey(false);
+                    Gta2Native_AutostartKey(t.which, false);
                     t.stage = 2;
                 }
             }
@@ -246,6 +283,7 @@ int main(int argc, char** argv)
         {
             Gta2Native_SoakStep(now);
         }
+        Gta2Native_ScenarioStep(now);
 
         Gta2Native_AudioPump(); // streams decoded ahead of the audio callback
 
