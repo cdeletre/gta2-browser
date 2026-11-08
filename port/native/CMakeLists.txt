@@ -71,6 +71,13 @@ endif()
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
   set(GTA2_OPT -O1 -g) # as the web debug build; -O1 keeps ASan bearable
+elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
+  # As the web release build: -O2, and no NDEBUG (CMake's default Release flags are
+  # -O3 -DNDEBUG). -g does not change the code; build_native.sh moves the debug info to
+  # dist/gta2.debug and ships a stripped dist/gta2.
+  set(CMAKE_C_FLAGS_RELEASE "")
+  set(CMAKE_CXX_FLAGS_RELEASE "")
+  set(GTA2_OPT -O2 -g)
 endif()
 
 if(GTA2_SANITIZE)
@@ -142,10 +149,21 @@ target_include_directories(gta2 PRIVATE ${GTA2_INCLUDES} "${PORT}")
 target_link_libraries(gta2 PRIVATE gta2_core m dl pthread)
 if(NOT GTA2_HEADLESS)
   # SDL2 window and events, OpenGL ES 2.0 (platform/window_sdl.cpp, render/gles_renderer.cpp)
+  # SDL2 is linked by path, not with sdl2.pc's link flags: the build image's sdl2.pc adds
+  # -Wl,-rpath,/usr/local/lib, which the binary must not carry onto the console.
   find_package(PkgConfig REQUIRED)
-  pkg_check_modules(SDL2 REQUIRED IMPORTED_TARGET sdl2)
+  pkg_check_modules(SDL2 REQUIRED sdl2)
+  find_library(SDL2_LIBRARY NAMES SDL2 HINTS ${SDL2_LIBRARY_DIRS} REQUIRED)
   find_library(GLESV2_LIBRARY NAMES GLESv2 REQUIRED)
-  target_link_libraries(gta2 PRIVATE PkgConfig::SDL2 ${GLESV2_LIBRARY})
+  target_include_directories(gta2 PRIVATE ${SDL2_INCLUDE_DIRS})
+  target_compile_options(gta2 PRIVATE ${SDL2_CFLAGS_OTHER})
+  target_link_libraries(gta2 PRIVATE ${SDL2_LIBRARY} ${GLESV2_LIBRARY})
 endif()
 target_link_options(gta2 PRIVATE ${GTA2_SAN} ${GTA2_SAN_LINK} -Wl,--gc-sections)
-set_target_properties(gta2 PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+# No RUNPATH: the console's loader finds SDL2 and GLESv2 in its own directories.
+set_target_properties(gta2 PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" SKIP_BUILD_RPATH ON)
+if(CMAKE_BUILD_TYPE STREQUAL "Release" AND NOT GTA2_SANITIZE)
+  # The C++ runtime inside the binary: it then needs only glibc (2.17 at most), SDL2 and
+  # GLESv2 from the system, as is usual for PortMaster ports.
+  target_link_options(gta2 PRIVATE -static-libstdc++ -static-libgcc)
+endif()

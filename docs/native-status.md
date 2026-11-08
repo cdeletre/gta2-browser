@@ -4,6 +4,30 @@ Mis à jour le 8 novembre 2026. **Jalons 1 à 5 atteints.** Le jeu s'affiche sur
 en 1920×1080 par Wayland, avec le GPU (Adreno 610) : menu, puis Downtown, à 60 images/s et
 30,3 ticks/s ; manette et clavier ; son par PulseAudio.
 
+## Build release (jalon 6, préparation)
+
+`./scripts/build_native.sh --preset release` produit, en plus de la sortie du linker,
+**`build/native/release/dist/`** :
+- `gta2` : le binaire à distribuer, sans symboles (1,4 Mo) ;
+- `gta2.debug` : ses symboles (14 Mo), liés par `.gnu_debuglink`, pour lire une trace de
+  plantage ; à garder, pas à distribuer.
+
+Options : `-O2 -g` sans `NDEBUG`, comme le build web release (les options Release par
+défaut de CMake étaient `-O3 -DNDEBUG`) ; `-g` ne change pas le code. `libstdc++` et
+`libgcc` sont liées en statique (Release seulement ; debug et ASan restent dynamiques).
+SDL2 est lié par son chemin plutôt qu'avec les options de `sdl2.pc`, qui ajoutait
+`-Wl,-rpath,/usr/local/lib`.
+
+- **Dépendances observées :** `libc`, `libm`, `libdl`, `libpthread` (glibc **2.17** au
+  plus), `libSDL2-2.0.so.0`, `libGLESv2.so.2`. Aucun `RPATH`/`RUNPATH`.
+  `build_native.sh` refuse un `dist/gta2` qui aurait un `RUNPATH` ou dépendrait de
+  `libstdc++`/`libgcc_s`.
+- **Sur la console** (8 novembre 2026, `dist/gta2` à la place du binaire debug) : soak de
+  300 s à la manette simulée (`GTA2_SOAK_INPUT=pad`, graine 4), Wayland + PulseAudio :
+  sortie propre (code 0), 8 810 ticks, 298 actions, 6 voitures ; cadence de **30,1 à
+  30,5 ticks/s sur toutes les tranches de 5 s** après le chargement (49 sur 57 à 30,3).
+  Le soak a joué sur le profil 0 de `saves/` de la console.
+
 ## Jalon 5 : son
 
 - **Mixeur** (`port/native/audio/audio_sdl.cpp`), derrière les mêmes ponts que
