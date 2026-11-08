@@ -13,7 +13,8 @@
 //   GTA2_CONF_DIR     settings: registry.txt (the game's registry), controls.ini (default conf/)
 // Other:
 //   GTA2_AUTOSTART=1  press Enter twice like ?autostart=1 (PLAY, then area 1: Downtown)
-//   GTA2_MENU_KEYS    the menu presses instead, comma-separated, 1 s apart from 1.5 s:
+//   GTA2_MENU_KEYS    the menu presses instead, comma-separated, 1 s apart, from 0.5 s after
+//                     the menu has drawn 30 frames:
 //                     ok, up, down, left, right, back ("ok,right,ok": area 2;
 //                     "ok,up,up,ok": resume the saved game)
 //   GTA2_RUN_SECONDS  stop cleanly after this many seconds (soak tests)
@@ -250,7 +251,7 @@ int main(int argc, char** argv)
             }
             else
             {
-                taps.push_back({1500.0 + 1000.0 * taps.size(), 0, which});
+                taps.push_back({500.0 + 1000.0 * taps.size(), 0, which});
             }
             pos = end + 1;
         }
@@ -267,21 +268,29 @@ int main(int argc, char** argv)
     const double start = emscripten_get_now();
     double lastReport = start;
     double lastRegistrySave = 0.0;
+    double menuReadyAt = -1.0; // when the menu presses' schedule starts
     const char* statusEnv = getenv("GTA2_STATUS_SECONDS");
     const double statusMs = (statusEnv ? atof(statusEnv) : 60.0) * 1000.0;
     int code = 0;
     for (;;)
     {
         const double now = emscripten_get_now() - start;
+        // The menu presses start once the menu has drawn 30 frames (half a second of it
+        // running), not at a fixed time: loading takes 1 s on the Air X, 10 s on an R36S.
+        if (menuReadyAt < 0.0 && gta2_port_present_count() >= 30)
+        {
+            menuReadyAt = now;
+        }
+        if (menuReadyAt >= 0.0)
         {
             for (Tap& t : taps)
             {
-                if (t.stage == 0 && now >= t.at)
+                if (t.stage == 0 && now >= menuReadyAt + t.at)
                 {
                     Gta2Native_AutostartKey(t.which, true);
                     t.stage = 1;
                 }
-                else if (t.stage == 1 && now >= t.at + 100)
+                else if (t.stage == 1 && now >= menuReadyAt + t.at + 100)
                 {
                     Gta2Native_AutostartKey(t.which, false);
                     t.stage = 2;
