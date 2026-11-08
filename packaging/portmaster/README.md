@@ -33,8 +33,8 @@ The settings are in `ports/gta2/conf/`: `registry.txt` holds the game's own opti
 To help with a bug report, add `export GTA2_LOG_INPUT=1` to the launch script (it logs the controller
 mapping and every button press) and send the log.
 
-Tested on: MANGMI Air X (ROCKNIX), R36S (AmberELEC), RG CubeXX (muOS), RG353VS (dArkOS),
-TrimUI Smart Pro S (REG Linux).
+Tested on: MANGMI Air X (ROCKNIX), R36S (AmberELEC), RG CubeXX (muOS), RG353VS (dArkOS and
+ROCKNIX), G350 (dArkOS), TrimUI Smart Pro S (REG Linux).
 
 ## Controls
 

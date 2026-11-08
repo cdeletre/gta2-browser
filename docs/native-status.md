@@ -59,6 +59,7 @@ essais mesurés par SSH, binaire dans `/tmp`, cache disque vidé avant chaque es
 | R36S (Mali r13p0) | direct (0,050 ms) | 12,7 s | aucun |
 | MANGMI Air X (freedreno) | direct (0,024 ms) | 6,0 s | aucun |
 | RG353VS (Mali-G52 g29p1) | groupé (0,153 à 0,222 ms) | 6 s (18 s en direct) | aucun sur 4 min |
+| G350 (Mali-G31 r13p0, dArkOS) | direct (0,044 ms) | 9 s (7 s groupé forcé) | aucun sur 3 min |
 
   Sur la R36S, l'envoi groupé forcé donnait 10,0 s : le seuil de 0,15 ms la laisse en direct,
   au prix de 2,7 s, pour ne pas risquer le cas de la CubeXX (0,041 ms) ; à revoir si besoin.
@@ -127,6 +128,20 @@ EmulationStation arrêté (`sudo systemctl stop emulationstation.service`), cach
   le seuil de l'atlas plus haut.
 - Soak de 4 min avec conduite : 30,3 ticks/s, 60 images/s, aucune boucle lente après le
   chargement, 364 Mo au plus, sortie propre.
+
+## G350 (dArkOS) et RG353VS sous ROCKNIX (observé, 8 novembre 2026)
+
+- **G350 :** la console s'identifie comme « BatleXP G350 ». 4 cœurs à 1,51 GHz, 895 Mo de RAM,
+  noyau 4.4.189 (famille RK3326, comme la R36S), pilote Mali G31 r13p0, KMSDRM 640×480.
+  dArkOS sur Debian 13. `/roms` en exFAT, 4,2 Go seulement. Port installé par
+  l'utilisateur.
+  - Cache vidé : l'atlas choisit l'envoi direct (médiane 0,044 ms), Downtown atteint vers 9 s ;
+    7 s en envoi groupé forcé, comme sur la R36S (même pilote).
+  - Soak de 3 min avec conduite : 30,3 ticks/s, 60 images/s, aucune boucle lente après le
+    chargement, 317 Mo au plus.
+- **RG353VS :** repassée de dArkOS à ROCKNIX (noyau 7.2, sway, PulseAudio). L'utilisateur y a
+  fait tourner le port avec libmali et avec Panfrost. Sous Panfrost, l'atlas choisit l'envoi
+  groupé (médiane 0,291 ms).
 
 ## RG CubeXX (H700, muOS) (observé, 8 novembre 2026)
 
