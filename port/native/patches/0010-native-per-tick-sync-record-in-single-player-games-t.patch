@@ -1,0 +1,32 @@
+From 3ecc889532e35108d90b6b887233e8411ebaa247 Mon Sep 17 00:00:00 2001
+From: GTA2 port <port@localhost>
+Date: Sat, 7 Nov 2026 20:16:26 -0500
+Subject: [PATCH] native: per-tick sync record in single-player games too
+
+Gta2Port_SyncRecord (dev_hooks.cpp) records the tick number and the ped and car
+counts and hashes after every network tick. The native build also calls it after
+single-player ticks, so its status line and soak tests can measure the tick rate.
+It only reads the game state.
+---
+ Source/winmain.cpp | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/Source/winmain.cpp b/Source/winmain.cpp
+index e1e82223..dde1000d 100644
+--- a/Source/winmain.cpp
++++ b/Source/winmain.cpp
+@@ -1807,6 +1807,11 @@ EXPORT u8 RunGameFrame_4DA850()
+             bContinue = ExecuteGame_4DA780();
+ #ifdef GTA2_PORT
+             Gta2Port_InterpTick();
++#endif
++#if defined(GTA2_PORT_NATIVE)
++            // Per-tick record (ticks, ped and car counts and hashes; read only), as network
++            // games already do: the native status line and soak tests count ticks with it.
++            Gta2Port_SyncRecord();
+ #endif
+             s32 v2 = gGame_0x40_67E008->GetFrameDurationMs_4B8BB0();
+             bForceGameUpdate_6F5880 = 0;
+-- 
+2.54.0
+

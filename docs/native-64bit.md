@@ -128,7 +128,7 @@ Règle pour les asserts de taille : voir « Stratégie 64 bits » dans `CLAUDE.m
   | `winmain.cpp:952` | 1 | sans effet : `net_web.cpp` ignore ce callback |
   | `winmain.cpp:2278` | 1 | sans effet : code de retour de `ShellExecuteA` |
   | `sound_obj.cpp:5246`, `:5522` | 2 | sans effet : l'adresse sert de nombre pseudo-aléatoire (hauteur, parité) |
-  | `sound_obj.cpp:1398` | 1 | à revoir : `Car_BC*` rangé dans `field_4` (`u32`), jamais relu comme pointeur dans `sound_obj.cpp` |
+  | `sound_obj.cpp:1398` | 1 | sans effet observé : `Car_BC*` rangé dans `field_4` (`u32`), jamais relu comme pointeur dans `sound_obj.cpp` ; à revoir si un autre fichier le relit |
   | `Bink.cpp` | 2 | sans effet tant que Bink est désactivé (`bink_web.cpp` : « cannot open ») |
   | `KanjiFont_8EC.cpp` | 2 | à corriger avant d'activer le japonais (pointeur passé en `s32` à `OutlineGlyph_4D2150`) |
 
@@ -194,3 +194,70 @@ Règle pour les asserts de taille : voir « Stratégie 64 bits » dans `CLAUDE.m
   (ASan : `heap-buffer-overflow`). En natif : `4096 * sizeof(Light_28*)`.
 - Recherche des autres allocations `4 * n` dans le moteur : il n'y avait que celles des
   entrées 8 et 9.
+
+## 12. `Car_18_Cmd` : une autre commande de script plaquée sur le `.scr` (patch natif 0009)
+
+- **Où :** `Car_BC.cpp`, `struct Car_18_Cmd : SCR_CMD_HEADER`, définie dans le `.cpp`, d'où
+  son absence de la revue des `SCR_*` (entrée 5). Une union met un `miss2_0x11C*` à
+  l'offset 8.
+- **Symptôme (observé, soak, ~30 s) :** en LP64, `field_10_idx` passait à 0x18 ;
+  `Car_214::CheckThreadTrigger_5C8780` lisait un mauvais index de commande, puis une
+  case qui ne contenait pas de pointeur. La table des handles l'a arrêté : « unknown
+  handle 28705913 ».
+- **Correctif :** la case devient `GTA2_SCR_PTR(miss2_0x11C)`, avec des asserts `offsetof`
+  (0xC, 0x10, 0x24). Recherche faite ensuite dans tout `Source/` (`.cpp` compris) des
+  structures dérivées de `SCR_CMD_HEADER` qui contiennent un pointeur : il n'y en a pas
+  d'autre.
+
+## 13. Émetteurs radio : la vue `sound_7` des enregistrements de 0x1C octets (patch natif 0011)
+
+- **Où :** `sound_obj::field_544C` et ses lecteurs (`FindEmitterByStatus_57F050`,
+  `ChooseRadioEmitterForVehicle_57E6C0`, `UpdateVocalStream_57E510`, …).
+- **Structure réelle (lue dans le code) :** un `sound_7` (emplacement 0, un vrai objet son,
+  enregistré par pointeur) suivi des émetteurs radio 1 à 5, de 0x1C octets chacun ;
+  l'émetteur 5 recouvre `field_54D8`..`field_54F2[1]`, et `DeInitVocals_57EA10` les
+  parcourt à reculons depuis `field_54E8`. Le code lit les émetteurs tantôt via
+  `RadioEmitter()` (`sound_f16_pos_0x1C`), tantôt via les membres de `sound_7`
+  réinterprétés en `u32`.
+- **Symptôme (observé, soak, en voiture) :** `sound_7` contient un `SoundObject_10` à
+  pointeurs, donc il fait 0x28 octets en LP64 au lieu de 0x1C. Les lectures par la vue
+  `sound_7` tombaient à côté ; `FindEmitterByStatus_57F050` ne trouvait rien et renvoyait
+  127, et `RadioEmitter(128)` lisait 3 Ko au-delà de `gSound_obj_66F680`.
+- **Correctif :** en natif, l'emplacement 0 reste un `sound_7` de taille native, suivi des
+  émetteurs 1 à 4 en enregistrements bruts juste avant `field_54D8`, si bien que toutes
+  les vues recouvrent les mêmes octets qu'en 32 bits. Les huit lectures par la vue
+  `sound_7` passent par `RadioEmitter()` aux mêmes offsets (`field_8.field_4_bStatus` →
+  `field_C`, `field_8.field_8_sound_entry` → `field_10`, `field_8.field_C_pAny` →
+  `field_14`). Un `static_assert` vérifie l'écart `field_54E8 − émetteurs = 0x80`.
+
+## 14. `-fsanitize=return` (outil)
+
+- `ExplosionPool_7A8::FreeLowestPriority_543690` et `PedGroup::MergeWithOtherGroup_4C9B60`
+  n'ont pas de `return` sur tous les chemins (connu, `docs/browser-build-status.md`) ;
+  `-fno-strict-return` garde le comportement MSVC, mais le contrôle UBSan `return` arrête
+  le programme (observé à 210 s d'un soak, pendant une explosion). Le build `--sanitize`
+  ajoute `-fno-sanitize=return`.
+
+## 15. Revue des avertissements et des rapports UBSan (8 novembre 2026)
+
+- **40 avertissements de troncature distincts** (117 avec les doublons des en-têtes),
+  tous sans conséquence : longueurs `strlen`/`wcslen` (`CarInfo_808.cpp` ×5,
+  `map_0x370.cpp:233`, `ScriptManager_C1EA8.cpp:407`, `registry.cpp`, `Hud.cpp`),
+  positions et tailles de fichiers `ftell`/`st_size`/longueurs de chunks (`file.cpp`,
+  `cSampleManager.cpp`, `map_0x370.cpp` ×9, `winmain.cpp:1219`, `crt_compat.cpp:429`),
+  différences de pointeurs dans un même tableau de sommets (`MapRenderer.cpp` ×2,
+  `sprite.cpp:81`), code de retour (`winmain.cpp:2910`), identifiant de texture rangé dans
+  un champ pointeur puis relu (`gbh_web.cpp:173`, un petit entier, pas un pointeur),
+  identifiant de collision (`sprite.hpp:46`).
+- **26 rapports UBSan distincts** sur quatre soaks, aucun lié au 64 bits :
+  - tableaux de longueur variable dans les données du fichier (noms de zones
+    `field_6_name`, remaps `car_info`, `field_4_blockd` des colonnes, `field_4_delta`) ;
+  - débordements à l'intérieur d'un objet dont la disposition est la même qu'en 32 bits
+    (vérifié : `Gang_144::field_2_name` jusqu'à l'offset 0xC, `RollingDigitCounter_38`
+    sans pointeur) ;
+  - `MapRenderer.cpp:3515` : adresse `&liste[-1]` calculée quand la liste est vide, jamais
+    lue ;
+  - `Frontend.cpp:1529`/`1554` : méthode non virtuelle appelée sur `gFrontend_67DC84` nul,
+    qui n'utilise pas `this` ;
+  - `fix16.hpp:243` : conversion hors bornes d'une valeur négative (même résultat qu'en
+    x86).

@@ -1,8 +1,8 @@
 # Port natif Linux aarch64 : statut
 
-Mis à jour le 8 novembre 2026. **Jalon 1 atteint en headless** : le binaire charge les
-données et entre dans Downtown sous ASan/UBSan, sans erreur ASan. Jalon suivant : 2
-(soak de plusieurs minutes, tri des rapports UBSan et des avertissements).
+Mis à jour le 8 novembre 2026. **Jalons 1 et 2 atteints, sans fenêtre** : le binaire entre
+dans Downtown, et des parties jouées au hasard tiennent 15 minutes sous ASan/UBSan sans
+erreur ASan. Jalon suivant : 3 (fenêtre SDL2 et renderer GLES 2).
 
 ## Ce qui marche (observé)
 
@@ -26,29 +26,57 @@ données et entre dans Downtown sous ASan/UBSan, sans erreur ASan. Jalon suivant
 - Une ligne d'état toutes les 5 s (`port/native/platform/status_native.cpp`) : carte,
   position du joueur, véhicule.
 
-## Ce qui ne marche pas encore, ou n'est pas vérifié
+## Soaks (jalon 2, observé)
 
-- **Pas vérifié :** que la simulation avance à 30 ticks/s. Le joueur ne bouge pas (aucune
-  entrée), et environ 180 images par seconde sont présentées (le renderer headless ne
-  limite rien ; l'interpolation du patch 0015 dessine entre les ticks). Il faut une
-  mesure du nombre de ticks.
-- **Pas vérifié :** que (159,5 ; 139,5 ; 2) est bien le départ à l'église du build web.
-- **21 rapports UBSan distincts, non bloquants** (60 s dans Downtown) :
-  - 17 « index out of bounds » sur des tableaux de taille fixe utilisés comme tableaux de
-    longueur variable (`map_0x370.cpp` ×12, `gtx_0x106C.cpp` ×2, `PublicTransport.cpp`,
-    `Gang.cpp`, `RollingDigitCounter_38.cpp`) : idiome du code d'origine, ASan ne voit
-    aucun accès hors du bloc alloué ;
-  - à regarder de près : `MapRenderer.cpp:3515` (index −1 dans `Nanobotz_8[1500]`) et
-    `sound_obj.cpp:7152`/`7154` (index 5 dans `sound_7[5]`) ;
-  - `Frontend.cpp:1529`/`1554` : méthodes appelées sur un `Frontend` nul
-    (`intro_bik_exists_4B5FF0`, depuis `WinMain`) ;
-  - `fix16.hpp:243` : conversion `double` → `int` hors bornes dans
-    `arc_tan_table_init_4052D0` (−7,99e13). Pour une valeur négative, x86 et aarch64
-    donnent tous les deux `INT_MIN` ; pour une valeur positive hors bornes, x86 donne
-    `INT_MIN` et aarch64 `INT_MAX`.
-- **Troncatures de pointeurs restantes :** toutes classées (`docs/native-64bit.md`,
-  entrée 6) ; à revoir : `sound_obj.cpp:1398`, `KanjiFont_8EC.cpp` (japonais).
-- **Compilation :** 117 avertissements de troncature d'entiers, pas encore triés.
+`GTA2_SOAK=1` (`port/native/platform/soak_native.cpp`) joue au hasard avec les touches par
+défaut de l'original : marche et conduite avec virages, marche arrière, tirs en rafale,
+saut et frein à main, changement d'arme, Entrée. Il donne une arme au départ, et toutes
+les 30 s, s'il est à pied, fait apparaître une voiture à côté du joueur et appuie sur
+Entrée pour y monter (aides de la sonde web, `dev_hooks.cpp`). `GTA2_SOAK_SEED` choisit la
+séquence, pour rejouer un échec.
+
+Build `--sanitize` (25 patches web + 13 natifs), `GTA2_AUTOSTART=1`, dans `gta2-pm` :
+
+| Graine | Durée | Ticks | Actions | Voitures | Résultat |
+|---|---|---|---|---|---|
+| 1, 2, 3 | 300 s | ~8 810 chacune | 294 à 307 | 6 à 8 | 0 erreur ASan, sortie 0 |
+| 4, 5 | 900 s | 27 014 chacune | 871, 917 | 24, 23 | 0 erreur ASan, sortie 0 |
+
+- **Cadence de simulation mesurée :** 30,2 à 30,4 ticks/s sur chaque tranche de 5 s, et
+  27 014 ticks en environ 892 s de jeu (30,3 ticks/s), comme l'original (33 ms par tick).
+  Le compteur vient de `Gta2Port_SyncRecord`, appelé après chaque tick (patch natif 0010).
+- Le joueur se déplace dans tout Downtown (positions de 116 à 227 en x, de 69 à 197 en y),
+  monte en voiture, et réapparaît ailleurs après une mort ou une arrestation ; jusqu'à
+  24 piétons et 73 voitures autour de lui.
+- **Ce que le soak ne couvre pas :** les missions (aucune n'est démarrée volontairement),
+  les sauvegardes, les deux autres districts, le réseau.
+- **Rapports UBSan restants, non bloquants :** 29 distincts sur les cinq soaks, tous
+  classés sans lien avec le 64 bits (`docs/native-64bit.md`, entrée 15).
+- **Avertissements de compilation :** 40 distincts, tous classés sans conséquence (même
+  entrée).
+
+Avant d'en arriver là, les soaks ont trouvé cinq défauts, corrigés par les patches natifs
+0009, 0011, 0012, 0013 et par `-fno-sanitize=return` (entrées 12 à 14 du journal 64 bits,
+et « Écarts par rapport à l'original » ci-dessous).
+
+## Écarts par rapport à l'original (natif seulement)
+
+Les deux remplacent une lecture hors de son objet, dont le résultat dépendait de ce qui
+suivait en mémoire, par une valeur fixe :
+
+- **Éclairage des chiffres du score qui explose** (patch natif 0012) : `gQuadVerts_706B88`
+  a quatre positions monde de plus, à zéro ; le renderer les lisait dans les globaux
+  suivants. Purement visuel.
+- **Radio des véhicules sans radio** (patch natif 0013) : en quittant un véhicule de police
+  ou de service, la voiture reçoit 0 (« pas d'émetteur ») au lieu d'une valeur lue 2,5 Ko
+  après l'objet son. Effet attendu : si le joueur y remonte, la radio choisit une station
+  comme pour une voiture neuve. Non observé à l'oreille (pas encore de son en natif).
+
+## Ce qui n'est pas encore vérifié
+
+- Que (159,5 ; 139,5 ; 2) est bien le départ à l'église du build web.
+- Le build release (seul le debug, avec et sans sanitizer, a tourné).
+- Le binaire sur la console (jalon 6), dont les chemins sensibles à la casse.
 
 ## Corrigé en route
 
@@ -71,12 +99,14 @@ reporter l'un d'eux, il suffit de retirer sa garde `#if defined(GTA2_PORT_NATIVE
 | Où | Défaut | Effet dans le build web |
 |---|---|---|
 | `port/audio/miles_web.cpp`, `AIL_release_sample_handle` | handle nul déréférencé (`cSampleManager::Terminate_58DAE0` libère des cases encore vides au premier `AllocSamples_58D9F0`) | écriture silencieuse à l'adresse 0x30 de la mémoire wasm, à chaque initialisation du son |
+| `port/render/gbh_web.cpp` (`Draw`, lumières) avec `gQuadVerts_706B88` (`Draw.cpp`) | un dessin éclairé lit les positions monde après les 4 sommets ; `DrawFigure_5D7EC0` n'en remplit que 4 | les chiffres du score qui explose sont éclairés d'après des globaux sans rapport (lecture hors du tableau) |
+| `sound_obj::RadioEmitter` (`sound_obj.hpp`) | index 102, 103 ou 128 quand `field_54F7[0]` vaut 101, 0x66 ou 127 | lectures et écritures 2 à 3 Ko après `gSound_obj_66F680` ; la voiture de police quittée reçoit un « statut d'émetteur » quelconque |
 
 ## À reprendre plus tard (64 bits, hors jalon 1)
 
-- `miles_web.cpp` `Id()` et `gbh_web.cpp:173` tronquent un pointeur en `int` pour
-  nommer un son ou une texture côté JS. Sans conséquence en headless ; à revoir pour
-  l'audio (jalon 5) et le renderer (jalon 3).
+- `miles_web.cpp` `Id()` tronque un pointeur en `int` pour nommer un son côté JS. Sans
+  conséquence en headless ; à revoir pour l'audio (jalon 5). (`gbh_web.cpp:173`, que je
+  citais aussi, range un petit identifiant dans un champ pointeur : sans problème.)
 
 ## Comment c'est construit
 

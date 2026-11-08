@@ -1,0 +1,43 @@
+From e5c069e41a27d8ebfc5badbf3ae868c5ef07b1b7 Mon Sep 17 00:00:00 2001
+From: GTA2 port <port@localhost>
+Date: Sat, 7 Nov 2026 20:16:26 -0500
+Subject: [PATCH] native: Car_18_Cmd keeps its 4-byte thread slot
+
+Car_18_Cmd (Car_BC.cpp) is a script command read in place from the .scr bytes, like
+the SCR_* commands, with a miss2_0x11C* in a union at offset 8. On LP64 its later
+fields moved (field_10_idx to 0x18): CheckThreadTrigger_5C8780 read the wrong command
+index and then a slot that holds no pointer (found by the soak: the handle table
+reported an unknown handle). The slot is now GTA2_SCR_PTR, with offsetof asserts.
+---
+ Source/Car_BC.cpp | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/Source/Car_BC.cpp b/Source/Car_BC.cpp
+index 88f6a372..2bc1bb83 100644
+--- a/Source/Car_BC.cpp
++++ b/Source/Car_BC.cpp
+@@ -268,7 +268,7 @@ struct Car_18_Cmd : SCR_CMD_HEADER
+     union
+     {
+         u16 field_8_idx;
+-        miss2_0x11C* field_8_thread;
++        GTA2_SCR_PTR(miss2_0x11C) field_8_thread; // a 4-byte slot of the .scr bytes (port_scr_ptr.hpp)
+     };
+     u16 field_C;
+     s16 field_E;
+@@ -276,6 +276,12 @@ struct Car_18_Cmd : SCR_CMD_HEADER
+     u8 field_12_pad[0x12];
+     u16 field_24_idx;
+ };
++#if defined(GTA2_PORT_NATIVE)
++// Read in place from the .scr bytes, like the SCR_* commands (miss2_0x11C.hpp).
++static_assert(offsetof(Car_18_Cmd, field_C) == 0xC, "Car_18_Cmd::field_C must be at 0xC as in the .scr file");
++static_assert(offsetof(Car_18_Cmd, field_10_idx) == 0x10, "Car_18_Cmd::field_10_idx must be at 0x10 as in the .scr file");
++static_assert(offsetof(Car_18_Cmd, field_24_idx) == 0x24, "Car_18_Cmd::field_24_idx must be at 0x24 as in the .scr file");
++#endif
+ 
+ MATCH_FUNC(0x5c8780)
+ void Car_214::CheckThreadTrigger_5C8780(u8 idx, Sprite* pSprite)
+-- 
+2.54.0
+

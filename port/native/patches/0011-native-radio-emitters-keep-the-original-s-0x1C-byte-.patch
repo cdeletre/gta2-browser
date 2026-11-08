@@ -1,0 +1,152 @@
+From 9c4535c23244cceaaa4998a24e1c19033b6f5d43 Mon Sep 17 00:00:00 2001
+From: GTA2 port <port@localhost>
+Date: Sat, 7 Nov 2026 20:20:06 -0500
+Subject: [PATCH] native: radio emitters keep the original's 0x1C-byte layout
+
+sound_obj::field_544C is one sound_7 (slot 0, a real sound object) followed in memory
+by radio emitters 1..5 of 0x1C bytes, emitter 5 lying over field_54D8..field_54F2[1]
+(DeInitVocals_57EA10 walks them back from field_54E8). Several functions read the
+emitters through sound_7 members; sound_7 holds a SoundObject_10 with pointers, so on
+LP64 it is 0x28 bytes and those reads missed: FindEmitterByStatus_57F050 found nothing,
+returned 127, and RadioEmitter(128) read 3 KB past the object (ASan, in a car).
+Natively slot 0 stays a sound_7 and emitters 1..4 are raw records right before
+field_54D8, so all views overlay the same bytes as in the original; the sound_7-view
+reads go through RadioEmitter() at the same offsets. A static_assert checks the
+overlay.
+---
+ Source/sound_obj.cpp | 28 ++++++++++++++++++++++++++++
+ Source/sound_obj.hpp | 23 +++++++++++++++++++++++
+ 2 files changed, 51 insertions(+)
+
+diff --git a/Source/sound_obj.cpp b/Source/sound_obj.cpp
+index a8f76da8..2bdda022 100644
+--- a/Source/sound_obj.cpp
++++ b/Source/sound_obj.cpp
+@@ -7104,7 +7104,11 @@ void sound_obj::UpdateVocalStream_57E510()
+         if (field_54F7[1] < 5)
+         {
+             // Radio emitters use indices 1..5
++#if defined(GTA2_PORT_NATIVE)
++            RadioEmitter(field_54F7[1] + 1).field_18 = gSampManager_6FFF00.GetVocalPosMs_58E770(0);
++#else
+             field_544C[field_54F7[1] + 1].field_18 = gSampManager_6FFF00.GetVocalPosMs_58E770(0);
++#endif
+         }
+         gSampManager_6FFF00.CloseVocalStream_58E6A0(0);
+         gSampManager_6FFF00.PlayVocal_58E510(0, 12, 1);
+@@ -7149,10 +7153,17 @@ void sound_obj::Type3_CopRadioReport_57E680()
+         u32 v2 = 90000 * this->field_8_frames_per_second;
+         for (u8 i = 0; i < 5; i++)
+         {
++#if defined(GTA2_PORT_NATIVE)
++            if (*(u32*)&RadioEmitter(i + 1).field_14 < v2) // sound_7 view: field_8.field_C_pAny
++            {
++                ++*(u32*)&RadioEmitter(i + 1).field_14;
++            }
++#else
+             if (*(u32*)&field_544C[i + 1].field_8.field_C_pAny < v2)
+             {
+                 ++*(u32*)&field_544C[i + 1].field_8.field_C_pAny;
+             }
++#endif
+         }
+     }
+ }
+@@ -7222,7 +7233,11 @@ void sound_obj::ChooseRadioEmitterForVehicle_57E6C0()
+                 i = 0;
+                 while (1)
+                 {
++#if defined(GTA2_PORT_NATIVE)
++                    s32 status = RadioEmitter(i + 1).field_C; // sound_7 view: field_8.field_4_bStatus
++#else
+                     s32 status = *(u32*)&field_544C[i + 1].field_8.field_4_bStatus;
++#endif
+                     if (status == 6 || (status > 8 && status <= 10))
+                     {
+                         field_54F7[0] = i;
+@@ -7242,7 +7257,11 @@ void sound_obj::ChooseRadioEmitterForVehicle_57E6C0()
+                 i = 0;
+                 while (1)
+                 {
++#if defined(GTA2_PORT_NATIVE)
++                    s32 status = RadioEmitter(i + 1).field_C; // sound_7 view: field_8.field_4_bStatus
++#else
+                     s32 status = *(u32*)&field_544C[i + 1].field_8.field_4_bStatus;
++#endif
+                     if (status >= 7 && (status <= 8 || status == 11))
+                     {
+                         field_54F7[0] = i;
+@@ -7268,8 +7287,13 @@ void sound_obj::ChooseRadioEmitterForVehicle_57E6C0()
+             case 3:
+                 for (i = 0; i < 5; i++)
+                 {
++#if defined(GTA2_PORT_NATIVE)
++                    if (*(u16*)&RadioEmitter(i + 1).field_10 == 0 && // sound_7 view: field_8.field_8_sound_entry
++                        RadioEmitter(i + 1).field_C != 1)
++#else
+                     if (*(u16*)&field_544C[i + 1].field_8.field_8_sound_entry == 0 &&
+                         *(u32*)&field_544C[i + 1].field_8.field_4_bStatus != 1)
++#endif
+                     {
+                         field_54F7[0] = i;
+                         return;
+@@ -7633,7 +7657,11 @@ u8 sound_obj::FindEmitterByStatus_57F050(s32 status)
+     for (u8 i = 0; i < 5; i++)
+     {
+         // TODO: Structure is wrong, maybe field_544C starts earlier or later?
++#if defined(GTA2_PORT_NATIVE)
++        if (RadioEmitter(i + 1).field_C == status) // sound_7 view: field_8.field_4_bStatus
++#else
+         if (*(u32*)&field_544C[i + 1].field_8.field_4_bStatus == status)
++#endif
+         {
+             return i;
+         }
+diff --git a/Source/sound_obj.hpp b/Source/sound_obj.hpp
+index d2489db2..659cec21 100644
+--- a/Source/sound_obj.hpp
++++ b/Source/sound_obj.hpp
+@@ -207,6 +207,23 @@ class sound_obj
+     s32 field_5440;
+     s32 field_5444;
+     u32 field_5448_m_FrameCounter;
++#if defined(GTA2_PORT_NATIVE)
++    // In the original's memory, field_544C is one sound_7 (slot 0, a real sound object)
++    // followed by radio emitters 1..5, 0x1C bytes each; emitter 5 lies over field_54D8..
++    // field_54F2[1] (DeInitVocals_57EA10 walks them back from field_54E8). sound_7 holds a
++    // SoundObject_10 (pointers), so on LP64 it is 0x28 bytes and the sound_7 view of the
++    // emitters no longer matches: here slot 0 is a native sound_7, then emitters 1..4 as
++    // raw records, so emitter 5 overlays the same fields as in the original. The accesses
++    // that went through sound_7 members go through RadioEmitter() at the same offsets.
++    sound_7 field_544C[1];
++    alignas(4) u8 field_5468_radio_emitters[4 * 0x1C];
++
++    // Radio emitters use indices 1..5
++    inline sound_f16_pos_0x1C& RadioEmitter(s32 idx)
++    {
++        return ((sound_f16_pos_0x1C*)field_5468_radio_emitters)[idx - 1];
++    }
++#else
+     sound_7 field_544C[5]; // sound_f16_pos_0x1C instead of sound_7 ?
+ 
+     // Radio emitters use indices 1..5
+@@ -214,6 +231,7 @@ class sound_obj
+     {
+         return ((sound_f16_pos_0x1C*)field_544C)[idx];
+     }
++#endif
+ 
+     char_type field_54D8[5];
+     char_type field_54DD;
+@@ -421,3 +439,8 @@ class sound_obj
+ };
+ 
+ EXTERN_GLOBAL(sound_obj, gSound_obj_66F680);
++
++#if defined(GTA2_PORT_NATIVE)
++static_assert(offsetof(sound_obj, field_54E8) - offsetof(sound_obj, field_5468_radio_emitters) == 4 * 0x1C + 0x10,
++              "radio emitter 5 must overlay field_54D8.. as in the original (sound_obj.hpp)");
++#endif
+-- 
+2.54.0
+

@@ -11,6 +11,9 @@
 #include <unordered_map>
 #include <vector>
 
+// Present only in sanitizer builds (weak: null otherwise).
+extern "C" void __sanitizer_print_stack_trace() __attribute__((weak));
+
 namespace
 {
 std::vector<void*>& Pointers()
@@ -53,7 +56,11 @@ extern "C" void* Gta2Native_ScrPtrFromHandle(uint32_t handle)
         // A slot the game never wrote through GTA2_SCR_PTR (raw script data, or a value
         // written through another member of the same union). Stop loudly rather than
         // follow a garbage pointer.
-        fprintf(stderr, "gta2: script pointer slot holds unknown handle %u (%zu known)\n", handle, table.size());
+        fprintf(stderr, "gta2: script pointer slot holds unknown handle %u (0x%x, %zu known)\n", handle, handle, table.size());
+        if (__sanitizer_print_stack_trace)
+        {
+            __sanitizer_print_stack_trace();
+        }
         abort();
     }
     return table[handle];

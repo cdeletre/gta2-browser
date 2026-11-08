@@ -74,7 +74,11 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
 endif()
 
 if(GTA2_SANITIZE)
-  set(GTA2_SAN -fsanitize=address,undefined -fno-omit-frame-pointer)
+  # -fno-sanitize=return: two engine functions fall off the end on some paths and their
+  # callers ignore the value (PedGroup::MergeWithOtherGroup_4C9B60,
+  # ExplosionPool_7A8::FreeLowestPriority_543690); -fno-strict-return keeps the MSVC
+  # behaviour, but UBSan's return check stops the program there.
+  set(GTA2_SAN -fsanitize=address,undefined -fno-sanitize=return -fno-omit-frame-pointer)
   # Shared ASan runtime: the engine defines its own operator new/delete (crt_stubs.cpp,
   # zero-filled through calloc, which the game relies on). The static runtime defines
   # them too (duplicate symbols); with the shared one the executable's definitions win

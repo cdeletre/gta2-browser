@@ -8,6 +8,8 @@
 //   GTA2_DATA_DIR     game folder (the one holding data/); default: the binary's folder
 //   GTA2_AUTOSTART=1  press Enter twice like ?autostart=1 (PLAY, then area 1: Downtown)
 //   GTA2_RUN_SECONDS  stop cleanly after this many seconds (soak tests)
+//   GTA2_SOAK=1       random play once the player exists (walk, drive, shoot; soak_native.cpp)
+//   GTA2_SOAK_SEED    the soak's random sequence (default 1)
 #include <errno.h>
 #include <limits.h>
 #include <sys/stat.h>
@@ -30,6 +32,10 @@ extern "C" void gta2_port_reg_set_dword(const char* path, const char* name, DWOR
 extern "C" void gta2_port_reg_set_string(const char* path, const char* name, const char* value);
 extern "C" unsigned int gta2_port_present_count();
 extern "C" void Gta2Native_StatusLine(char* out, int size); // platform/status_native.cpp
+extern "C" int Gta2Native_TickCount(int* peds, int* cars);
+extern "C" void Gta2Native_SoakInit(); // platform/soak_native.cpp
+extern "C" void Gta2Native_SoakStep(double now);
+extern "C" void Gta2Native_SoakSummary(char* out, int size);
 
 namespace
 {
@@ -117,6 +123,12 @@ int main(int argc, char** argv)
     const double runMs = runEnv ? atof(runEnv) * 1000.0 : 0.0;
     const bool autostart = getenv("GTA2_AUTOSTART") && atoi(getenv("GTA2_AUTOSTART")) != 0;
     Tap taps[] = {{1500, 0}, {3500, 0}};
+    const bool soak = getenv("GTA2_SOAK") && atoi(getenv("GTA2_SOAK")) != 0;
+    if (soak)
+    {
+        Gta2Native_SoakInit();
+    }
+    int lastTicks = 0;
 
     const double start = emscripten_get_now();
     double lastReport = start;
@@ -141,6 +153,11 @@ int main(int argc, char** argv)
             }
         }
 
+        if (soak)
+        {
+            Gta2Native_SoakStep(now);
+        }
+
         const unsigned before = gta2_port_present_count();
         const int slice = Gta2Port_RunLoopSlice();
         if (slice != -1)
@@ -151,14 +168,26 @@ int main(int argc, char** argv)
         }
         if (now - (lastReport - start) >= 5000)
         {
+            const double elapsed = now - (lastReport - start);
             lastReport = start + now;
+            int peds = 0;
+            int cars = 0;
+            const int ticks = Gta2Native_TickCount(&peds, &cars);
             char status[256];
             Gta2Native_StatusLine(status, sizeof(status));
-            fprintf(stderr, "gta2: %.0f s, %u frames presented, %s\n", now / 1000.0, gta2_port_present_count(), status);
+            fprintf(stderr, "gta2: %.0f s, %.1f ticks/s, %u frames, %s\n", now / 1000.0,
+                    (ticks - lastTicks) * 1000.0 / elapsed, gta2_port_present_count(), status);
+            lastTicks = ticks;
         }
         if (runMs > 0 && now >= runMs)
         {
             fprintf(stderr, "gta2: stopping after %.0f s (GTA2_RUN_SECONDS)\n", now / 1000.0);
+            if (soak)
+            {
+                char summary[128];
+                Gta2Native_SoakSummary(summary, sizeof(summary));
+                fprintf(stderr, "gta2: %s\n", summary);
+            }
             break;
         }
         if (gta2_port_present_count() == before)

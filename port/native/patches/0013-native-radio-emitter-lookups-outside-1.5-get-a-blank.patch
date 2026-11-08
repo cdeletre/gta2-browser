@@ -1,0 +1,46 @@
+From 0ded20f60237174b59a65cbe9f3c10557124b91d Mon Sep 17 00:00:00 2001
+From: GTA2 port <port@localhost>
+Date: Sat, 7 Nov 2026 20:48:48 -0500
+Subject: [PATCH] native: radio emitter lookups outside 1..5 get a blank record
+
+field_54F7[0] holds 101 for police and service vehicles (no radio), and 0x66 or 127
+when no emitter is chosen; some paths still ask for RadioEmitter(field_54F7[0] + 1).
+The original then reads and writes 2-3 KB past gSound_obj, in unrelated globals, and
+ProcessType3_CopRadioAndMusic_57DD50 stores that read in the car's
+field_B0_emitter_status (ASan: global-buffer-overflow after leaving such a car, 505 s
+into a soak). Natively those indices get a blank record zeroed on each access: reads
+give 0 (no emitter, so the car picks one again), writes are dropped. Recorded as a
+deviation: 0 instead of whatever followed the object in memory.
+---
+ Source/sound_obj.hpp | 13 ++++++++++++-
+ 1 file changed, 12 insertions(+), 1 deletion(-)
+
+diff --git a/Source/sound_obj.hpp b/Source/sound_obj.hpp
+index 659cec21..abf7f6ac 100644
+--- a/Source/sound_obj.hpp
++++ b/Source/sound_obj.hpp
+@@ -218,9 +218,20 @@ class sound_obj
+     sound_7 field_544C[1];
+     alignas(4) u8 field_5468_radio_emitters[4 * 0x1C];
+ 
+-    // Radio emitters use indices 1..5
++    // Radio emitters use indices 1..5. The game also asks for field_54F7[0] + 1 when
++    // field_54F7[0] holds 101 (police/service vehicle, no radio), 0x66 or 127 (none found):
++    // the original then reads and writes 2-3 KB past this object, in unrelated globals
++    // (ProcessType3_CopRadioAndMusic_57DD50 stores that read in the car's
++    // field_B0_emitter_status). Natively such an index gets a blank record, zeroed on each
++    // access: reads give 0 ("no emitter", so the car picks one again), writes are dropped.
+     inline sound_f16_pos_0x1C& RadioEmitter(s32 idx)
+     {
++        if (idx < 1 || idx > 5)
++        {
++            static sound_f16_pos_0x1C sNoEmitter;
++            memset(&sNoEmitter, 0, sizeof(sNoEmitter));
++            return sNoEmitter;
++        }
+         return ((sound_f16_pos_0x1C*)field_5468_radio_emitters)[idx - 1];
+     }
+ #else
+-- 
+2.54.0
+

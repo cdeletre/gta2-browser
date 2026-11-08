@@ -1,0 +1,34 @@
+From e713cbc71028a81aa4ace956db248d07ea2a6653 Mon Sep 17 00:00:00 2001
+From: GTA2 port <port@localhost>
+Date: Sat, 7 Nov 2026 20:20:06 -0500
+Subject: [PATCH] native: four zeroed world vertices after gQuadVerts_706B88
+
+A lit gbh_DrawQuad reads world positions after the four screen vertices;
+DrawFigure_5D7EC0 fills only these four, so the renderer read the next globals
+(ASan: global-buffer-overflow). Natively the world positions exist and are zero:
+those digits' lighting no longer depends on unrelated globals. Visual only.
+---
+ Source/Draw.hpp | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/Source/Draw.hpp b/Source/Draw.hpp
+index 24cbb5df..60863261 100644
+--- a/Source/Draw.hpp
++++ b/Source/Draw.hpp
+@@ -9,6 +9,13 @@
+ struct QuadVerts // TODO: Same as Verts in gbh header (d3ddll)
+ {
+     Vert field_0_verts[4];
++#if defined(GTA2_PORT_NATIVE)
++    // A lit draw (gbh_DrawQuad with lighting) reads the world positions after the four
++    // screen vertices. DrawFigure_5D7EC0 only fills these four, so the renderer read the
++    // next globals (garbage lighting for those digits; ASan: global-buffer-overflow).
++    // Natively the four world positions exist and stay zero. Visual only.
++    Vert field_80_world_verts[4];
++#endif
+ };
+ 
+ EXPORT void __stdcall DrawText_4B87A0(const wchar_t* pBuffer, Fix16 xpos_fp, Fix16 ypos_fp, s16 fontType, Fix16 scale);
+-- 
+2.54.0
+
