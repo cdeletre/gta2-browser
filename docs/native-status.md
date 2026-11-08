@@ -76,6 +76,11 @@ essais mesurés par SSH, binaire dans `/tmp`, cache disque vidé avant chaque es
   `SDL_GAMECONTROLLERCONFIG` (« Argument list too long ») : depuis l'interface, `regmsgd`
   fournit seulement les manettes branchées. Les essais par SSH passent la base par
   `SDL_GAMECONTROLLERCONFIG_FILE`.
+- **Après une mise à jour de REG Linux (8 novembre au soir) :** l'utilisateur a réinstallé le
+  port (build `1ca5259a`). Avec la correspondance du lanceur, A et B sortent inversés en
+  `face_buttons = auto` : l'utilisateur a mis `nintendo` dans l'écran Options. Sur ce système,
+  la correspondance exportée par PortMaster semble nommer les positions (convention SDL) et
+  non les étiquettes, contrairement à la R36S. Non vérifié bouton par bouton.
 
 ## Plantage pendant les démos du menu (observé, 8 novembre 2026)
 
