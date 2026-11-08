@@ -45,6 +45,7 @@
 #include <string.h>
 #include <time.h>
 
+#include <ctype.h>
 #include <math.h>
 
 #include <algorithm>
@@ -52,9 +53,11 @@
 #include <vector>
 
 #include "render/frame.h"
+#include "overlay_font.h"
 
 extern "C" void Gta2Native_DrawableSize(int* w, int* h); // window_sdl.cpp
 extern "C" void Gta2Native_EndFrame();                    // window_sdl.cpp: screenshot, swap
+extern "C" void Gta2Native_OptionsDraw(int dw, int dh);   // platform/options_native.cpp
 
 namespace
 {
@@ -159,6 +162,9 @@ struct Renderer
     int shadows = 0;                                            // pages with a copy
     int batch = -1;                                             // batched page uploads: -1 not decided yet
     std::vector<float> timedMs;                                 // calibration samples
+    GLuint fontTex = 0;                                         // overlay_font.h glyphs
+    unsigned char glyphIndex[128] = {};                         // character -> glyph
+    std::vector<FrameVertex> overlay;                           // the port's own screens
 };
 Renderer gR;
 
@@ -197,6 +203,9 @@ GLuint Compile(GLenum type, const char* source)
     return shader;
 }
 
+void SetParams();
+void SetBlend(int mode);
+
 void Init()
 {
     if (gR.ready)
@@ -234,7 +243,62 @@ void Init()
         gR.batch = atoi(batch) != 0 ? 1 : 0;
         fprintf(stderr, "gta2: atlas: %s (GTA2_ATLAS_BATCH)\n", gR.batch ? "batched page uploads" : "direct uploads");
     }
+    // The overlay font: glyphs in 8x8 cells, 16 to a row, white where lit.
+    {
+        constexpr int kFontW = 128, kFontH = 64;
+        std::vector<uint8_t> px(kFontW * kFontH * 4, 0);
+        const int count = static_cast<int>(sizeof(kOverlayFont) / sizeof(kOverlayFont[0]));
+        for (int i = 0; i < count; ++i)
+        {
+            gR.glyphIndex[static_cast<unsigned char>(kOverlayFont[i].c) & 127] = static_cast<unsigned char>(i);
+            const int cx = (i % 16) * 8, cy = (i / 16) * 8;
+            for (int y = 0; y < kGlyphH; ++y)
+            {
+                for (int x = 0; x < kGlyphW; ++x)
+                {
+                    if (kOverlayFont[i].rows[y][x] == '1')
+                    {
+                        memset(&px[((cy + y) * kFontW + cx + x) * 4], 255, 4);
+                    }
+                }
+            }
+        }
+        glGenTextures(1, &gR.fontTex);
+        glBindTexture(GL_TEXTURE_2D, gR.fontTex);
+        SetParams();
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, kFontW, kFontH, 0, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
+    }
     gR.ready = true;
+}
+
+// Overlay quads, in drawable pixels (top left origin), font texture coordinates.
+void OverlayQuad(float x, float y, float w, float h, float u0, float v0, float u1, float v1, uint32_t rgba)
+{
+    const FrameVertex a{x, y, 1, u0, v0, rgba}, b{x + w, y, 1, u1, v0, rgba};
+    const FrameVertex c{x, y + h, 1, u0, v1, rgba}, d{x + w, y + h, 1, u1, v1, rgba};
+    gR.overlay.insert(gR.overlay.end(), {a, b, c, b, d, c});
+}
+
+void DrawOverlay(int dw, int dh)
+{
+    gR.overlay.clear();
+    Gta2Native_OptionsDraw(dw, dh);
+    if (gR.overlay.empty())
+    {
+        return;
+    }
+    glDisable(GL_SCISSOR_TEST);
+    glViewport(0, 0, dw, dh);
+    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(gR.overlay.size()) * sizeof(FrameVertex), gR.overlay.data(),
+                 GL_STREAM_DRAW);
+    glVertexAttribPointer(kPos, 2, GL_FLOAT, GL_FALSE, sizeof(FrameVertex), reinterpret_cast<const void*>(0));
+    glVertexAttribPointer(kRhw, 1, GL_FLOAT, GL_FALSE, sizeof(FrameVertex), reinterpret_cast<const void*>(8));
+    glVertexAttribPointer(kUv, 2, GL_FLOAT, GL_FALSE, sizeof(FrameVertex), reinterpret_cast<const void*>(12));
+    glVertexAttribPointer(kColour, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(FrameVertex), reinterpret_cast<const void*>(20));
+    glUniform4f(gR.uView, 2.0f / dw, -2.0f / dh, -1.0f, 1.0f);
+    glBindTexture(GL_TEXTURE_2D, gR.fontTex);
+    SetBlend(kBlendAlpha);
+    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(gR.overlay.size()));
 }
 
 void SetBlend(int mode)
@@ -549,6 +613,31 @@ void gta2_js_free_all_textures()
     gR.shadows = 0;
 }
 
+// The port's own screens (platform/options_native.cpp), drawn over the game's frame from
+// Gta2Native_OptionsDraw: drawable pixels from the top left, colours as R,G,B,A bytes.
+void Gta2Native_OverlayRect(float x, float y, float w, float h, uint32_t rgba)
+{
+    const int i = gR.glyphIndex[0x7f];
+    const float u = ((i % 16) * 8 + 2.5f) / 128.0f, v = ((i / 16) * 8 + 3.5f) / 64.0f; // inside the block
+    OverlayQuad(x, y, w, h, u, v, u, v, rgba);
+}
+
+// One line of text, px screen pixels to a font pixel; a character is 6 font pixels wide.
+void Gta2Native_OverlayText(float x, float y, float px, uint32_t rgba, const char* text)
+{
+    for (; *text; ++text, x += 6 * px)
+    {
+        const int c = toupper(static_cast<unsigned char>(*text)) & 127;
+        const int i = gR.glyphIndex[c];
+        if (i == 0)
+        {
+            continue; // space, or no glyph
+        }
+        const float u0 = ((i % 16) * 8) / 128.0f, v0 = ((i / 16) * 8) / 64.0f;
+        OverlayQuad(x, y, kGlyphW * px, kGlyphH * px, u0, v0, u0 + kGlyphW / 128.0f, v0 + kGlyphH / 64.0f, rgba);
+    }
+}
+
 void Gta2Native_SetPresentHeight(int height)
 {
     gRefH = height > 0 ? height : 480;
@@ -685,6 +774,7 @@ void gta2_js_present(const void* cmdData, int cmdCount, const void* vertData, in
         SetBlend(static_cast<int>(c.blend));
         glDrawArrays(GL_TRIANGLES, static_cast<GLint>(c.first), static_cast<GLsizei>(count));
     }
+    DrawOverlay(dw, dh);
     static const bool logFrames = getenv("GTA2_LOG_TEXTURES") && atoi(getenv("GTA2_LOG_TEXTURES")) != 0;
     const double beforeSwap = logFrames ? NowSeconds() : 0.0;
     Gta2Native_EndFrame();
