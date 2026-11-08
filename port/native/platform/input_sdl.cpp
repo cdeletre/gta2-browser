@@ -14,12 +14,19 @@
 // the A that confirms a menu does not also fire a shot. City actions are the game's own
 // controls (the 12 slots of hklm\...\gta2\control, read from the registry on entering the
 // city), so a key rebound in the game's settings moves with its button. The labels a, b,
-// x, y follow face_buttons: SDL only knows positions (its A is the bottom button) and
-// handhelds are usually labelled Nintendo-style (A right, B bottom), as the MANGMI Air X,
-// whose pad InputPlumber presents as a DualSense. GTA2_FACE_BUTTONS overrides the file.
-// Quitting is the launcher's job (gptokeyb kills the game, which SDL turns into SDL_QUIT).
+// x, y follow face_buttons. SDL's own mappings name positions (its A is the bottom
+// button), while handhelds are usually labelled Nintendo-style (A right, B bottom). The
+// mappings PortMaster exports in SDL_GAMECONTROLLERCONFIG name the labels instead (R36S:
+// its "a" is the button printed A), so face_buttons = auto (the default) takes SDL's names
+// as they are when that variable is set, and swaps A/B and X/Y otherwise.
+// GTA2_FACE_BUTTONS (auto, nintendo, xbox) overrides the file.
+// While the game's quit prompt is up, the menu layout applies: A (confirm) quits, twice
+// because of the port's "ARE YOU SURE?", B or Start (back) carries on. The launcher can
+// also end the game (gptokeyb kills it, which SDL turns into SDL_QUIT).
 // SDL also reads mappings from SDL_GAMECONTROLLERCONFIG (PortMaster) and from
 // conf/gamecontrollerdb.txt if there is one.
+// GTA2_LOG_INPUT=1 logs the controller's SDL mapping, every button and the keys sent to
+// the game, with the layout in use (city or menu).
 #if !defined(GTA2_NATIVE_HEADLESS)
 #include <SDL.h>
 #include <ctype.h>
@@ -37,7 +44,8 @@
 
 extern "C" void gta2_port_key(int scancode, int vk, int down, int ch);
 extern "C" void gta2_port_release_all_keys();
-extern "C" bool Gta2Native_IsPlaying(); // status_native.cpp
+extern "C" bool Gta2Native_IsPlaying();       // status_native.cpp
+extern "C" bool Gta2Native_QuitPromptShown(); // status_native.cpp
 extern "C" unsigned int Gta2Native_RegistryDword(const char* path, const char* name, unsigned int fallback);
 
 namespace
@@ -182,6 +190,8 @@ Action gBindings[kLayoutCount][kButtonCount];
 Key gSlotKeys[12]; // current key of each slot (registry), refreshed on entering the city
 
 bool gNintendoLabels = true;
+int gFaceMode = 0; // face_buttons: 0 auto, 1 nintendo, 2 xbox
+bool gLogInput = false; // GTA2_LOG_INPUT
 bool gStickAsDpad = true;
 int gStickDeadzone = static_cast<int>(0.35 * 32767); // web/gamepad.js
 constexpr int kTriggerThreshold = 16384;
@@ -209,12 +219,16 @@ const char* const kDefaultControls = R"(# GTA2 controller layout
 # Both sections also accept key:<name>, a keyboard key by its SDL name
 #   (key:Escape, key:Return, key:F1, key:Tab ...).
 #
-# Quitting the game is handled by the PortMaster launcher.
+# Quitting: Start (pause) opens the quit prompt, then A twice quits, B carries on.
+# The PortMaster launcher can also end the game.
 
 [options]
+# Which physical button is "a", "b", "x" and "y" below:
+# auto:     the names of the launcher's controller mapping (PortMaster), else nintendo
 # nintendo: A right, B bottom, X top, Y left (most handhelds)
 # xbox:     A bottom, B right, X left, Y top
-face_buttons = nintendo
+# If A and B (or X and Y) come out swapped, try nintendo or xbox.
+face_buttons = auto
 # dpad: the left stick moves like the d-pad; off: the left stick is ignored
 left_stick = dpad
 # how far the stick must move, 0.05 to 0.95
@@ -384,9 +398,9 @@ void ParseControls(const std::string& text, const char* source)
         if (section == kOptions)
         {
             const std::string v = LowerStr(value);
-            if (key == "face_buttons" && (v == "nintendo" || v == "xbox"))
+            if (key == "face_buttons" && (v == "auto" || v == "nintendo" || v == "xbox"))
             {
-                gNintendoLabels = v == "nintendo";
+                gFaceMode = v == "auto" ? 0 : v == "nintendo" ? 1 : 2;
                 ok = true;
             }
             else if (key == "left_stick" && (v == "dpad" || v == "off"))
@@ -522,6 +536,10 @@ void Apply(const std::set<Key>& keys)
     {
         if (!keys.count(k))
         {
+            if (gLogInput)
+            {
+                fprintf(stderr, "gta2: input: key 0x%02x up\n", k.dik);
+            }
             gta2_port_key(k.dik, k.vk, 0, 0);
         }
     }
@@ -529,6 +547,10 @@ void Apply(const std::set<Key>& keys)
     {
         if (!gHeld.count(k))
         {
+            if (gLogInput)
+            {
+                fprintf(stderr, "gta2: input: key 0x%02x down\n", k.dik);
+            }
             gta2_port_key(k.dik, k.vk, 1, 0);
         }
     }
@@ -555,6 +577,12 @@ void OpenController(int index)
     if (SDL_GameController* c = SDL_GameControllerOpen(index))
     {
         fprintf(stderr, "gta2: controller \"%s\"\n", SDL_GameControllerName(c));
+        if (gLogInput)
+        {
+            char* mapping = SDL_GameControllerMapping(c);
+            fprintf(stderr, "gta2: input: mapping %s\n", mapping ? mapping : "(none)");
+            SDL_free(mapping);
+        }
     }
 }
 } // namespace
@@ -583,12 +611,18 @@ int Gta2Native_PadButtonForLabel(int sdlButtonAsLabel)
 void Gta2Native_InputInit()
 {
     LoadControls();
+    gLogInput = getenv("GTA2_LOG_INPUT") && atoi(getenv("GTA2_LOG_INPUT")) != 0;
     if (const char* labels = getenv("GTA2_FACE_BUTTONS"))
     {
-        gNintendoLabels = strcmp(labels, "xbox") != 0;
+        gFaceMode = strcmp(labels, "xbox") == 0 ? 2 : strcmp(labels, "nintendo") == 0 ? 1 : 0;
     }
-    fprintf(stderr, "gta2: controller face buttons: %s labels, left stick %s\n",
-            gNintendoLabels ? "Nintendo (A right, B bottom)" : "Xbox (A bottom, B right)", gStickAsDpad ? "as d-pad" : "off");
+    const char* launcherMapping = getenv("SDL_GAMECONTROLLERCONFIG");
+    const bool fromLauncher = launcherMapping && *launcherMapping;
+    gNintendoLabels = gFaceMode == 1 || (gFaceMode == 0 && !fromLauncher);
+    fprintf(stderr, "gta2: controller face buttons: %s%s, left stick %s\n",
+            gNintendoLabels ? "Nintendo (A right, B bottom) labels" : "as the mapping names them",
+            gFaceMode == 0 ? (fromLauncher ? " (auto: launcher mapping)" : " (auto: no launcher mapping)") : "",
+            gStickAsDpad ? "as d-pad" : "off");
     const std::string db = gConfDir + "/gamecontrollerdb.txt";
     const int added = SDL_GameControllerAddMappingsFromFile(db.c_str());
     if (added > 0)
@@ -623,6 +657,15 @@ void Gta2Native_InputEvent(const SDL_Event& e)
             break;
         case SDL_CONTROLLERBUTTONDOWN:
         case SDL_CONTROLLERBUTTONUP:
+            if (gLogInput)
+            {
+                const int label = ButtonFromSdl(e.cbutton.button);
+                fprintf(stderr, "gta2: input: SDL button %s %s -> %s, layout %s\n",
+                        SDL_GameControllerGetStringForButton(static_cast<SDL_GameControllerButton>(e.cbutton.button)),
+                        e.type == SDL_CONTROLLERBUTTONDOWN ? "down" : "up",
+                        label >= 0 && label < kButtonCount ? kButtonNames[label] : "(unused)",
+                        gPlaying == 1 ? "city" : "menu");
+            }
             if (const int b = ButtonFromSdl(e.cbutton.button); b >= 0)
             {
                 gPressed[b] = e.type == SDL_CONTROLLERBUTTONDOWN;
@@ -661,7 +704,8 @@ void Gta2Native_InputEvent(const SDL_Event& e)
 // Once per loop iteration, after the events: turns the controller's state into keys.
 void Gta2Native_InputFrame()
 {
-    const int playing = Gta2Native_IsPlaying() ? 1 : 0;
+    // The quit prompt takes the menu layout: A quits, B or Start carries on.
+    const int playing = Gta2Native_IsPlaying() && !Gta2Native_QuitPromptShown() ? 1 : 0;
     if (playing != gPlaying)
     {
         if (gPlaying != -1)
@@ -676,6 +720,10 @@ void Gta2Native_InputFrame()
             RefreshSlotKeys(); // the game's settings may have changed in the menus
         }
         gPlaying = playing;
+        if (gLogInput)
+        {
+            fprintf(stderr, "gta2: input: layout %s\n", playing ? "city" : "menu");
+        }
     }
     std::set<Key> keys;
     for (int b = 0; b < kInputCount; ++b)

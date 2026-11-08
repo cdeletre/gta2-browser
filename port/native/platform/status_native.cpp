@@ -8,6 +8,7 @@
 #include "Frontend.hpp"
 #include "Game_0x40.hpp"
 #include "GameSession_578.hpp"
+#include "Player.hpp"
 
 extern "C" const s32* gta2_dev_state();
 extern "C" const s32* gta2_dev_sync_history();
@@ -60,4 +61,12 @@ extern "C" void Gta2Native_StatusLine(char* out, int size)
 extern "C" bool Gta2Native_IsPlaying()
 {
     return !gFrontend_67DC84 && gGame_0x40_67E008 && gta2_dev_state()[0] != 0;
+}
+
+// True while the game's quit prompt ("quit? / ARE YOU SURE?") is on screen for the local
+// player: the controller uses the menu layout then (input_sdl.cpp).
+extern "C" bool Gta2Native_QuitPromptShown()
+{
+    return Gta2Native_IsPlaying() && gGame_0x40_67E008->field_38_orf1 &&
+        gGame_0x40_67E008->field_38_orf1->field_78A_show_quit_message;
 }
