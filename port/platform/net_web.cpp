@@ -16,6 +16,8 @@
 // late as well), so a message has `delay` ticks to arrive before anyone waits
 // for it. The first `delay` ticks use empty inputs, queued here at the start.
 #include <emscripten.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <deque>
@@ -288,26 +290,29 @@ static bool InputDue(s32 from)
 char_type NetPlay::ReceiveGameMessage_521890(Network_8* pOut, s32* pPlayerIdx, u32* packet_subtype)
 {
 #if defined(GTA2_PORT_NATIVE)
-    // the first message the game may have now (each player's messages stay in their order)
+    // the first message the game may have now (each player's messages stay in their order:
+    // only a player's first message in the queue can go, or be dropped as a resend)
+    bool seen[MAX_PLAYERS] = {};
     for (auto it = gInbox.begin(); gSession && it != gInbox.end();)
     {
-        if (it->subtype == kInputs && it->seq != gExpectedSeq[it->from])
+        const s32 from = it->from;
+        if (from < 0 || from >= MAX_PLAYERS)
+        {
+            it = gInbox.erase(it);
+            continue;
+        }
+        if (seen[from])
+        {
+            ++it; // behind an earlier message of the same player
+            continue;
+        }
+        if (it->subtype == kInputs && it->seq != gExpectedSeq[from])
         {
             it = gInbox.erase(it); // a resend of inputs already delivered
             continue;
         }
-        bool laterInputOfSamePlayer = false;
-        if (it->subtype == kInputs && !InputDue(it->from))
-        {
-            ++it;
-            continue;
-        }
-        // a standard message (keep-alive, give-up) after a held-back input of its player waits too
-        for (auto prev = gInbox.begin(); prev != it; ++prev)
-        {
-            laterInputOfSamePlayer = laterInputOfSamePlayer || prev->from == it->from;
-        }
-        if (laterInputOfSamePlayer)
+        seen[from] = true;
+        if (it->subtype == kInputs && !InputDue(from))
         {
             ++it;
             continue;
@@ -335,6 +340,28 @@ char_type NetPlay::ReceiveGameMessage_521890(Network_8* pOut, s32* pPlayerIdx, u
         *pPlayerIdx = m.from;
         *packet_subtype = m.subtype;
         return 1;
+    }
+    // GTA2_NET_TRACE=1: what is held back when nothing can be delivered
+    static const bool trace = getenv("GTA2_NET_TRACE") != nullptr;
+    static u32 traced = 0;
+    if (trace && !gInbox.empty() && traced < 40)
+    {
+        ++traced;
+        fprintf(stderr, "gta2: net trace: nothing due; delivered");
+        for (s32 q = 0; q < MAX_PLAYERS; ++q)
+        {
+            fprintf(stderr, " %d", gInputsDelivered[q]);
+        }
+        fprintf(stderr, "; inbox:");
+        s32 n = 0;
+        for (const Message& m : gInbox)
+        {
+            if (n++ < 12)
+            {
+                fprintf(stderr, " %d:%u/%u", m.from, m.subtype, m.seq);
+            }
+        }
+        fprintf(stderr, " (%d)\n", n);
     }
     return 0;
 #endif

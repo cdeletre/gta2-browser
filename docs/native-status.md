@@ -908,6 +908,17 @@ au tick 180, les deux consoles entre elles. Reproduit dans le conteneur avec tro
 et des touches au hasard : l'hôte divergeait dès le tick 2 (11 peds contre 13). Cause et
 correction (natif) : tableau « Correctifs à reporter dans le build web » ci-dessous. Après :
 3 joueurs pendant 2 min, 3 622 ticks, contrôles identiques, 600 premiers relevés identiques.
+- **Régression de cette correction, sur consoles (TSP S, RP Mini, Air X) :** les parties à 3
+  se défaisaient dès le début (le jeu abandonnait un joueur après ~6,5 s d'attente, l'hôte
+  partait, la partie finissait). Reproduit dans le conteneur avec un réseau irrégulier
+  (`GTA2_NET_LAG_MS=30,120` : 30 ms plus jusqu'à 120 ms par message, ordre gardé) et tracé
+  (`GTA2_NET_TRACE=1`) : en cherchant le premier message livrable, la boucle jetait comme
+  « renvoi » tout message d'un joueur dont le numéro n'était pas l'attendu, y compris ceux qui
+  attendaient derrière le premier de ce joueur ; ses entrées des ticks suivants disparaissaient.
+  Corrigé : seul le premier message de chaque joueur dans la file est examiné. Après : 3 joueurs,
+  réseau irrégulier, 120 s, aucun blocage ni abandon, 600 premiers relevés identiques.
+- Les lignes `co-op:` du log portent l'heure depuis le début de la partie et l'image réseau,
+  et disent quand le jeu abandonne un joueur ou termine la partie.
 
 Reste : A5 (consoles), A6 (`wss://` si le serveur public est en HTTPS), A7 (scores, chat,
 points de passage), puis D1-D4 (transport TCP local, découverte UDP, consoles, paquet).

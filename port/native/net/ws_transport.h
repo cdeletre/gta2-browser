@@ -6,6 +6,7 @@
 // Multiplayer build only (gta2-mp).
 #pragma once
 
+#include <deque>
 #include <map>
 #include <memory>
 #include <string>
@@ -61,6 +62,13 @@ class WsTransport : public Transport
         std::function<void()> fail;
     };
     std::map<std::string, PendingPing> mPings; // by n (as text)
+    struct Delayed
+    {
+        double at;
+        bool text;
+        std::string data;
+    };
+    std::deque<Delayed> mDelayed; // received messages not handed on yet (GTA2_NET_LAG_MS)
 };
 
 } // namespace gta2net

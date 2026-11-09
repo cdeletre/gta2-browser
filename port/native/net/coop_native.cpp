@@ -31,6 +31,8 @@ const int32_t* gta2_dev_sync_dump(int at);
 const int32_t* gta2_dev_sync_peds();
 }
 
+extern uint8_t gNetPlayerDropped_6F8470[6]; // winmain.cpp: players the game gave up on (C++ name)
+
 namespace gta2net
 {
 
@@ -51,6 +53,18 @@ int gHeldFrame = -1;
 double gHeldSince = 0;
 uint32_t gLastWaiting = 0;
 double gLastWatch = 0;
+double gMatchStart = 0;
+int32_t gLastQuit = 0;
+uint8_t gLastDropped[6];
+
+
+// "[12.3 s, frame 456]": when, for the co-op log lines
+std::string Stamp()
+{
+    char buf[48];
+    snprintf(buf, sizeof(buf), "[%.1f s, frame %d] ", (NowMs() - gMatchStart) / 1000.0, gta2_port_net_debug()[4]);
+    return buf;
+}
 
 // The original's multiplayer setups for the three story districts (DISTRICTS in web/net.js).
 struct District
@@ -84,7 +98,7 @@ void Compare(int tick)
         if (own != gMine.end() && h != own->second && !gDesync)
         {
             gDesync = true;
-            fprintf(stderr, "gta2: co-op: games drifted apart at tick %d (%s: %s, here: %s)\n", tick,
+            fprintf(stderr, "gta2: co-op: %sgames drifted apart at tick %d (%s: %s, here: %s)\n", Stamp().c_str(), tick,
                     PlayerName(slot).c_str(), h.c_str(), own->second.c_str());
         }
     }
@@ -158,7 +172,7 @@ void SetupCoop(Lobby* lobby, const Json& match)
         gta2_port_net_receive(slot, bytes.data(), static_cast<int>(bytes.size()));
     };
     lobby->onPlayerLeft = [](int slot) {
-        fprintf(stderr, "gta2: co-op: %s left\n", PlayerName(slot).c_str());
+        fprintf(stderr, "gta2: co-op: %s%s left (the connection closed)\n", Stamp().c_str(), PlayerName(slot).c_str());
         gta2_port_net_peer_left(slot);
     };
     lobby->onSync = [](int slot, int tick, const std::string& h) {
@@ -173,6 +187,7 @@ void SetupCoop(Lobby* lobby, const Json& match)
     {
         gta2_dev_sync_dump(atoi(getenv("GTA2_NET_SYNC_DUMP")));
     }
+    gMatchStart = NowMs();
     lobby->GameReady();
     fprintf(stderr, "gta2: co-op: %d players, this is slot %d, mode %s, district %s, %s, input delay %d ticks\n", count,
             gMySlot, mode.c_str(), d->key, script, match["delay"].Int(1));
@@ -264,7 +279,25 @@ void WatchCoop(double nowMs)
                 names += (names.empty() ? "" : ", ") + PlayerName(s);
             }
         }
-        fprintf(stderr, waiting ? "gta2: co-op: waiting for %s\n" : "gta2: co-op: no longer waiting%s\n", names.c_str());
+        fprintf(stderr, waiting ? "gta2: co-op: %swaiting for %s\n" : "gta2: co-op: %sno longer waiting%s\n",
+                Stamp().c_str(), names.c_str());
+    }
+    // the game giving up on a player (no inputs for several seconds), or ending the match
+    for (int p = 0; p < 6; ++p)
+    {
+        if (gNetPlayerDropped_6F8470[p] != gLastDropped[p])
+        {
+            gLastDropped[p] = gNetPlayerDropped_6F8470[p];
+            if (gLastDropped[p])
+                fprintf(stderr, "gta2: co-op: %sthe game gave up on %s (no inputs from them)\n", Stamp().c_str(),
+                        PlayerName(p).c_str());
+        }
+    }
+    if (d[9] != gLastQuit)
+    {
+        gLastQuit = d[9];
+        if (d[9])
+            fprintf(stderr, "gta2: co-op: %sthe match ends here (a player quit, or the host left)\n", Stamp().c_str());
     }
 }
 

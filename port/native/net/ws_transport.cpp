@@ -643,11 +643,42 @@ void WsTransport::Poll()
         }
         if (!fin)
             continue;
-        if (mFragmentOpcode == 1)
-            OnText(mFragments);
-        else if (mFragmentOpcode == 2)
-            OnBinary(Bytes(mFragments.begin(), mFragments.end()));
+        if (mFragmentOpcode == 1 || mFragmentOpcode == 2)
+        {
+            // GTA2_NET_LAG_MS=base[,jitter]: a slower, uneven network for tests; each message is
+            // held base + up to jitter ms, never before the one ahead of it (TCP keeps the order)
+            static double base = -1;
+            static double jitter = 0;
+            if (base < 0)
+            {
+                base = 0;
+                if (const char* lag = getenv("GTA2_NET_LAG_MS"))
+                {
+                    base = atof(lag);
+                    if (const char* comma = strchr(lag, ','))
+                        jitter = atof(comma + 1);
+                }
+            }
+            double at = NowMs();
+            if (base > 0 || jitter > 0)
+            {
+                static std::mt19937 lagRng(12345);
+                at += base + std::uniform_real_distribution<double>(0, jitter)(lagRng);
+            }
+            if (!mDelayed.empty() && mDelayed.back().at > at)
+                at = mDelayed.back().at;
+            mDelayed.push_back({at, mFragmentOpcode == 1, mFragments});
+        }
         mFragments.clear();
+    }
+    while (!mDelayed.empty() && mDelayed.front().at <= NowMs())
+    {
+        Delayed d = std::move(mDelayed.front());
+        mDelayed.pop_front();
+        if (d.text)
+            OnText(d.data);
+        else
+            OnBinary(Bytes(d.data.begin(), d.data.end()));
     }
     // unanswered pings
     const double now = NowMs();
