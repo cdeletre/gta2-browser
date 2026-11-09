@@ -98,6 +98,10 @@ Lobby::Lobby(Transport* transport, const std::string& name, bool host) : mT(tran
     mSettings.Set("lang", "en"); // the game's language for the match: the host's (English natively for now)
 
     mT->onPeerJoined = [this](const std::string& id) {
+        if (mHost && !mStarted)
+        {
+            mSilent[id] = NowMs();
+        }
         if (!mHost)
         {
             Json hello = Json::Object();
@@ -164,6 +168,7 @@ void Lobby::OnMessage(const std::string& from, const Message& m)
     const int fromSlot = SlotOf(from);
     if (kind == "hello" && mHost && !mStarted)
     {
+        mSilent.erase(from);
         if (!FindPlayer(from) && static_cast<int>(mPlayers.size()) < kMaxPlayers)
         {
             Json p = Json::Object();
@@ -195,6 +200,11 @@ void Lobby::OnMessage(const std::string& from, const Message& m)
             mSettings = data["settings"];
         }
         Changed();
+    }
+    else if (kind == "roster" && mHost)
+    {
+        if (onOtherHost)
+            onOtherHost(from); // another host in this room (the browser ignores it too)
     }
     else if (kind == "start" && !mHost && from == mHostId)
     {
@@ -425,9 +435,21 @@ std::string Lobby::StartProblem() const
     return unpicked.empty() ? "" : "waitingGang:" + unpicked;
 }
 
+int Lobby::SilentPeers(double ms) const
+{
+    int n = 0;
+    const double now = NowMs();
+    for (const auto& [id, at] : mSilent)
+    {
+        n += now - at > ms ? 1 : 0;
+    }
+    return n;
+}
+
 // left()
 void Lobby::Left(const std::string& id)
 {
+    mSilent.erase(id);
     const int slot = SlotOf(id);
     if (slot >= 0)
     {

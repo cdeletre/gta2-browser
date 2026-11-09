@@ -53,6 +53,8 @@ class Lobby
     std::function<void(int slot, bool set, double x, double y)> onWaypoint;
     std::function<void(int slot, int tick, const std::string& h)> onSync;
     std::function<void(int slot, const std::string& text)> onChat;
+    // Host: another player in the room also hosts it (sent a roster): two hosts in one room.
+    std::function<void(const std::string& id)> onOtherHost;
     // The relay refused us ("full" or "taken").
     std::function<void(const std::string& why)> onRefused;
 
@@ -65,6 +67,9 @@ class Lobby
     // {mode, district, friendlyFire, minutes, killLimit, pointsTarget, sides, lang}
     const Json& Settings() const { return mSettings; }
     int MySlot() const { return mMySlot; }
+    // Host: players in the room who have not said hello for more than ms (another host, most
+    // likely: hosts do not send hello, so two hosts in one room never see each other's roster).
+    int SilentPeers(double ms) const;
     // The slot of a player id in the match, or -1.
     int SlotOf(const std::string& id) const;
 
@@ -129,6 +134,7 @@ class Lobby
     std::function<void()> mGo;
     std::vector<std::pair<int, Bytes>> mEarly;
     int mPingsOut = 0;
+    std::map<std::string, double> mSilent; // host: peer id -> when it joined, until its hello
 };
 
 } // namespace gta2net

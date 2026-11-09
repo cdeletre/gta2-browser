@@ -63,6 +63,8 @@ struct Screen
     double lastPing = 0;
     std::vector<Item> items;
     std::string refused;    // set while the transport polls; acted on after it (Leave frees it)
+    double joinedAt = 0;    // when this player entered the room
+    bool otherHost = false; // host: someone else hosts this room too
 };
 Screen gS;
 
@@ -139,6 +141,9 @@ void Enter(bool host)
     }
     SaveNetConfig(*gS.config);
     gLobby->onStart = [](const Json& m) { gS.match = m; };
+    gLobby->onOtherHost = [](const std::string&) { gS.otherHost = true; };
+    gS.otherHost = false;
+    gS.joinedAt = NowMs();
     gLobby->onRefused = [](const std::string& why) {
         gS.refused = why == "full" ? "That room is full." : "Could not enter the room (id taken).";
     };
@@ -366,6 +371,20 @@ void Draw(int dw, int dh)
         }
     }
     const float bottom = (dh + kRows * lineH) / 2 - 2 * lineH;
+    // hints for the two ways a room goes wrong
+    std::string hint;
+    if (gS.phase == kRoom && gLobby && !gLobby->IsHost() && gLobby->HostId().empty() && NowMs() - gS.joinedAt > 5000)
+        hint = "Nobody hosts " + gS.config->room + " yet: one player must pick Create room.";
+    if (gS.phase == kRoom && gLobby && gLobby->IsHost() && (gS.otherHost || gLobby->SilentPeers(3000) > 0))
+        hint = gS.config->room + " already has a host: leave, then pick Join room.";
+    if (!hint.empty())
+    {
+        // two lines when it does not fit
+        const size_t cut = hint.size() > kCols ? hint.rfind(' ', kCols) : std::string::npos;
+        Gta2Native_OverlayText(x0, bottom - 2 * lineH, px, kYellow, hint.substr(0, cut).c_str());
+        if (cut != std::string::npos)
+            Gta2Native_OverlayText(x0, bottom - lineH, px, kYellow, hint.substr(cut + 1).c_str());
+    }
     if (gS.phase == kRoom && gLobby && gLobby->IsHost() && gS.message.empty())
     {
         const std::string problem = gLobby->StartProblem();

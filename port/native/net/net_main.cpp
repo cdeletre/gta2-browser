@@ -109,7 +109,8 @@ NetConfig LoadNetConfig(const std::string& confDir)
     std::string server = "ws://127.0.0.1:8790", password, invite, names = kDefaultNames, name, rooms = kDefaultRooms,
                 room, crews = kDefaultCrews;
     std::ifstream in(c.path);
-    if (in)
+    const bool found = in.is_open(); // (the stream's state after reading to the end is no test)
+    if (found)
     {
         std::string line;
         while (std::getline(in, line))
@@ -155,7 +156,7 @@ NetConfig LoadNetConfig(const std::string& confDir)
         c.rooms = SplitList(kDefaultRooms);
     c.name = Env("GTA2_NET_NAME", name.empty() ? c.names[0].c_str() : name.c_str());
     c.room = Env("GTA2_NET_ROOM", room.empty() ? c.rooms[0].c_str() : room.c_str());
-    if (!in)
+    if (!found)
     {
         SaveNetConfig(c);
         fprintf(stderr, "gta2: net: wrote the default settings to %s\n", c.path.c_str());
