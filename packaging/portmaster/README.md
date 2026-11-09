@@ -20,14 +20,23 @@ The settings are in `ports/gta2/conf/`: `registry.txt` holds the game's own opti
   scaled. A wider screen (16:9) shows more of the city on the sides, and a taller one (1:1, as on the
   RG CubeXX) shows more above and below. Menus stay 4:3, with black bars.
 - The intro movies are not played.
-- Options (main menu, or Select during the pause in the city) opens a simple settings screen instead of the original's separate GTA2
-  Manager program: music and radio volume, sound effects volume, text speed, exploding scores,
-  lighting, and the A/B layout (`face_buttons`).
-- Quitting: Start opens the game's pause and quit prompt, then A twice quits (the second press
-  confirms "ARE YOU SURE?"), B or Start carries on.
+- Options opens a simple settings screen of the port, instead of the original's separate GTA2
+  Manager program (see below).
+- Select changes the car radio station (F1 on a PC keyboard).
 
-**If A and B (or X and Y) are swapped,** set `face_buttons = nintendo` or `face_buttons = xbox` in
-`conf/controls.ini`. The default, `auto`, follows PortMaster's controller mapping.
+**Options:** from the main menu (Options), or during a game: press Start (the quit prompt), then
+Select. The game is paused while the screen is open. Up/down choose a line, left/right change it,
+B or Start close it (in a game, B again resumes play). Settings:
+- Music and radio volume, sound effects volume (applied at once).
+- Text speed (from the next game), exploding scores, lighting.
+- Face buttons: `auto`, `nintendo` or `xbox` (the A/B and X/Y layout, see below).
+
+**Quitting:** press Start (the quit prompt), then A twice (the second press confirms "ARE YOU
+SURE?"). B or Start resumes play. The quit prompt alone does not pause the game.
+
+**If A and B (or X and Y) are swapped,** change Face buttons in Options to `nintendo` or `xbox`
+(it is saved as `face_buttons` in `conf/controls.ini`). The default, `auto`, follows PortMaster's
+controller mapping; on some systems (TrimUI Smart Pro S with REG Linux) `nintendo` is needed.
 
 **Logs:** the game writes its log to `ports/gta2/log.txt`, with a status line every 60 seconds.
 To help with a bug report, add `export GTA2_LOG_INPUT=1` to the launch script (it logs the controller
@@ -49,8 +58,8 @@ ROCKNIX), G350 (dArkOS), TrimUI Smart Pro S (REG Linux).
 | L1 / R1 | Previous / next weapon |
 | L3 (hold) | Look around with the D-pad |
 | R3 | Status |
-| Start | Pause, quit prompt (then Select: Options) |
 | Select | Next radio station (in a car) |
+| Start | Quit prompt: then A, A to quit, B to resume, Select for Options |
 | Menus: A / B | Confirm / Back |
 
 Every button can be changed in `conf/controls.ini`.
