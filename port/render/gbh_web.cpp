@@ -15,6 +15,7 @@
 #include <string.h>
 #include <unordered_map>
 #include <unordered_set>
+#include <set>
 #include <vector>
 
 #include "gbh_graphics.hpp"
@@ -93,6 +94,98 @@ std::unordered_map<uint64_t, intptr_t> gTextureByContent;
 // Every texture the game holds, so a quick load can rebuild the GPU side (savestate_web.cpp).
 std::unordered_set<STexture*> gLiveTextures;
 
+#if defined(GTA2_PORT_NATIVE)
+// Natively the content cache above is not left to grow: every new text, digit or car damage
+// state, and every district loaded, added GPU textures that were never freed (about 80 MB a
+// quarter of an hour in the menu's attract replays, until a 1 GB console ran out of memory).
+// Each GPU texture counts the game textures showing it. One that none shows any more stays
+// cached (it often comes back: digits, text) while the unshown ones total under
+// kUnshownBudget; past that the longest unshown are freed, never before the frame that last
+// drew them has been presented (the draws are queued until gta2_frame_present). The web
+// build has the same growth (docs/native-status.md, "Correctifs à reporter dans le build web").
+struct GpuTexture
+{
+    uint64_t key = 0;
+    bool keyed = false; // in gTextureByContent (front-end images are not)
+    int shownBy = 0;
+    uint32_t lastFrame = 0; // the frame it was last shown in (present count)
+    size_t bytes = 0;
+};
+std::unordered_map<intptr_t, GpuTexture> gGpu;
+std::unordered_map<STexture*, intptr_t> gShows;            // the GPU texture each game texture shows
+std::set<std::pair<uint32_t, intptr_t>> gUnshown;            // (last frame, id), oldest first
+size_t gUnshownBytes = 0;
+constexpr size_t kUnshownBudget = 16u << 20;
+
+void Unshow(intptr_t id)
+{
+    const auto it = gGpu.find(id);
+    if (it == gGpu.end())
+    {
+        return;
+    }
+    GpuTexture& g = it->second;
+    g.lastFrame = gta2_port_present_count();
+    if (--g.shownBy == 0)
+    {
+        gUnshown.insert({g.lastFrame, id});
+        gUnshownBytes += g.bytes;
+    }
+}
+
+// t now shows GPU texture id (registered in gGpu).
+void Show(STexture* t, intptr_t id)
+{
+    const auto held = gShows.find(t);
+    if (held != gShows.end() && held->second == id)
+    {
+        return;
+    }
+    GpuTexture& g = gGpu[id];
+    if (g.shownBy++ == 0 && gUnshown.erase({g.lastFrame, id}))
+    {
+        gUnshownBytes -= g.bytes;
+    }
+    if (held != gShows.end())
+    {
+        Unshow(held->second);
+        held->second = id;
+    }
+    else
+    {
+        gShows.emplace(t, id);
+    }
+}
+
+void StopShowing(STexture* t)
+{
+    const auto held = gShows.find(t);
+    if (held != gShows.end())
+    {
+        Unshow(held->second);
+        gShows.erase(held);
+    }
+}
+
+void FreeUnshown()
+{
+    const uint32_t now = gta2_port_present_count();
+    while (gUnshownBytes > kUnshownBudget && !gUnshown.empty() && gUnshown.begin()->first < now)
+    {
+        const intptr_t id = gUnshown.begin()->second;
+        gUnshown.erase(gUnshown.begin());
+        const auto it = gGpu.find(id);
+        gUnshownBytes -= it->second.bytes;
+        if (it->second.keyed)
+        {
+            gTextureByContent.erase(it->second.key);
+        }
+        gGpu.erase(it);
+        gta2_js_free_texture(static_cast<int>(id));
+    }
+}
+#endif
+
 uint64_t ContentKey(const u8* pix, int w, int h, int palId)
 {
     uint64_t hash = 1469598103934665603ull;
@@ -127,11 +220,22 @@ void UploadPaletted(STexture* t)
     if (it != gTextureByContent.end())
     {
         t->field_1C_ptr = reinterpret_cast<void*>(it->second);
+#if defined(GTA2_PORT_NATIVE)
+        Show(t, it->second);
+#endif
         return;
     }
     const intptr_t id = gNextTextureId++;
     gTextureByContent.emplace(key, id);
     t->field_1C_ptr = reinterpret_cast<void*>(id);
+#if defined(GTA2_PORT_NATIVE)
+    GpuTexture& g = gGpu[id];
+    g.key = key;
+    g.keyed = true;
+    g.bytes = static_cast<size_t>(w) * h * 4;
+    Show(t, id);
+    FreeUnshown();
+#endif
 
     gConvert.resize(static_cast<size_t>(w) * h * 4);
     const DWORD* pal = palId >= 0 && gPalettes[palId].loaded ? gPalettes[palId].original : nullptr;
@@ -529,6 +633,9 @@ void CC gbh_FreeTexture(STexture* t)
 {
     // GPU textures are shared by content; they stay cached (see UploadPaletted).
     gLiveTextures.erase(t);
+#if defined(GTA2_PORT_NATIVE)
+    StopShowing(t);
+#endif
     free(t);
 }
 
@@ -566,6 +673,13 @@ s32 CC gbh_LoadImage(SImage* img)
         {
             STexture* t = NewTexture(img->field_C_width, img->field_E_height, nullptr);
             t->field_1C_ptr = reinterpret_cast<void*>(static_cast<intptr_t>(gNextTextureId++));
+#if defined(GTA2_PORT_NATIVE)
+            {
+                GpuTexture& g = gGpu[reinterpret_cast<intptr_t>(t->field_1C_ptr)];
+                g.bytes = static_cast<size_t>(img->field_C_width) * img->field_E_height * 4;
+                Show(t, reinterpret_cast<intptr_t>(t->field_1C_ptr));
+            }
+#endif
             const u8* src = reinterpret_cast<const u8*>(&img->field_12) + img->field_0;
             UploadImage(t, src);
             const size_t bytes = static_cast<size_t>(img->field_C_width) * img->field_E_height * 2;
@@ -658,6 +772,12 @@ void Gta2Port_ReuploadTextures()
 {
     gta2_js_free_all_textures();
     gTextureByContent.clear();
+#if defined(GTA2_PORT_NATIVE)
+    gGpu.clear();
+    gShows.clear();
+    gUnshown.clear();
+    gUnshownBytes = 0;
+#endif
     for (STexture* t : gLiveTextures)
     {
         if (t->field_14_original_pixel_data_ptr)

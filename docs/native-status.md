@@ -82,6 +82,32 @@ essais mesurés par SSH, binaire dans `/tmp`, cache disque vidé avant chaque es
   la correspondance exportée par PortMaster semble nommer les positions (convention SDL) et
   non les étiquettes, contrairement à la R36S. Non vérifié bouton par bouton.
 
+## Fuite des textures et RG34XX-H figée (observé, 8 novembre 2026)
+
+- **Vu par l'utilisateur :** la RG34XX-H, laissée sur les démos du menu, finit figée ; SSH
+  ne répond plus (bannière jamais reçue) alors que le ping passe. Mémoire saturée, sans swap.
+- **Mesuré avant le correctif :** sur les 5 consoles à pilote Mali propriétaire, la mémoire
+  du jeu grossit de 70 à 90 Mo par quart d'heure (avec ce pilote, la mémoire graphique est
+  comptée dans celle du jeu ; sous Mesa elle ne s'y voit pas). RG34XX-H, 15 min de démos :
+  349 Mo à 2 min, 470 Mo à 15 min, 58 000 textures toutes vivantes, atlas de 51 à 62 pages.
+- **Cause :** le cache des textures par contenu (`port/render/gbh_web.cpp`) ne libérait
+  jamais une texture GPU. `gbh_FreeTexture` ne faisait que l'oublier côté jeu.
+- **Correctif (natif seulement) :**
+  - chaque texture GPU compte les textures du jeu qui l'affichent ;
+  - celles qui ne sont plus affichées restent en cache jusqu'à 16 Mo au total, puis les plus
+    anciennes sont libérées, jamais avant que l'image qui les a dessinées en dernier ait été
+    affichée (les dessins attendent `gta2_frame_present`) ;
+  - une page d'atlas vide repart de zéro.
+- **La ligne d'état du log** donne le nombre de textures, de pages d'atlas et leurs Mo.
+- **Observé après correctif :**
+  - RG34XX-H, 30 min de démos : 352 Mo à 2 min, 354 à 359 Mo ensuite, jusqu'à 30 min ;
+    52 pages d'atlas (221 à 223 Mo de textures), environ 37 800 textures en jeu ;
+  - Air X, build ASan, 12 min de démos : aucune erreur, 51 pages, 216 à 220 Mo.
+- **Point ouvert :** pendant un premier essai sur la RG34XX-H (le son n'avait pas pu s'ouvrir,
+  « ALSA: Host is down »), le jeu est resté bloqué dans le menu, le fil principal à 100 % dans
+  l'horloge (`emscripten_get_now`), avant la première ligne d'état. Pas reproduit en deux
+  essais suivants sans son (90 s, puis 30 min). Sans gdb sur la console, la pile s'arrête là.
+
 ## Plantage pendant les démos du menu (observé, 8 novembre 2026)
 
 - **Vu par l'utilisateur :** le port laissé sur le menu, qui enchaîne ses 3 démos
@@ -605,6 +631,7 @@ reporter l'un d'eux, il suffit de retirer sa garde `#if defined(GTA2_PORT_NATIVE
 | `port/render/gbh_web.cpp` (`Draw`, lumières) avec `gQuadVerts_706B88` (`Draw.cpp`) | un dessin éclairé lit les positions monde après les 4 sommets ; `DrawFigure_5D7EC0` n'en remplit que 4 | les chiffres du score qui explose sont éclairés d'après des globaux sans rapport (lecture hors du tableau) |
 | `sound_obj::RadioEmitter` (`sound_obj.hpp`) | index 102, 103 ou 128 quand `field_54F7[0]` vaut 101, 0x66 ou 127 | lectures et écritures 2 à 3 Ko après `gSound_obj_66F680` ; la voiture de police quittée reçoit un « statut d'émetteur » quelconque |
 | `PublicTransport_181C::SetupTrainAndBusStops_5794B0` (patch natif 0016) | `gStationCount_6FF1CC` jamais remis à zéro : il grossit à chaque district chargé, et au-delà des 100 stations de `field_0_stations` la boucle des arrêts de bus lit hors du tableau | plantage (ou lecture hors de l'objet) après plusieurs chargements de districts dans la même session, par exemple les démos du menu |
+| `port/render/gbh_web.cpp`, cache des textures par contenu | une texture GPU n'est jamais libérée, même quand plus aucune texture du jeu ne l'affiche ; chaque nouveau texte, chiffre ou dégât de voiture et chaque district chargé en ajoute | la mémoire WebGL grossit pendant toute la session |
 
 ## À reprendre plus tard (64 bits, hors jalon 1)
 

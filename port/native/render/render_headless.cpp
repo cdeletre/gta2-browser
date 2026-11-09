@@ -19,6 +19,12 @@ void gta2_js_free_texture(int)
 void gta2_js_free_all_textures()
 {
 }
+void Gta2Native_TextureStats(int* textures, int* pages, int* mb)
+{
+    *textures = 0;
+    *pages = 0;
+    *mb = 0;
+}
 
 } // extern "C"
 #endif

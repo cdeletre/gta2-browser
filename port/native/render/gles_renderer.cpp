@@ -134,6 +134,7 @@ struct Page
     int dirtyTop = kPage;        // rows changed in the copy since the last upload
     int dirtyBottom = -1;
     unsigned lastWrite = 0;      // frame of the last write
+    int live = 0;                // textures in the page; at 0 it starts again empty
 };
 
 // Where a game texture is: its own GL texture (page < 0), or a rectangle of an atlas page
@@ -404,6 +405,7 @@ Slot Allocate(int w, int h)
     {
         const Slot s = f->second.back();
         f->second.pop_back();
+        ++gR.pages[s.page].live;
         return s;
     }
     const int pw = w + 2;
@@ -442,6 +444,7 @@ Slot Allocate(int w, int h)
                 s.w = w;
                 s.h = h;
                 best->x += pw;
+                ++page.live;
                 return s;
             }
         }
@@ -467,6 +470,19 @@ void Release(const Slot& s)
     if (s.page < 0)
     {
         glDeleteTextures(1, &s.tex);
+    }
+    else if (--gR.pages[s.page].live == 0)
+    {
+        // The page holds no texture any more (the game freed them, render/gbh_web.cpp): its
+        // shelves start again, and the free rectangles listed for it go.
+        Page& page = gR.pages[s.page];
+        page.shelves.clear();
+        page.bottom = 0;
+        for (auto& kv : gR.freeSlots)
+        {
+            auto& v = kv.second;
+            v.erase(std::remove_if(v.begin(), v.end(), [&](const Slot& f) { return f.page == s.page; }), v.end());
+        }
     }
     else
     {
@@ -637,6 +653,22 @@ void Gta2Native_OverlayText(float x, float y, float px, uint32_t rgba, const cha
         const float u0 = ((i % 16) * 8) / 128.0f, v0 = ((i / 16) * 8) / 64.0f;
         OverlayQuad(x, y, kGlyphW * px, kGlyphH * px, u0, v0, u0 + kGlyphW / 128.0f, v0 + kGlyphH / 64.0f, rgba);
     }
+}
+
+// The status line (main.cpp): GPU textures alive, atlas pages, and the pixels they hold in MB.
+void Gta2Native_TextureStats(int* textures, int* pages, int* mb)
+{
+    size_t bytes = gR.pages.size() * static_cast<size_t>(kPage) * kPage * 4;
+    for (const auto& kv : gR.textures)
+    {
+        if (kv.second.page < 0)
+        {
+            bytes += static_cast<size_t>(kv.second.w) * kv.second.h * 4;
+        }
+    }
+    *textures = static_cast<int>(gR.textures.size());
+    *pages = static_cast<int>(gR.pages.size());
+    *mb = static_cast<int>(bytes >> 20);
 }
 
 void Gta2Native_SetPresentHeight(int height)

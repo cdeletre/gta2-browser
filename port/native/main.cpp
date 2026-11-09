@@ -49,6 +49,7 @@ extern "C" void gta2_port_reg_set_string(const char* path, const char* name, con
 extern "C" unsigned int gta2_port_present_count();
 extern "C" void Gta2Native_StatusLine(char* out, int size); // platform/status_native.cpp
 extern "C" void Gta2Native_InstallCrashHandler();           // platform/crash_native.cpp
+extern "C" void Gta2Native_TextureStats(int* textures, int* pages, int* mb); // render/
 extern "C" int Gta2Native_TickCount(int* peds, int* cars);
 extern "C" void Gta2Native_SoakInit(); // platform/soak_native.cpp
 extern "C" void Gta2Native_SoakStep(double now);
@@ -360,8 +361,10 @@ int main(int argc, char** argv)
             const int ticks = Gta2Native_TickCount(&peds, &cars);
             char status[256];
             Gta2Native_StatusLine(status, sizeof(status));
-            fprintf(stderr, "gta2: %.0f s, %.1f ticks/s, %u frames, %s\n", now / 1000.0,
-                    (ticks - lastTicks) * 1000.0 / elapsed, gta2_port_present_count(), status);
+            int textures = 0, pages = 0, textureMb = 0;
+            Gta2Native_TextureStats(&textures, &pages, &textureMb);
+            fprintf(stderr, "gta2: %.0f s, %.1f ticks/s, %u frames, %d textures, %d atlas pages, %d MB, %s\n", now / 1000.0,
+                    (ticks - lastTicks) * 1000.0 / elapsed, gta2_port_present_count(), textures, pages, textureMb, status);
             lastTicks = ticks;
         }
         if (runMs > 0 && now >= runMs)
