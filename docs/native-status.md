@@ -765,6 +765,7 @@ reporter l'un d'eux, il suffit de retirer sa garde `#if defined(GTA2_PORT_NATIVE
 | `port/render/gbh_web.cpp` (`Draw`, lumières) avec `gQuadVerts_706B88` (`Draw.cpp`) | un dessin éclairé lit les positions monde après les 4 sommets ; `DrawFigure_5D7EC0` n'en remplit que 4 | les chiffres du score qui explose sont éclairés d'après des globaux sans rapport (lecture hors du tableau) |
 | `sound_obj::RadioEmitter` (`sound_obj.hpp`) | index 102, 103 ou 128 quand `field_54F7[0]` vaut 101, 0x66 ou 127 | lectures et écritures 2 à 3 Ko après `gSound_obj_66F680` ; la voiture de police quittée reçoit un « statut d'émetteur » quelconque |
 | `PublicTransport_181C::SetupTrainAndBusStops_5794B0` (patch natif 0016) | `gStationCount_6FF1CC` jamais remis à zéro : il grossit à chaque district chargé, et au-delà des 100 stations de `field_0_stations` la boucle des arrêts de bus lit hors du tableau | plantage (ou lecture hors de l'objet) après plusieurs chargements de districts dans la même session, par exemple les démos du menu |
+| `port/platform/net_web.cpp`, `ReceiveGameMessage_521890` (multijoueur, 9 novembre) | à 3 joueurs ou plus, pendant que le jeu attend les entrées d'un joueur lent pour un tick, il lit aussi l'entrée du tick suivant d'un joueur en avance, qui écrase la sienne (`PortNetReceivePoll`, `winmain.cpp`) : chaque machine applique alors des entrées différentes selon l'ordre d'arrivée | les parties à 3 joueurs et plus divergent dès les premiers ticks (vu : tick 2 dans le conteneur, tick 180 sur deux consoles avec un navigateur) ; à 2 joueurs rien. Tant que le web n'a pas la correction, un navigateur dans une partie à 3+ divergera des natifs |
 | `port/render/gbh_web.cpp`, cache des textures par contenu | une texture GPU n'est jamais libérée, même quand plus aucune texture du jeu ne l'affiche ; chaque nouveau texte, chiffre ou dégât de voiture et chaque district chargé en ajoute | la mémoire WebGL grossit pendant toute la session |
 
 ## À reprendre plus tard (64 bits, hors jalon 1)
@@ -901,6 +902,12 @@ builds sans écran et quand `GTA2_NET_HOST` est défini. Après une partie termi
   équipe Reds, gang) contre hôte automatique en Gang Wars, qui attend l'équipe puis le gang
   avant de démarrer. Les deux parties démarrent.
 - **Pas encore vérifié :** le retour au lobby après une partie, sur console et à la manette.
+
+**3 joueurs (9 novembre) :** deux consoles (TSP S hôte, RP Mini) et un navigateur ont divergé
+au tick 180, les deux consoles entre elles. Reproduit dans le conteneur avec trois `gta2-mp`
+et des touches au hasard : l'hôte divergeait dès le tick 2 (11 peds contre 13). Cause et
+correction (natif) : tableau « Correctifs à reporter dans le build web » ci-dessous. Après :
+3 joueurs pendant 2 min, 3 622 ticks, contrôles identiques, 600 premiers relevés identiques.
 
 Reste : A5 (consoles), A6 (`wss://` si le serveur public est en HTTPS), A7 (scores, chat,
 points de passage), puis D1-D4 (transport TCP local, découverte UDP, consoles, paquet).

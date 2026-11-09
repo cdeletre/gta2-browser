@@ -45,6 +45,12 @@ struct Message
 
 std::deque<Message> gInbox;
 u8 gExpectedSeq[MAX_PLAYERS];
+#if defined(GTA2_PORT_NATIVE)
+// Three players or more: the inputs delivered so far per player, and the players gone (see
+// ReceiveGameMessage_521890).
+s32 gInputsDelivered[MAX_PLAYERS];
+bool gGone[MAX_PLAYERS];
+#endif
 u8 gDelivered[256];
 wchar_t gNames[MAX_PLAYERS][32];
 bool gSession = false;
@@ -90,6 +96,10 @@ EMSCRIPTEN_KEEPALIVE void gta2_port_net_configure(int count, int me, int delay)
         n.field_758_n2.field_10_players[i].field_10_player_id = i;
         n.field_758_n2.field_8_packet_game_tick[i] = 0;
         gExpectedSeq[i] = 0;
+#if defined(GTA2_PORT_NATIVE)
+        gInputsDelivered[i] = 0;
+        gGone[i] = false;
+#endif
     }
     gInbox.clear();
     gGta2PortNetInputDelay = delay < 0 ? 0 : delay > kMaxInputDelay ? kMaxInputDelay : delay;
@@ -172,6 +182,9 @@ EMSCRIPTEN_KEEPALIVE void gta2_port_net_peer_left(int idx)
     u8 payload[5] = {kGiveUp, 0, 0, 0, 0};
     memcpy(payload + 1, &idx, 4);
     gInbox.push_back({idx, kStandard, 0, std::vector<u8>(payload, payload + 5)});
+#if defined(GTA2_PORT_NATIVE)
+    gGone[idx] = true;
+#endif
 }
 
 } // extern "C"
@@ -242,8 +255,89 @@ s32 NetPlay::SendToPlayer_521630(Network_8*, s32, char_type)
     return 0;
 }
 
+#if defined(GTA2_PORT_NATIVE)
+extern u8 gNetPlayerDropped_6F8470[6]; // winmain.cpp: players the game gave up on
+
+// Whether player `from`'s next inputs may go to the game now. The game reads messages until
+// it has every other player's inputs for the tick (winmain.cpp PortNetReceivePoll), and an
+// input overwrites that player's previous one: with three players or more, a player whose
+// inputs for the next tick came in before a slower player's for this tick had them read one
+// tick early, on that machine only, which drifted the games apart (seen at three players,
+// tick 2). An input is held back while its player is ahead of another player still in the
+// game. With two players there is no other player to wait for: nothing changes.
+static bool InputDue(s32 from)
+{
+    const NetPlay& n = gNetPlay_7071E8;
+    const s32 me = n.field_5D4_player_idx;
+    for (s32 q = 0; q < MAX_PLAYERS; ++q)
+    {
+        if (q == from || q == me || !n.field_758_n2.field_10_players[q].field_0_in_use || gGone[q] ||
+            gNetPlayerDropped_6F8470[q])
+        {
+            continue;
+        }
+        if (gInputsDelivered[q] < gInputsDelivered[from])
+        {
+            return false;
+        }
+    }
+    return true;
+}
+#endif
+
 char_type NetPlay::ReceiveGameMessage_521890(Network_8* pOut, s32* pPlayerIdx, u32* packet_subtype)
 {
+#if defined(GTA2_PORT_NATIVE)
+    // the first message the game may have now (each player's messages stay in their order)
+    for (auto it = gInbox.begin(); gSession && it != gInbox.end();)
+    {
+        if (it->subtype == kInputs && it->seq != gExpectedSeq[it->from])
+        {
+            it = gInbox.erase(it); // a resend of inputs already delivered
+            continue;
+        }
+        bool laterInputOfSamePlayer = false;
+        if (it->subtype == kInputs && !InputDue(it->from))
+        {
+            ++it;
+            continue;
+        }
+        // a standard message (keep-alive, give-up) after a held-back input of its player waits too
+        for (auto prev = gInbox.begin(); prev != it; ++prev)
+        {
+            laterInputOfSamePlayer = laterInputOfSamePlayer || prev->from == it->from;
+        }
+        if (laterInputOfSamePlayer)
+        {
+            ++it;
+            continue;
+        }
+        Message m = std::move(*it);
+        gInbox.erase(it);
+        if (m.subtype == kInputs)
+        {
+            ++gExpectedSeq[m.from];
+            ++gInputsDelivered[m.from];
+        }
+        else if (m.payload.size() >= 5 && m.payload[0] == kGiveUp)
+        {
+            s32 who;
+            memcpy(&who, m.payload.data() + 1, 4);
+            if (who >= 0 && who < MAX_PLAYERS)
+            {
+                gGone[who] = true;
+            }
+        }
+        const size_t len = m.payload.size() < sizeof(gDelivered) ? m.payload.size() : sizeof(gDelivered);
+        memcpy(gDelivered, m.payload.data(), len);
+        pOut->field_0_data = gDelivered;
+        pOut->field_4_len = static_cast<s32>(len);
+        *pPlayerIdx = m.from;
+        *packet_subtype = m.subtype;
+        return 1;
+    }
+    return 0;
+#endif
     while (gSession && !gInbox.empty())
     {
         Message m = std::move(gInbox.front());
