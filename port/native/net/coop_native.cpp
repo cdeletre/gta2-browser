@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <map>
@@ -26,6 +27,8 @@ void gta2_port_net_receive(int from, const uint8_t* data, int len);
 void gta2_port_net_peer_left(int idx);
 const int32_t* gta2_dev_sync_history();
 const int32_t* gta2_port_net_debug();
+const int32_t* gta2_dev_sync_dump(int at);
+const int32_t* gta2_dev_sync_peds();
 }
 
 namespace gta2net
@@ -165,6 +168,11 @@ void SetupCoop(Lobby* lobby, const Json& match)
     lobby->onChat = [](int slot, const std::string& text) {
         fprintf(stderr, "gta2: co-op: chat from %s: %s\n", PlayerName(slot).c_str(), text.c_str());
     };
+    // GTA2_NET_SYNC_DUMP=tick: the live peds at that tick (as ?syncdump in the browser), logged once
+    if (getenv("GTA2_NET_SYNC_DUMP"))
+    {
+        gta2_dev_sync_dump(atoi(getenv("GTA2_NET_SYNC_DUMP")));
+    }
     lobby->GameReady();
     fprintf(stderr, "gta2: co-op: %d players, this is slot %d, mode %s, district %s, %s, input delay %d ticks\n", count,
             gMySlot, mode.c_str(), d->key, script, match["delay"].Int(1));
@@ -210,6 +218,31 @@ void WatchCoop(double nowMs)
         else
         {
             ++it;
+        }
+    }
+    // GTA2_NET_DUMP_HISTORY=n: the first n ticks' records (tick, game RNG, world RNG, peds, ped
+    // hash, cars, car hash), once, to find the first tick where two players' games differ
+    static const int dumpTicks = getenv("GTA2_NET_DUMP_HISTORY") ? atoi(getenv("GTA2_NET_DUMP_HISTORY")) : 0;
+    static bool dumped = false;
+    if (dumpTicks > 0 && !dumped && gLastSent >= dumpTicks)
+    {
+        dumped = true;
+        for (int t = 0; t < dumpTicks && t < kSyncTicks; ++t)
+        {
+            const int32_t* row = v + t * kSyncRow;
+            fprintf(stderr, "gta2: co-op: history %d %d %d %d %d %d %d\n", row[0], row[1], row[2], row[3], row[4], row[5],
+                    row[6]);
+        }
+    }
+    static bool pedsDumped = false;
+    if (getenv("GTA2_NET_SYNC_DUMP") && !pedsDumped && gLastSent > atoi(getenv("GTA2_NET_SYNC_DUMP")))
+    {
+        pedsDumped = true;
+        const int32_t* p = gta2_dev_sync_peds();
+        for (int i = 0; i < p[0]; ++i)
+        {
+            const int32_t* o = p + 1 + i * 5;
+            fprintf(stderr, "gta2: co-op: ped %d id %d at (%d, %d) sprite %d type %d\n", i, o[0], o[1], o[2], o[3], o[4]);
         }
     }
     // who are we waiting for?

@@ -709,6 +709,13 @@ et « Écarts par rapport à l'original » ci-dessous).
 
 ## Écarts par rapport à l'original (natif seulement)
 
+- **`rand()` de la bibliothèque C** (`platform/rand_native.cpp`, 9 novembre) : le natif
+  remplace celui de la glibc par celui d'Emscripten (musl), que le build web a. Les nombres
+  aléatoires « du monde » du moteur (`gRng_6F6784` : où naissent les passants, etc.) viennent
+  directement de `rand()` ; avec la suite de la glibc, un joueur natif et un navigateur ne
+  tiraient pas les mêmes après le même `srand(1)`. Aucune des deux n'est celle de l'original
+  (MSVC, `RAND_MAX` 0x7FFF) : le solo natif tire donc désormais la même suite que le
+  navigateur, et toujours pas celle du jeu Windows.
 - **Vue haute** (patch natif 0015) : sur un écran plus haut que 4:3, on voit plus de ville
   au-dessus et en dessous du joueur, comme le widescreen du web en montre plus sur les
   côtés (D07). Avec la marge d'activation (active par défaut, comme dans le web), les
@@ -850,8 +857,32 @@ fichier). La ligne d'état de `gta2-mp` ajoute le dernier contrôle et les messa
   ce que wasm (et le x87 de l'original) ne fait pas ; nécessaire pour jouer avec un
   navigateur (A3). Les parties ci-dessus sont avec ce drapeau.
 
-Reste : A3 (natif contre
-navigateur), A4 (lobby à la manette, noms prédéfinis ; clavier à l'écran plus tard), A5
+**A3, natif contre navigateur (observé, 9 novembre)** : le serveur de jeu, le build web
+release (emsdk 6.0.12) et `game/` sur un conteneur Ubuntu 24.04 du propriétaire
+(10.20.0.158, `/opt/gta2-browser`) ; un `gta2-mp` natif sans écran comme hôte dans
+`gta2-pm`, et Chromium sans fenêtre comme invité (`scripts/native/browser_peer.mjs`, image
+`mcr.microsoft.com/playwright:v1.49.1-noble` sur le Mac), qui rejoint la salle par le lien
+d'invitation et presse des touches au hasard.
+- **Premier essai : divergence au tick 90, même sans aucune touche.** Les relevés tick par
+  tick (`GTA2_NET_DUMP_HISTORY=n` en natif, `DUMP=n` pour le navigateur) différaient dès le
+  tick 2, sur le hash des peds seulement ; la liste des peds à ce tick (`GTA2_NET_SYNC_DUMP`,
+  `?syncdump` côté web) : le passant 9 né 4 608 (0,28 bloc) plus loin en x et en y côté
+  navigateur, soit 8 × l'écart de son décalage aléatoire (`GetSpawnJitter`). Cause : le
+  `rand()` de la bibliothèque C, dont le moteur tire ses nombres « du monde », n'a pas la
+  même suite dans la glibc et dans musl (vérifié : après `srand(1)`, 1804289383… contre
+  0, 740882966…). Corrigé côté natif seulement (`platform/rand_native.cpp`, la suite de
+  musl ; voir les écarts plus bas).
+- **Après la correction :**
+
+| Essai | Ticks | Résultat |
+|---|---|---|
+| Sans touches, 40 s | 150 premiers relevés comparés un à un | identiques |
+| Touches au hasard des deux côtés, 2 min | 3 629 | contrôles identiques jusqu'à 3 600 |
+| Touches au hasard des deux côtés, 10 min (630 touches côté navigateur, 713 actions côté natif) | 18 147 | contrôles identiques jusqu'à 18 090, aucune alerte dans la page |
+
+  Ping par le relais 21 à 71 ms, délai d'entrée 1 ou 2 ticks, 29,4 à 30,3 ticks/s côté natif.
+
+Reste : A4 (lobby à la manette, noms prédéfinis ; clavier à l'écran plus tard), A5
 (consoles), A6 (`wss://` si le serveur public est en HTTPS), A7 (scores, chat, points de
 passage), puis D1-D4 (transport TCP local, découverte UDP, consoles, paquet).
 
