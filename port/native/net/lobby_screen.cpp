@@ -145,7 +145,10 @@ void Enter(bool host)
     gS.otherHost = false;
     gS.joinedAt = NowMs();
     gLobby->onRefused = [](const std::string& why) {
-        gS.refused = why == "full" ? "That room is full." : "Could not enter the room (id taken).";
+        gS.refused = why == "full"                     ? "That room is full."
+            : why.compare(0, 8, "version:") == 0 ? "That room runs another version of the game (co-op " + why.substr(8) +
+                "; this one " + std::to_string(kCoopVersion) + ")."
+                                                       : "Could not enter the room (id taken).";
     };
     gS.phase = kRoom;
     gS.line = 0;

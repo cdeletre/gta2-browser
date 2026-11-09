@@ -107,6 +107,7 @@ Lobby::Lobby(Transport* transport, const std::string& name, bool host) : mT(tran
             Json hello = Json::Object();
             hello.Set("lobby", "hello");
             hello.Set("name", mName);
+            hello.Set("v", kCoopVersion);
             mT->Send(id, Message::Of(hello));
         }
     };
@@ -166,7 +167,26 @@ void Lobby::OnMessage(const std::string& from, const Message& m)
         return;
     }
     const int fromSlot = SlotOf(from);
-    if (kind == "hello" && mHost && !mStarted)
+    const int version = data["v"].IsNumber() ? data["v"].Int() : 1;
+    if (kind == "hello" && mHost && !mStarted && version != kCoopVersion)
+    {
+        Json no = Json::Object();
+        no.Set("lobby", "refused");
+        no.Set("reason", "version");
+        no.Set("v", kCoopVersion);
+        mT->Send(from, Message::Of(no));
+    }
+    else if (kind == "refused" && !mStarted && data["reason"].Str() == "version")
+    {
+        if (onRefused)
+            onRefused("version:" + std::to_string(version));
+    }
+    else if (kind == "roster" && !mHost && version != kCoopVersion)
+    {
+        if (onRefused)
+            onRefused("version:" + std::to_string(version));
+    }
+    else if (kind == "hello" && mHost && !mStarted)
     {
         mSilent.erase(from);
         if (!FindPlayer(from) && static_cast<int>(mPlayers.size()) < kMaxPlayers)
@@ -250,6 +270,7 @@ void Lobby::BroadcastRoster()
     msg.Set("lobby", "roster");
     msg.Set("players", mPlayers);
     msg.Set("settings", mSettings);
+    msg.Set("v", kCoopVersion);
     for (const Json& p : mPlayers.Items())
     {
         if (p["id"].Str() != mT->Id())
@@ -688,6 +709,15 @@ void Lobby::ShareWaypoint(bool set, double x, double y)
 // sendGame()
 void Lobby::SendGame(int slot, const Bytes& bytes)
 {
+    if (slot < 0)
+    {
+        // one message for everyone, which the relay copies to each player: if this player
+        // leaves in the middle, either everyone has its last inputs or nobody does, so the
+        // others see the departure at the same tick (as sendGame in web/net.js)
+        mT->Send("", Message::Of(bytes));
+        stats.sent += static_cast<int>(mSlots.size()) - 1;
+        return;
+    }
     for (const auto& [id, s] : mSlots)
     {
         if (s == mMySlot || (slot >= 0 && s != slot))

@@ -1798,6 +1798,13 @@ function wireCoopLobby() {
     });
     if (host && rematch && rematch.settings) lobby.setSettings({ ...rematch.settings, lang: currentLang() });
     lobby.code = code;
+    // another version of the game in the room (COOP_VERSION): say so and leave it
+    lobby.onRefused = (reason, info) => {
+      if (reason !== 'version') return;
+      setStatus(t('ui.net.versionMismatch', info), true);
+      try { transport.leave(); } catch { /* closed */ }
+      for (const b of ['coop-host', 'coop-join']) $(b).disabled = false;
+    };
     window.gta2Lobby = lobby; // for tests
     pinger = setInterval(() => lobby.measurePings(), 2000);
     location.hash = code;

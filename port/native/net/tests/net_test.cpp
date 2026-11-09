@@ -332,7 +332,7 @@ void TestBrowserRoster()
     const std::string roster = std::string(R"({"lobby":"roster","players":[{"id":")") + browser->Id() +
         R"(","name":"Web","crew":"","colour":7},{"id":")" + t->Id() +
         R"(","name":"Native","crew":""}],"settings":{"mode":"ffa","district":"downtown","friendlyFire":false,)"
-        R"("minutes":5,"killLimit":10,"pointsTarget":0,"sides":{},"lang":"fr","future":{"a":1}}})";
+        R"("minutes":5,"killLimit":10,"pointsTarget":0,"sides":{},"lang":"fr","future":{"a":1}},"v":2})";
     browser->Send(t->Id(), Message::Of(J(roster.c_str())));
     t->Poll();
     CHECK_EQ(lobby.Players()[0]["colour"].Int(), 7);
@@ -356,6 +356,37 @@ void TestBrowserRoster()
     CHECK_EQ(match["delay"].Int(), 1);           // match.delay || 1
     CHECK_EQ(match["lang"].Str(), std::string("en")); // not a language of the port: English for everyone
 }
+// A player or a host of another co-op version (or of a build from before the check).
+void TestVersion()
+{
+    MemoryHub hub;
+    auto ht = hub.Connect();
+    Lobby host(ht.get(), "Host", true);
+    auto old = hub.Connect();
+    Json got;
+    old->onMessage = [&](const std::string&, const Message& m) { got = m.json; };
+    old->Join();
+    ht->Poll();
+    old->Poll();
+    // an old player's hello (no v): turned away, not in the roster
+    old->Send(ht->Id(), Message::Of(J(R"({"lobby":"hello","name":"Old"})")));
+    ht->Poll();
+    old->Poll();
+    CHECK_EQ(host.Players().size(), size_t(1));
+    CHECK_EQ(got["lobby"].Str(), std::string("refused"));
+    CHECK_EQ(got["v"].Int(), kCoopVersion);
+    // our hello carries the version; a roster from an old host makes us leave
+    auto ct = hub.Connect();
+    Lobby guest(ct.get(), "Guest", false);
+    std::string why;
+    guest.onRefused = [&](const std::string& w) { why = w; };
+    old->Poll();
+    ct->Poll();
+    old->Send(ct->Id(), Message::Of(J(R"({"lobby":"roster","players":[],"settings":{}})")));
+    ct->Poll();
+    CHECK_EQ(why, std::string("version:1"));
+    CHECK(guest.Players().size() == 0);
+}
 } // namespace
 
 int main()
@@ -365,6 +396,7 @@ int main()
     TestLobby();
     TestLeaveBeforeStart();
     TestBrowserRoster();
+    TestVersion();
     printf("gta2-net-test: %d checks, %d failed\n", gChecks, gFailures);
     return gFailures ? 1 : 0;
 }

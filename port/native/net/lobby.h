@@ -22,6 +22,10 @@ namespace gta2net
 {
 
 constexpr int kMaxPlayers = 6;
+// The co-op version, as COOP_VERSION in web/net.js: every player of a match must simulate the
+// same game, so a change that can change a match bumps it in both. Sent in hello and in the
+// roster; builds from before the check send none (version 1).
+constexpr int kCoopVersion = 2;
 constexpr double kTickMs = 1000.0 / 30;
 
 // The input delay (ticks) the host picks for the slowest player's round trip (inputDelayFor).
@@ -55,7 +59,8 @@ class Lobby
     std::function<void(int slot, const std::string& text)> onChat;
     // Host: another player in the room also hosts it (sent a roster): two hosts in one room.
     std::function<void(const std::string& id)> onOtherHost;
-    // The relay refused us ("full" or "taken").
+    // The relay refused us ("full" or "taken"), or the room runs another version of the game
+    // ("version:<theirs>").
     std::function<void(const std::string& why)> onRefused;
 
     bool IsHost() const { return mHost; }

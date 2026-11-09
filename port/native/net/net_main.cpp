@@ -275,7 +275,12 @@ int AutoLobby(const NetConfig& config)
     };
     gLobby->onStart = [&](const Json& m) { match = m; };
     gLobby->onRefused = [&](const std::string& why) {
-        fprintf(stderr, "gta2: net: the server refused us: %s\n", why == "full" ? "the room is full" : "id taken");
+        fprintf(stderr, "gta2: net: refused: %s\n",
+                why == "full"                          ? "the room is full"
+                    : why.compare(0, 8, "version:") == 0 ? ("the room runs another co-op version (" + why.substr(8) +
+                                                            ", this one " + std::to_string(kCoopVersion) + ")")
+                                                               .c_str()
+                                                         : "id taken");
         refused = true;
     };
     if (host)

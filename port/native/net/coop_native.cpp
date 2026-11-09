@@ -98,6 +98,17 @@ void Compare(int tick)
         if (own != gMine.end() && h != own->second && !gDesync)
         {
             gDesync = true;
+            // GTA2_NET_DUMP_ON_DRIFT=1: the last 1024 ticks' records, to find the first that differs
+            if (getenv("GTA2_NET_DUMP_ON_DRIFT"))
+            {
+                const int32_t* v = gta2_dev_sync_history();
+                for (int t = 0; t < kSyncTicks; ++t)
+                {
+                    const int32_t* row = v + t * kSyncRow;
+                    fprintf(stderr, "gta2: co-op: last %d %d %d %d %d %d %d\n", row[0], row[1], row[2], row[3], row[4],
+                            row[5], row[6]);
+                }
+            }
             fprintf(stderr, "gta2: co-op: %sgames drifted apart at tick %d (%s: %s, here: %s)\n", Stamp().c_str(), tick,
                     PlayerName(slot).c_str(), h.c_str(), own->second.c_str());
         }

@@ -36,6 +36,7 @@ registerDict({
     'ui.net.threeCrews': 'Gang Wars has room for three crews (one per street gang).',
     'ui.net.waitingGang': 'Waiting for {names} to pick a gang.',
     'ui.net.and': 'and',
+    'ui.net.versionMismatch': 'This room runs another version of the game (co-op version {theirs}, this one {mine}): everyone needs the same version.',
   },
   es: {
     'ui.net.serverNoAnswer': 'el servidor del juego no respondió',
@@ -46,6 +47,7 @@ registerDict({
     'ui.net.threeCrews': 'Guerras de bandas admite tres clanes (uno por banda callejera).',
     'ui.net.waitingGang': 'Esperando a que {names} elija una banda.',
     'ui.net.and': 'y',
+    'ui.net.versionMismatch': 'Esta sala usa otra versión del juego (versión cooperativa {theirs}, esta {mine}): todos necesitan la misma versión.',
   },
   fr: {
     'ui.net.serverNoAnswer': 'le serveur de jeu n’a pas répondu',
@@ -56,6 +58,7 @@ registerDict({
     'ui.net.threeCrews': 'Les Guerres de gangs accueillent trois équipes (une par gang de rue).',
     'ui.net.waitingGang': 'En attente du choix d’un gang par {names}.',
     'ui.net.and': 'et',
+    'ui.net.versionMismatch': 'Cette salle utilise une autre version du jeu (version coop {theirs}, celle-ci {mine}) : tout le monde doit avoir la même version.',
   },
 });
 
@@ -67,6 +70,12 @@ export const DISTRICTS = {
   industrial: { get label() { return t('ui.district.industrial'); }, gmp: 'bil-multi.gmp', sty: 'bil.sty', scr: (n) => `Industrial-${n}P.scr` },
 };
 export const MAX_PLAYERS = 6;
+// The co-op version: every player of a match must simulate the same game, so a change to the
+// game's code that can change a match (net_web.cpp, the engine patches) bumps it, here and in
+// the native build (port/native/net/lobby.h, kCoopVersion). Sent in hello and in the roster:
+// a host turns away a player of another version, a player leaves a host of another version
+// (builds from before the check send none: version 1).
+export const COOP_VERSION = 2;
 
 // Each district's three street gangs (the multiplayer maps have them all): internal name, name,
 // colour. In Gang Wars every crew sides with one; its members treat the crew as their own.
@@ -271,7 +280,8 @@ export class CoopLobby {
     this.loaded = new Set(); // host: players whose game files are ready
     this.gone = new Set();   // players who left after the start
     this.go = () => {};      // game messages that arrived before this player's game was ready
-    transport.onPeerJoined = (id) => { if (!this.host) this.t.send(id, { lobby: 'hello', name: this.name }); };
+    this.onRefused = () => {}; // (reason, {theirs, mine}): 'version'
+    transport.onPeerJoined = (id) => { if (!this.host) this.t.send(id, { lobby: 'hello', name: this.name, v: COOP_VERSION }); };
     transport.onPeerLeft = (id) => this.left(id);
     transport.onMessage = (from, data) => this.message(from, data);
     transport.join();
@@ -291,7 +301,11 @@ export class CoopLobby {
       return;
     }
     if (!data || !data.lobby) return;
-    if (data.lobby === 'hello' && this.host && !this.started) {
+    if (data.lobby === 'hello' && this.host && !this.started && (data.v || 1) !== COOP_VERSION) {
+      this.t.send(from, { lobby: 'refused', reason: 'version', v: COOP_VERSION });
+    } else if (data.lobby === 'refused' && !this.started && data.reason === 'version') {
+      this.onRefused('version', { theirs: data.v || 1, mine: COOP_VERSION });
+    } else if (data.lobby === 'hello' && this.host && !this.started) {
       if (!this.players.some((p) => p.id === from) && this.players.length < MAX_PLAYERS) {
         this.players.push({ id: from, name: String(data.name || t('ui.coop.namePlaceholder')).slice(0, 16), crew: '' });
       }
@@ -301,6 +315,8 @@ export class CoopLobby {
       if (p) { p.crew = cleanCrew(data.crew); this.broadcastRoster(); }
     } else if (data.lobby === 'side' && this.host && !this.started && typeof data.side === 'string') {
       this.applySide(from, data.side);
+    } else if (data.lobby === 'roster' && !this.host && (data.v || 1) !== COOP_VERSION) {
+      this.onRefused('version', { theirs: data.v || 1, mine: COOP_VERSION });
     } else if (data.lobby === 'roster' && !this.host) {
       this.hostId = from;
       this.players = data.players;
@@ -325,7 +341,7 @@ export class CoopLobby {
 
   broadcastRoster() {
     for (const p of this.players) {
-      if (p.id !== this.t.id) this.t.send(p.id, { lobby: 'roster', players: this.players, settings: this.settings });
+      if (p.id !== this.t.id) this.t.send(p.id, { lobby: 'roster', players: this.players, settings: this.settings, v: COOP_VERSION });
     }
     this.onChange();
   }
@@ -497,8 +513,16 @@ export class CoopLobby {
   /** Game messages from the core: to one slot, or -1 for everyone. */
   sendGame(slot, bytes) {
     this.log('out', slot, bytes);
+    if (slot < 0) {
+      // one message for everyone, which the relay copies to each player: if this player leaves
+      // in the middle, either everyone has its last inputs or nobody does, so the others see
+      // the departure at the same tick (one send per player let some have them and not others)
+      this.t.send(null, bytes);
+      this.stats.sent += Object.keys(this.slots).length - 1;
+      return;
+    }
     for (const [id, s] of Object.entries(this.slots)) {
-      if (s === this.mySlot || (slot >= 0 && s !== slot)) continue;
+      if (s === this.mySlot || s !== slot) continue;
       this.t.send(id, bytes);
       this.stats.sent++;
     }
