@@ -882,9 +882,28 @@ d'invitation et presse des touches au hasard.
 
   Ping par le relais 21 à 71 ms, délai d'entrée 1 ou 2 ticks, 29,4 à 30,3 ticks/s côté natif.
 
-Reste : A4 (lobby à la manette, noms prédéfinis ; clavier à l'écran plus tard), A5
-(consoles), A6 (`wss://` si le serveur public est en HTTPS), A7 (scores, chat, points de
-passage), puis D1-D4 (transport TCP local, découverte UDP, consoles, paquet).
+
+**A4, lobby à la manette (fait, 9 novembre)** : `net/lobby_screen.cpp`, dans le style de
+l'écran Options (même police, mêmes entrées : haut/bas, gauche/droite, A, B ; il prend la
+main par des crochets faibles de `options_native.cpp`, absents du binaire solo). Avant le
+jeu : nom et salle choisis dans les listes de `conf/net.ini` (pas de clavier à l'écran pour
+l'instant), « Create room » ou « Join room » ; dans la salle, les joueurs avec leur aller-
+retour, les réglages de l'hôte (mode, district, tir ami ou durée, limite de kills), en
+Gang Wars l'équipe et le gang de chacun, « Start the match » ; puis l'attente de tous.
+`conf/net.ini` (écrit avec des valeurs par défaut au premier lancement) : `server`,
+`password` ou `invite`, `names`, `name`, `rooms`, `room`, `crews` ; les `GTA2_NET_*`
+priment sans être réécrits dans le fichier. Le mode automatique des tests reste pour les
+builds sans écran et quand `GTA2_NET_HOST` est défini. Après une partie terminée par le jeu,
+`gta2-mp` se relance (`execv`) et revient au lobby, comme la page du navigateur se recharge.
+`GTA2_LOBBY_KEYS` joue des appuis pour les tests.
+- **Observé dans le conteneur** (pilote SDL hors écran, captures) : hôte à l'écran (créer
+  ROOM1, attendre, démarrer) contre client automatique ; client à l'écran (rejoindre ROOM2,
+  équipe Reds, gang) contre hôte automatique en Gang Wars, qui attend l'équipe puis le gang
+  avant de démarrer. Les deux parties démarrent.
+- **Pas encore vérifié :** le retour au lobby après une partie, sur console et à la manette.
+
+Reste : A5 (consoles), A6 (`wss://` si le serveur public est en HTTPS), A7 (scores, chat,
+points de passage), puis D1-D4 (transport TCP local, découverte UDP, consoles, paquet).
 
 ## Reste à faire
 

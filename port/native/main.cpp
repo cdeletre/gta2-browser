@@ -67,7 +67,8 @@ extern "C" void Gta2Native_AudioShutdown();
 extern "C" int gta2_port_set_view_width(int width);   // port/render/vid_web.cpp
 extern "C" int gta2_port_set_view_height(int height); // port/render/vid_web.cpp (native only)
 #if defined(GTA2_NATIVE_NET)
-extern "C" int Gta2Net_PreGame(char* cmd, int size); // net/net_main.cpp (gta2-mp only)
+extern "C" int Gta2Net_PreGame(char* cmd, int size, const char* confDir); // net/net_main.cpp (gta2-mp only)
+extern "C" void Gta2Net_AfterMatch(char** argv);
 extern "C" void Gta2Net_Frame(double nowMs);
 extern "C" void Gta2Net_Status(char* out, int size);
 #endif
@@ -233,10 +234,13 @@ int main(int argc, char** argv)
     strncpy(cmd, args.c_str(), sizeof(cmd) - 1);
 #if defined(GTA2_NATIVE_NET)
     // gta2-mp: the lobby first; the game then starts as a network game (-N), as in the browser
-    if (const int lobby = Gta2Net_PreGame(cmd, sizeof(cmd)))
+    if (const int lobby = Gta2Net_PreGame(cmd, sizeof(cmd), confDir.c_str()))
     {
         Gta2Native_AudioShutdown();
-        return lobby;
+#if !defined(GTA2_NATIVE_HEADLESS)
+        Gta2Native_WindowShutdown();
+#endif
+        return lobby == 1 ? 0 : lobby; // 1: the player quit from the lobby
     }
 #endif
 
@@ -296,6 +300,7 @@ int main(int argc, char** argv)
     const char* statusEnv = getenv("GTA2_STATUS_SECONDS");
     const double statusMs = (statusEnv ? atof(statusEnv) : 60.0) * 1000.0;
     int code = 0;
+    bool gameEnded = false; // the game itself ended (not a window close or a signal)
     // GTA2_LOG_TEXTURES=1: a loop iteration over 100 ms is logged with the time of each step.
     const bool logStalls = getenv("GTA2_LOG_TEXTURES") && atoi(getenv("GTA2_LOG_TEXTURES")) != 0;
     for (;;)
@@ -360,6 +365,7 @@ int main(int argc, char** argv)
         if (slice != -1)
         {
             code = slice;
+            gameEnded = true;
             fprintf(stderr, "gta2: game ended (%d)\n", slice);
             break;
         }
@@ -409,5 +415,12 @@ int main(int argc, char** argv)
 #if !defined(GTA2_NATIVE_HEADLESS)
     Gta2Native_WindowShutdown();
 #endif
+#if defined(GTA2_NATIVE_NET)
+    if (gameEnded)
+    {
+        Gta2Net_AfterMatch(argv); // gta2-mp: back to the lobby (does not return when it restarts)
+    }
+#endif
+    (void)gameEnded;
     return code;
 }

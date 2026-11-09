@@ -43,6 +43,11 @@ extern "C" void Gta2Native_OverlayText(float x, float y, float px, uint32_t rgba
 extern "C" bool Gta2Native_IsPlaying();          // status_native.cpp
 extern "C" int Gta2Native_FaceButtons();          // input_sdl.cpp: 0 auto, 1 nintendo, 2 xbox
 extern "C" void Gta2Native_SetFaceButtons(int mode); // input_sdl.cpp, also writes controls.ini
+// gta2-mp's lobby screen (net/lobby_screen.cpp) takes this screen's inputs and drawing while
+// it is up, before the game starts. Weak: the solo binary has no lobby, and these stay null.
+extern "C" bool Gta2Net_LobbyActive() __attribute__((weak));
+extern "C" void Gta2Net_LobbyInput(int action) __attribute__((weak));
+extern "C" void Gta2Net_LobbyDraw(int dw, int dh) __attribute__((weak));
 
 namespace
 {
@@ -192,12 +197,17 @@ void gta2_js_open_options()
 
 bool Gta2Native_OptionsOpen()
 {
-    return gOpen;
+    return gOpen || (Gta2Net_LobbyActive && Gta2Net_LobbyActive());
 }
 
 // input_sdl.cpp: 0 up, 1 down, 2 left, 3 right, 4 confirm (A, Return), 5 back (B, Start, Escape).
 void Gta2Native_OptionsInput(int action)
 {
+    if (Gta2Net_LobbyActive && Gta2Net_LobbyActive())
+    {
+        Gta2Net_LobbyInput(action);
+        return;
+    }
     if (!gOpen)
     {
         return;
@@ -226,6 +236,11 @@ void Gta2Native_OptionsInput(int action)
 // render/gles_renderer.cpp, after the game's frame: dw x dh drawable pixels.
 void Gta2Native_OptionsDraw(int dw, int dh)
 {
+    if (Gta2Net_LobbyActive && Gta2Net_LobbyActive())
+    {
+        Gta2Net_LobbyDraw(dw, dh);
+        return;
+    }
     if (!gOpen)
     {
         return;
