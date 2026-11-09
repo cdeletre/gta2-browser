@@ -586,6 +586,18 @@ Ce que le jeu écrit sur stdout/stderr (le `log.txt` du lanceur) :
   position du joueur, véhicule. Toutes les 5 s à l'époque, 60 s par défaut depuis le
   8 novembre (`GTA2_STATUS_SECONDS`).
 
+- **Cœurs de santé** (9 novembre, `GTA2_TEST=damage`, `scenario_native.cpp`) : le scénario
+  frappe le joueur par `Ped::TakeDamage` (10 points toutes les 3-4 s) et journalise la
+  santé ; la ligne d'état l'affiche aussi (`health N`).
+  - Docker sans écran : 100 → 90 → … → 10 → 0, mort, réapparition à 100 avec
+    50 ticks d'invulnérabilité (le coup suivant est ignoré), trois fois de suite.
+  - TSP S, vrai rendu, captures toutes les 2 s : les cœurs affichés suivent la santé
+    (5 cœurs à 100 et 90, puis un demi-cœur de moins tous les 10 points ; une vie de
+    moins à la mort). Aucun écart avec l'original : à pied, il faut plus de 10 points de
+    dégâts pour perdre le premier demi-cœur (un coup de poing en fait 2, une balle 10,
+    une balle de pistolet 20) ; le gilet absorbe les balles ; en voiture, c'est la
+    voiture qui prend les coups.
+
 ## Soaks (jalon 2, observé)
 
 `GTA2_SOAK=1` (`port/native/platform/soak_native.cpp`) joue au hasard avec les touches par

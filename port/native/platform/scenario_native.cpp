@@ -15,6 +15,11 @@
 //                          phones that fast, so the phone scenario waits for the soak's
 //                          mission flag to clear (see docs/native-status.md)
 //   GTA2_TEST=watch        only the log below (after loading a save, for example)
+//   GTA2_TEST=damage       hurts the player through the game's Ped::TakeDamage, as a hit
+//                          does, and logs the health and the HUD's half hearts (the sum
+//                          Hud_Health_4::DrawHealth_5D0260 draws) around each hit
+//   GTA2_TEST_DAMAGE=n     points per hit (default 10, a bullet; a punch is 2)
+//   GTA2_TEST_DAMAGE_EVERY=s  seconds between hits (default 5); the first after the delay
 //   GTA2_TEST_UNLOCK=1     unlocks the three areas for the current player in the menus (as the
 //                          UKGAMER name cheat; gta2_dev_unlock_areas), so GTA2_MENU_KEYS
 //                          can start area 2 or 3 with a fresh profile; works with any test
@@ -51,7 +56,8 @@ enum Test
     kNone,
     kSave,
     kPhone,
-    kWatch
+    kWatch,
+    kDamage
 };
 Test gTest = kNone;
 int gPhone = 0;
@@ -70,6 +76,12 @@ int ToBlocks(const Fix16& f)
 Player* ThePlayer()
 {
     return gGame_0x40_67E008 ? gGame_0x40_67E008->field_38_orf1 : nullptr;
+}
+
+// The half hearts the HUD draws for this health (Hud_Health_4::DrawHealth_5D0260).
+int HalfHearts(int health)
+{
+    return health == 100 ? 10 : health / 10 + 1;
 }
 
 bool SaveZone(int* x, int* y, int* z)
@@ -249,7 +261,11 @@ extern "C" void Gta2Native_ScenarioInit()
     {
         return;
     }
-    gTest = !strcmp(test, "save") ? kSave : !strcmp(test, "phone") ? kPhone : !strcmp(test, "watch") ? kWatch : kNone;
+    gTest = !strcmp(test, "save")    ? kSave
+        : !strcmp(test, "phone")     ? kPhone
+        : !strcmp(test, "watch")     ? kWatch
+        : !strcmp(test, "damage")    ? kDamage
+                                     : kNone;
     if (const char* delay = getenv("GTA2_TEST_DELAY"))
     {
         gDelay = atof(delay) * 1000.0;
@@ -420,6 +436,39 @@ extern "C" void Gta2Native_ScenarioStep(double now)
         {
             AnswerPhone();
             gStep = 1;
+        }
+    }
+    else if (gTest == kDamage)
+    {
+        static const int points = getenv("GTA2_TEST_DAMAGE") ? atoi(getenv("GTA2_TEST_DAMAGE")) : 10;
+        static const double every = (getenv("GTA2_TEST_DAMAGE_EVERY") ? atof(getenv("GTA2_TEST_DAMAGE_EVERY")) : 5.0) * 1000.0;
+        static double nextHit = -1;
+        static int lastHealth = -1;
+        Ped* ped = player->GetPlayerPed_41D020();
+        if (!ped)
+        {
+            return;
+        }
+        gStep = gStep ? gStep : 1;
+        const int health = ped->get_health_433B70();
+        if (health != lastHealth)
+        {
+            // Every change, the test's hits and anything else (a respawn, a power-up).
+            fprintf(stderr, "gta2: test: %.1f s, health %d -> %d, %d half hearts, invulnerability %u, armour %u\n",
+                    inGame / 1000.0, lastHealth, health, HalfHearts(health), ped->field_208_invulnerability,
+                    player->field_6F4_power_up_timers[3]);
+            lastHealth = health;
+        }
+        if (nextHit < 0)
+        {
+            nextHit = gPlayerSince + gDelay;
+        }
+        if (now >= nextHit)
+        {
+            nextHit = now + every;
+            fprintf(stderr, "gta2: test: hit for %d (health %d, invulnerability %u)\n", points, health,
+                    ped->field_208_invulnerability);
+            ped->TakeDamage(static_cast<s16>(points));
         }
     }
 

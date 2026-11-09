@@ -8,6 +8,7 @@
 #include "Frontend.hpp"
 #include "Game_0x40.hpp"
 #include "GameSession_578.hpp"
+#include "Ped.hpp"
 #include "Player.hpp"
 
 extern "C" const s32* gta2_dev_state();
@@ -51,9 +52,12 @@ extern "C" void Gta2Native_StatusLine(char* out, int size)
         snprintf(out, size, "map \"%s\", tick %d, no player", map, ticks);
         return;
     }
+    Player* player = gGame_0x40_67E008 ? gGame_0x40_67E008->field_38_orf1 : nullptr;
+    Ped* ped = player ? player->GetPlayerPed_41D020() : nullptr;
     // Fix16: 14 fractional bits (1 block = 16384).
-    snprintf(out, size, "map \"%s\", tick %d, %d peds, %d cars, player at (%.2f, %.2f, %.2f)%s", map, ticks, peds, cars,
-             s[2] / 16384.0, s[3] / 16384.0, s[4] / 16384.0, s[1] ? " in a car" : "");
+    snprintf(out, size, "map \"%s\", tick %d, %d peds, %d cars, player at (%.2f, %.2f, %.2f)%s, health %d", map, ticks,
+             peds, cars, s[2] / 16384.0, s[3] / 16384.0, s[4] / 16384.0, s[1] ? " in a car" : "",
+             ped ? ped->get_health_433B70() : -1);
 }
 
 // True while the player is in the city (not in the front end's menus): the controller's
