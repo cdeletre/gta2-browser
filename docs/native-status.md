@@ -818,8 +818,39 @@ entre ensuite en partie réseau par `-N`.
   hôte navigateur) : toutes passent, aussi sous ASan + UBSan. Elles ont trouvé une référence
   pendante (`for (… : Crews().Items())` sur un temporaire) dans `ApplySide`.
 
-Reste : A1 (client WebSocket `ws://`, connexion au serveur, déroulé avant le jeu dans
-`main.cpp`), A2 (natif contre natif dans Docker, `-ffp-contract=off`), A3 (natif contre
+**A1, client WebSocket (fait, 9 novembre)** : `ws_transport.*`, le `ServerTransport` de
+`web/net.js` (RFC 6455 : trames texte et binaires, fragments, ping/pong, fermeture ; socket
+non bloquant ; `ws://` seulement), avec la connexion d'un serveur à mot de passe
+(`POST /login` ou code d'invitation, pour le cookie `gta2_session` que le relais demande).
+`net_main.cpp` déroule le lobby avant `WinMain` (puis `-N`) et lit le transport à chaque
+tour de boucle ; réglé pour l'instant par l'environnement (`GTA2_NET_SERVER`, `_PASSWORD`,
+`_ROOM`, `_NAME`, `_HOST`, `_PLAYERS`, `_MODE`, `_DISTRICT`, `_CREW`, `_SIDE`…, en-tête du
+fichier). La ligne d'état de `gta2-mp` ajoute le dernier contrôle et les messages.
+
+**A2, natif contre natif (observé, 9 novembre)** : le serveur dans son propre conteneur
+(`docker build -t gta2-server server/`, puis `docker run -d --name gta2-relay -p 8790:8790
+-e GTA2_PASSWORD=test -e DATA_DIR=/tmp/db gta2-server`) ; deux `gta2-mp` sans écran dans
+`gta2-pm`, par `ws://host.docker.internal:8790`, avec le soak des deux côtés
+(`GTA2_SOAK=1 GTA2_SOAK_AIDS=0`, graines différentes) :
+
+| Mode | Durée | Ticks | Contrôles | Divergence |
+|---|---|---|---|---|
+| Free roam | 300 s | 8 175 | identiques jusqu'à 8 100 | aucune |
+| Free-for-all | 120 s | 2 720 | jusqu'à 2 700 | aucune |
+| Gang Wars (équipes Reds/Loonies, Blues/Yakuza) | 120 s | 2 720 | jusqu'à 2 700 | aucune |
+| Free roam sous ASan + UBSan | 60 s | 820 | jusqu'à 810 | aucune ; 0 erreur ASan, 0 rapport UBSan dans `net/` |
+
+30,0 à 30,3 ticks/s, ping par le relais 11 ms, délai d'entrée 1 tick.
+- **Faux départ :** avec le soak tel quel, les jeux divergeaient au tick 90. Cause : le soak
+  donne une arme et fait apparaître des voitures dans le jeu local par les aides de test
+  (`gta2_dev_give_weapon`, `gta2_dev_spawn_car`), donc chez un seul joueur.
+  `GTA2_SOAK_AIDS=0` le limite aux touches.
+- **`-ffp-contract=off` ajouté aux drapeaux obligatoires** (CMake et `build_native.sh`),
+  solo compris : sans lui, clang fusionne multiplications et additions en FMA sur aarch64,
+  ce que wasm (et le x87 de l'original) ne fait pas ; nécessaire pour jouer avec un
+  navigateur (A3). Les parties ci-dessus sont avec ce drapeau.
+
+Reste : A3 (natif contre
 navigateur), A4 (lobby à la manette, noms prédéfinis ; clavier à l'écran plus tard), A5
 (consoles), A6 (`wss://` si le serveur public est en HTTPS), A7 (scores, chat, points de
 passage), puis D1-D4 (transport TCP local, découverte UDP, consoles, paquet).

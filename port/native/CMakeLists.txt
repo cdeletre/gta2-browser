@@ -34,6 +34,7 @@ set(GTA2_REQUIRED_FLAGS
   -fsigned-char          # char is unsigned by default on aarch64
   -fwrapv                # signed overflow wraps, as the MSVC code assumed
   -fno-strict-aliasing   # decompiled code type-puns a lot
+  -ffp-contract=off      # no fused multiply-add: the same float results as wasm (co-op lockstep) and x87
 )
 set(GTA2_COMMON_FLAGS
   ${GTA2_REQUIRED_FLAGS}
@@ -186,11 +187,12 @@ if(GTA2_MULTIPLAYER)
   add_library(gta2_net STATIC
     "${NATIVE}/net/json.cpp"
     "${NATIVE}/net/lobby.cpp"
-    "${NATIVE}/net/memory_transport.cpp")
+    "${NATIVE}/net/memory_transport.cpp"
+    "${NATIVE}/net/ws_transport.cpp")
   target_compile_options(gta2_net PRIVATE ${GTA2_COMMON_FLAGS} ${GTA2_OPT} ${GTA2_SAN})
   target_compile_definitions(gta2_net PRIVATE ${GTA2_DEFINES} GTA2_NATIVE_NET=1)
 
-  gta2_add_game(gta2-mp "${NATIVE}/net/coop_native.cpp")
+  gta2_add_game(gta2-mp "${NATIVE}/net/coop_native.cpp" "${NATIVE}/net/net_main.cpp")
   target_compile_definitions(gta2-mp PRIVATE GTA2_NATIVE_NET=1)
   target_link_libraries(gta2-mp PRIVATE gta2_net)
 

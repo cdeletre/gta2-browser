@@ -66,6 +66,11 @@ extern "C" void Gta2Native_AudioPump();
 extern "C" void Gta2Native_AudioShutdown();
 extern "C" int gta2_port_set_view_width(int width);   // port/render/vid_web.cpp
 extern "C" int gta2_port_set_view_height(int height); // port/render/vid_web.cpp (native only)
+#if defined(GTA2_NATIVE_NET)
+extern "C" int Gta2Net_PreGame(char* cmd, int size); // net/net_main.cpp (gta2-mp only)
+extern "C" void Gta2Net_Frame(double nowMs);
+extern "C" void Gta2Net_Status(char* out, int size);
+#endif
 #if !defined(GTA2_NATIVE_HEADLESS)
 extern "C" bool Gta2Native_WindowInit(); // platform/window_sdl.cpp
 extern "C" void Gta2Native_SetConfDir(const char* dir); // platform/input_sdl.cpp
@@ -226,6 +231,14 @@ int main(int argc, char** argv)
         args += (i > 1 ? " " : "") + std::string(argv[i]);
     }
     strncpy(cmd, args.c_str(), sizeof(cmd) - 1);
+#if defined(GTA2_NATIVE_NET)
+    // gta2-mp: the lobby first; the game then starts as a network game (-N), as in the browser
+    if (const int lobby = Gta2Net_PreGame(cmd, sizeof(cmd)))
+    {
+        Gta2Native_AudioShutdown();
+        return lobby;
+    }
+#endif
 
     const int r = WinMain_5E53F0(reinterpret_cast<HINSTANCE>(0x400000), nullptr, cmd, SW_SHOWNORMAL);
     if (r != kRunning)
@@ -325,6 +338,9 @@ int main(int argc, char** argv)
             Gta2Native_SoakStep(now);
         }
         Gta2Native_ScenarioStep(now);
+#if defined(GTA2_NATIVE_NET)
+        Gta2Net_Frame(now);
+#endif
 
         const double tAudio = emscripten_get_now();
         Gta2Native_AudioPump(); // streams decoded ahead of the audio callback
@@ -359,8 +375,13 @@ int main(int argc, char** argv)
             int peds = 0;
             int cars = 0;
             const int ticks = Gta2Native_TickCount(&peds, &cars);
-            char status[256];
+            char status[384];
             Gta2Native_StatusLine(status, sizeof(status));
+#if defined(GTA2_NATIVE_NET)
+            char net[128];
+            Gta2Net_Status(net, sizeof(net));
+            strncat(status, net, sizeof(status) - strlen(status) - 1);
+#endif
             int textures = 0, pages = 0, textureMb = 0;
             Gta2Native_TextureStats(&textures, &pages, &textureMb);
             fprintf(stderr, "gta2: %.0f s, %.1f ticks/s, %u frames, %d textures, %d atlas pages, %d MB, %s\n", now / 1000.0,

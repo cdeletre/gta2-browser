@@ -8,6 +8,8 @@
 // presses as SDL keyboard or controller events instead, through input_sdl.cpp, which
 // tests the native input mapping end to end. The test aids used (gta2_dev_give_weapon, gta2_dev_spawn_car)
 // are the web developer probe's, and use the game's own functions.
+// GTA2_SOAK_AIDS=0 leaves them out (keys only): they change this player's game alone, so a
+// co-op match (gta2-mp, lockstep) would drift apart at once.
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -227,6 +229,12 @@ extern "C" void Gta2Native_SoakStep(double now)
     if (!s[0])
     {
         return; // no player yet (front end, loading)
+    }
+    static const bool aids = !getenv("GTA2_SOAK_AIDS") || atoi(getenv("GTA2_SOAK_AIDS")) != 0;
+    if (!aids)
+    {
+        gArmed = true;
+        gNextCar = 1e300; // never
     }
     if (!gArmed)
     {
