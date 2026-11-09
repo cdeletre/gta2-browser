@@ -6,6 +6,8 @@
 //   GTA2_TEST=phone        answers a mission phone, as touching it does
 //                          (Char_B4::PhoneTouched_5535B0 -> AnswerPhone_5129F0), then
 //                          lets the soak (GTA2_SOAK=1) play while the mission runs
+//   GTA2_TEST_WEAPONS=k:a,...  the save scenario also gives these weapons (kind:ammo,
+//                          gta2_dev_give_weapon) before paying, so a resume shows them back
 //   GTA2_TEST_PHONE=n      which of the district's mission phones (default 0)
 //   GTA2_TEST_DELAY=s      seconds in the city before the save or the phone (default 3).
 //                          Answering a phone while another mission is starting (the
@@ -36,12 +38,14 @@
 
 #include "Game_0x40.hpp"
 #include "Player.hpp"
+#include "Weapon_30.hpp"
 #include "ScriptManager_C1EA8.hpp"
 #include "Object_2C_Pool.hpp"
 #include "miss2_0x11C.hpp"
 
 extern "C" const s32* gta2_dev_state();
 extern "C" int gta2_dev_add_cash(int cash);
+extern "C" int gta2_dev_give_weapon(int kind, int ammo);
 extern "C" int gta2_dev_teleport(int x, int y);
 extern "C" int gta2_dev_unlock_areas();
 extern "C" void gta2_port_key(int scancode, int vk, int down, int ch);
@@ -337,6 +341,18 @@ extern "C" void Gta2Native_ScenarioStep(double now)
         if (gStep == 0 && inGame > gDelay)
         {
             fprintf(stderr, "gta2: test: score %d after adding 60000\n", gta2_dev_add_cash(60000));
+            if (const char* list = getenv("GTA2_TEST_WEAPONS"))
+            {
+                for (const char* p = list; *p;)
+                {
+                    const int kind = atoi(p);
+                    const char* colon = strchr(p, ':');
+                    const int ammo = colon ? atoi(colon + 1) : 10;
+                    fprintf(stderr, "gta2: test: weapon %d with %d ammo given (%d)\n", kind, ammo, gta2_dev_give_weapon(kind, ammo));
+                    const char* comma = strchr(p, ',');
+                    p = comma ? comma + 1 : p + strlen(p);
+                }
+            }
             if (!SaveZone(&zoneX, &zoneY, &zoneZ))
             {
                 fprintf(stderr, "gta2: test: no save zone in this district's script\n");
@@ -476,8 +492,24 @@ extern "C" void Gta2Native_ScenarioStep(double now)
     {
         gNextLog = now + 1000;
         ScriptManager_C1EA8* sm = gScriptManager_6F8060;
-        fprintf(stderr, "gta2: test: %.0f s in game, score %d, on a mission %d, loaded from a save %d\n",
+        // The weapons with ammo (kind:ammo), the current one marked with *.
+        char weapons[160] = "";
+        size_t used = 0;
+        for (int k = 0; k < 15 && used < sizeof(weapons) - 16; ++k)
+        {
+            const int ammo = player->field_718_weapons[k] ? player->field_718_weapons[k]->get_ammo_4A4FB0() : 0;
+            if (ammo)
+            {
+                used += snprintf(weapons + used, sizeof(weapons) - used, " %d:%d%s", k, ammo,
+                                 player->field_788_curr_weapon_idx == k ? "*" : "");
+            }
+        }
+        Ped* ped = player->GetPlayerPed_41D020();
+        fprintf(stderr,
+                "gta2: test: %.0f s in game, score %d, on a mission %d, loaded from a save %d, lives %d, health %d, "
+                "weapons%s\n",
                 inGame / 1000.0, player->GetScore_421980(), sm && sm->IsOnMission_4C7350() ? 1 : 0,
-                sm ? sm->get_field_C1E2C_475A20() : 0);
+                sm ? sm->get_field_C1E2C_475A20() : 0, player->get_lives_4766C0(), ped ? ped->get_health_433B70() : -1,
+                used ? weapons : " none");
     }
 }

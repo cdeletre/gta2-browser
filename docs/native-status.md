@@ -378,6 +378,7 @@ cas provoqué ci-dessous** (téléphone 11 décroché à 3 s).
 |---|---|---|
 | Sauvegarde à l'église, Downtown, Residential, Industrial | 3 | payée (−50 000 points), `plyslot0.svg` écrit (3 232 octets à Downtown) |
 | Reprise de ces sauvegardes (« Resume saved status ») | 3 | même district, 10 000 points, `bLoadedFromSave` levé |
+| Reprise avec armes (9 novembre, `GTA2_TEST_WEAPONS=0:50,1:80,4:20`, Downtown, build debug) | 1 + 1 | `plyslot0.svg` garde 10 000 points et les munitions ; la reprise rend 10 000 points, les trois armes avec leurs munitions, l'arme en main, 5 vies, santé 100 |
 | Téléphones de mission de Downtown (18), décrochés à 20 s, puis soak 100 s | 18 | 7 lancent une mission qui tourne jusqu'à la fin (96 s) ; les autres ne lèvent pas le drapeau de mission (cause pas vérifiée : sans doute pas encore disponibles en début de partie) |
 | Les mêmes, décrochés à 3 s | 18 | 17 sans erreur, 1 plantage provoqué (ci-dessous) |
 | Residential et Industrial : soak 300 s, téléphones 0 à 4 | 2 + 10 | 4 missions lancées (jusqu'à 95 s) |
