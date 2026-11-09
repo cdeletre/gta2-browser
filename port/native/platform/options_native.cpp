@@ -48,6 +48,13 @@ extern "C" void Gta2Native_SetFaceButtons(int mode); // input_sdl.cpp, also writ
 extern "C" bool Gta2Net_LobbyActive() __attribute__((weak));
 extern "C" void Gta2Net_LobbyInput(int action) __attribute__((weak));
 extern "C" void Gta2Net_LobbyDraw(int dw, int dh) __attribute__((weak));
+// gta2-mp in a match (net/hud_net.cpp): chat lines and the scoreboard, under this screen; and
+// two settings, shown here only in gta2-mp.
+extern "C" void Gta2Net_HudDraw(int dw, int dh) __attribute__((weak));
+extern "C" bool Gta2Net_ShowChat() __attribute__((weak));
+extern "C" void Gta2Net_SetShowChat(bool on) __attribute__((weak));
+extern "C" bool Gta2Net_ShowWaypoints() __attribute__((weak));
+extern "C" void Gta2Net_SetShowWaypoints(bool on) __attribute__((weak));
 
 namespace
 {
@@ -63,11 +70,32 @@ enum Line
     kExploding,
     kLighting,
     kFaceButtons,
+    kChat,      // gta2-mp only
+    kWaypoints, // gta2-mp only
     kBack,
     kLineCount
 };
-const char* const kLabels[kLineCount] = {"Music and radio", "Sound effects", "Text speed", "Exploding scores",
-                                         "Lighting",        "Face buttons",  "Back"};
+const char* const kLabels[kLineCount] = {"Music and radio", "Sound effects", "Text speed",    "Exploding scores",
+                                         "Lighting",        "Face buttons",  "Chat messages", "Waypoints",
+                                         "Back"};
+
+// The lines this binary shows: the multiplayer ones in gta2-mp only.
+bool Shown(int line)
+{
+    if (line == kChat || line == kWaypoints)
+    {
+        return Gta2Net_ShowChat != nullptr;
+    }
+    return true;
+}
+int Step(int line, int dir)
+{
+    do
+    {
+        line = (line + dir + kLineCount) % kLineCount;
+    } while (!Shown(line));
+    return line;
+}
 
 bool gOpen = false;
 int gLine = 0;
@@ -112,6 +140,8 @@ void Value(int line, char* out, size_t size)
         case kExploding: snprintf(out, size, "%s", bExplodingScoresOff_67D4FB ? "Off" : "On"); break;
         case kLighting: snprintf(out, size, "%s", Lighting() ? "On" : "Off"); break;
         case kFaceButtons: snprintf(out, size, "%s", kFaces[std::clamp(Gta2Native_FaceButtons(), 0, 2)]); break;
+        case kChat: snprintf(out, size, "%s", Gta2Net_ShowChat && Gta2Net_ShowChat() ? "On" : "Off"); break;
+        case kWaypoints: snprintf(out, size, "%s", Gta2Net_ShowWaypoints && Gta2Net_ShowWaypoints() ? "On" : "Off"); break;
         default: out[0] = 0; break;
     }
 }
@@ -154,6 +184,14 @@ void Change(int line, int dir)
             break;
         case kFaceButtons:
             Gta2Native_SetFaceButtons((Gta2Native_FaceButtons() + (dir > 0 ? 1 : 2)) % 3);
+            break;
+        case kChat:
+            if (Gta2Net_SetShowChat)
+                Gta2Net_SetShowChat(!Gta2Net_ShowChat());
+            break;
+        case kWaypoints:
+            if (Gta2Net_SetShowWaypoints)
+                Gta2Net_SetShowWaypoints(!Gta2Net_ShowWaypoints());
             break;
         default:
             return;
@@ -214,8 +252,8 @@ void Gta2Native_OptionsInput(int action)
     }
     switch (action)
     {
-        case 0: gLine = (gLine + kLineCount - 1) % kLineCount; break;
-        case 1: gLine = (gLine + 1) % kLineCount; break;
+        case 0: gLine = Step(gLine, -1); break;
+        case 1: gLine = Step(gLine, 1); break;
         case 2: Change(gLine, -1); break;
         case 3: Change(gLine, 1); break;
         case 4:
@@ -241,6 +279,10 @@ void Gta2Native_OptionsDraw(int dw, int dh)
         Gta2Net_LobbyDraw(dw, dh);
         return;
     }
+    if (Gta2Net_HudDraw)
+    {
+        Gta2Net_HudDraw(dw, dh); // in a match: chat lines, the scoreboard
+    }
     if (!gOpen)
     {
         return;
@@ -254,12 +296,21 @@ void Gta2Native_OptionsDraw(int dw, int dh)
 
     const float width = kCols * cell;
     const float x0 = (dw - width) / 2;
-    const float height = (kLineCount + 4) * lineH;
+    int shownLines = 0;
+    for (int i = 0; i < kLineCount; ++i)
+    {
+        shownLines += Shown(i) ? 1 : 0;
+    }
+    const float height = (shownLines + 4) * lineH;
     float y = (dh - height) / 2;
     Gta2Native_OverlayText(x0, y, px, kWhite, "Options");
     y += 2 * lineH;
-    for (int i = 0; i < kLineCount; ++i, y += lineH)
+    for (int i = 0; i < kLineCount; ++i)
     {
+        if (!Shown(i))
+        {
+            continue;
+        }
         const bool sel = i == gLine;
         if (sel)
         {
@@ -276,6 +327,7 @@ void Gta2Native_OptionsDraw(int dw, int dh)
             const float vx = x0 + width - static_cast<float>(strlen(shown)) * cell;
             Gta2Native_OverlayText(vx, y, px, colour, shown);
         }
+        y += lineH;
     }
     y += lineH;
     Gta2Native_OverlayText(x0, y, px, kGrey, "Up/down: choose   Left/right: change");

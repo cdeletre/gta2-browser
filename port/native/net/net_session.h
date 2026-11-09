@@ -23,6 +23,9 @@ struct NetConfig
     std::vector<std::string> rooms;  // the rooms to pick from
     std::string room;                // the last one used
     std::vector<std::string> crews;  // Gang Wars crew names to pick from
+    std::string chat[4];             // the quick messages: Select + up, down, left, right
+    bool showChat = true;            // other players' chat messages on screen (Options)
+    bool showWaypoints = true;       // other players' waypoints on screen (Options)
     std::string path;                // conf/net.ini
     // the file's own server settings, written back as they were (GTA2_NET_* only override)
     std::string fileUrl, filePassword, fileInvite;
@@ -33,6 +36,7 @@ NetConfig LoadNetConfig(const std::string& confDir);
 // Remembers the name and the room picked last.
 void SaveNetConfig(const NetConfig& config);
 
+extern NetConfig* gConfig; // the settings in use (set before the lobby)
 extern std::unique_ptr<Transport> gTransport;
 extern std::unique_ptr<Lobby> gLobby;
 

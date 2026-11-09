@@ -192,7 +192,7 @@ if(GTA2_MULTIPLAYER)
   target_compile_options(gta2_net PRIVATE ${GTA2_COMMON_FLAGS} ${GTA2_OPT} ${GTA2_SAN})
   target_compile_definitions(gta2_net PRIVATE ${GTA2_DEFINES} GTA2_NATIVE_NET=1)
 
-  gta2_add_game(gta2-mp "${NATIVE}/net/coop_native.cpp" "${NATIVE}/net/net_main.cpp" "${NATIVE}/net/lobby_screen.cpp")
+  gta2_add_game(gta2-mp "${NATIVE}/net/coop_native.cpp" "${NATIVE}/net/net_main.cpp" "${NATIVE}/net/lobby_screen.cpp" "${NATIVE}/net/hud_net.cpp")
   target_compile_definitions(gta2-mp PRIVATE GTA2_NATIVE_NET=1)
   target_link_libraries(gta2-mp PRIVATE gta2_net)
 

@@ -935,6 +935,22 @@ piéton dans une voiture meurt toujours (patch partagé 0027, `COOP_VERSION` 3) 
 les coups restent bloqués par le tir ami. Reproduit et vérifié avec `GTA2_TEST=boom` sous ASan
 (le joueur meurt puis réapparaît, plus de plantage).
 
+**A7, en partie (en cours, 9 novembre)** : `net/hud_net.cpp`, par-dessus le jeu (crochets
+faibles de `options_native.cpp`). En match, Select fait trois choses (`input_sdl.cpp`, seulement
+dans `gta2-mp` et en partie réseau ; le binaire solo garde Select tel quel) : un appui court
+(relâché en moins de 0,3 s, sans croix) donne son action liée (la radio) au relâchement ;
+maintenu, il affiche le tableau des scores (colonnes et ordre du navigateur : joueur, kills,
+morts, points ; Free-for-all par kills, Free roam par points, Gang Wars par équipe) avec en
+légende les quatre messages ; avec la croix, il envoie un message rapide (`conf/net.ini`
+`chat_up/down/left/right`, par défaut « Follow me! », « Wait for me! », « Help! »,
+« Nice one! »), et la croix ne va pas au jeu tant que Select est tenu. Tab au clavier : le
+tableau. Les messages reçus (consoles et texte libre du navigateur) : les quatre derniers en
+bas à gauche, 9 s, le nom dans la couleur du joueur. Options (gta2-mp seulement) : « Chat
+messages » et « Waypoints » On/Off (`show_chat`, `show_waypoints` dans `net.ini`). Fin de
+match : le classement final jusqu'à A ou 10 s, puis le lobby. Vu dans le conteneur
+(`GTA2_NET_TEST_HUD=1`, captures) : tableau, légende, messages envoyés et reçus par l'autre
+joueur. Reste : le geste à la manette sur console, les points de passage.
+
 Reste : A5 (consoles), A6 (`wss://` si le serveur public est en HTTPS), A7 (scores, chat,
 points de passage), puis D1-D4 (transport TCP local, découverte UDP, consoles, paquet).
 

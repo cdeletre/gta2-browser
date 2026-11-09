@@ -69,6 +69,9 @@ extern "C" int gta2_port_set_view_height(int height); // port/render/vid_web.cpp
 #if defined(GTA2_NATIVE_NET)
 extern "C" int Gta2Net_PreGame(char* cmd, int size, const char* confDir); // net/net_main.cpp (gta2-mp only)
 extern "C" void Gta2Net_AfterMatch(char** argv);
+#if !defined(GTA2_NATIVE_HEADLESS)
+extern "C" void Gta2Net_MatchOverScreen(); // net/hud_net.cpp
+#endif
 extern "C" void Gta2Net_Frame(double nowMs);
 extern "C" void Gta2Net_Status(char* out, int size);
 #endif
@@ -410,6 +413,12 @@ int main(int argc, char** argv)
             SleepMs(1); // the slice ended on its time budget: nothing to show yet
         }
     }
+#if defined(GTA2_NATIVE_NET) && !defined(GTA2_NATIVE_HEADLESS)
+    if (gameEnded)
+    {
+        Gta2Net_MatchOverScreen(); // the final standings before the lobby
+    }
+#endif
     Gta2Native_RegistrySave();
     Gta2Native_AudioShutdown();
 #if !defined(GTA2_NATIVE_HEADLESS)

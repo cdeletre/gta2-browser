@@ -50,6 +50,11 @@ extern "C" unsigned int Gta2Native_RegistryDword(const char* path, const char* n
 extern "C" bool Gta2Native_OptionsOpen();             // options_native.cpp
 extern "C" void Gta2Native_OptionsInput(int action);  // options_native.cpp
 extern "C" void gta2_js_open_options();              // options_native.cpp
+// gta2-mp (net/net_main.cpp, net/hud_net.cpp): Select's gestures in a match. Weak: the solo
+// binary has none, and Select keeps its plain binding there.
+extern "C" bool Gta2Net_InMatch() __attribute__((weak));
+extern "C" void Gta2Net_SelectHeld(bool held) __attribute__((weak));
+extern "C" void Gta2Net_QuickChat(int dir) __attribute__((weak));
 
 namespace
 {
@@ -198,6 +203,7 @@ bool gNintendoLabels = true;
 int gFaceMode = 0; // face_buttons: 0 auto, 1 nintendo, 2 xbox
 bool gFromLauncher = false; // SDL_GAMECONTROLLERCONFIG set (face_buttons = auto)
 bool gOptionsShown = false; // the Options screen had the input at the last frame
+bool gTabHeld = false;      // keyboard Tab in a match (the scoreboard)
 bool gOptionsHeld[kInputCount] = {}; // inputs down at the last frame, for the screen's presses
 bool gLogInput = false; // GTA2_LOG_INPUT
 bool gStickAsDpad = true;
@@ -731,6 +737,11 @@ void Gta2Native_InputEvent(const SDL_Event& e)
     {
         case SDL_KEYDOWN:
         case SDL_KEYUP:
+            if (e.key.keysym.scancode == SDL_SCANCODE_TAB && Gta2Net_InMatch && Gta2Net_InMatch())
+            {
+                gTabHeld = e.type == SDL_KEYDOWN; // the scoreboard, as in the browser
+                break;
+            }
             if (const Key* k = KeyFor(e.key.keysym.scancode))
             {
                 const bool down = e.type == SDL_KEYDOWN;
@@ -878,6 +889,56 @@ void Gta2Native_InputFrame()
             fprintf(stderr, "gta2: input: layout %s\n", playing ? "city" : "menu");
         }
     }
+    // In a match (gta2-mp), Select is three gestures: a tap (released within 0.3 s, no d-pad)
+    // does what Select is bound to (the radio), on its release; held, it shows the scoreboard;
+    // with the d-pad, it sends one of four quick chat messages. While it is down the d-pad
+    // does not reach the game.
+    bool selectTap = false;
+    const bool inMatch = playing && Gta2Net_InMatch && Gta2Net_InMatch();
+    static double selectSince = -1;
+    static bool selectCombo = false;
+    static double tapUntil = 0;
+    const double now = SDL_GetTicks();
+    if (inMatch)
+    {
+        const bool down = gPressed[kSelect] && !gBlocked[kSelect];
+        if (down && selectSince < 0)
+        {
+            selectSince = now;
+            selectCombo = false;
+        }
+        if (down)
+        {
+            static const int kDirs[4][2] = {{kPadUp, kStickUp}, {kPadDown, kStickDown}, {kPadLeft, kStickLeft}, {kPadRight, kStickRight}};
+            for (int d = 0; d < 4; ++d)
+            {
+                for (int input : kDirs[d])
+                {
+                    if (gPressed[input] && !gBlocked[input])
+                    {
+                        Gta2Net_QuickChat(d);
+                        selectCombo = true;
+                        gBlocked[input] = true; // one message a press, and not to the game
+                    }
+                }
+            }
+        }
+        else if (selectSince >= 0)
+        {
+            if (!selectCombo && now - selectSince < 300)
+            {
+                tapUntil = now + 120; // the bound key, long enough for a game tick to see it
+            }
+            selectSince = -1;
+        }
+        selectTap = now < tapUntil;
+        Gta2Net_SelectHeld(gTabHeld || (down && !selectCombo && now - selectSince >= 300));
+    }
+    else if (Gta2Net_SelectHeld)
+    {
+        Gta2Net_SelectHeld(false);
+        selectSince = -1;
+    }
     std::set<Key> keys;
     for (int b = 0; b < kInputCount; ++b)
     {
@@ -885,12 +946,31 @@ void Gta2Native_InputFrame()
         {
             gBlocked[b] = false;
         }
+        if (inMatch && b == kSelect)
+        {
+            continue; // its binding goes in on the tap only (below)
+        }
+        if (inMatch && selectSince >= 0 && (b == kPadUp || b == kPadDown || b == kPadLeft || b == kPadRight ||
+                                            b == kStickUp || b == kStickDown || b == kStickLeft || b == kStickRight))
+        {
+            continue;
+        }
         if (gPressed[b] && !gBlocked[b])
         {
             Add(keys, b, playing ? kCity : kMenu);
         }
     }
+    if (selectTap)
+    {
+        Add(keys, kSelect, kCity);
+    }
     Apply(keys);
+}
+
+// gta2-mp's end-of-match screen: A is down (as the game's controls see it, any layout).
+bool Gta2Native_PadAPressed()
+{
+    return gPressed[kA];
 }
 
 } // extern "C"

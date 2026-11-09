@@ -36,6 +36,7 @@ namespace gta2net
 
 std::unique_ptr<Transport> gTransport;
 std::unique_ptr<Lobby> gLobby;
+NetConfig* gConfig = nullptr;
 
 namespace
 {
@@ -80,6 +81,8 @@ std::string JoinList(const std::vector<std::string>& v)
 const char* const kDefaultNames = "Ace, Rusty, Nina, Zed, Kasia, Moose, Lola, Duke";
 const char* const kDefaultRooms = "ROOM1, ROOM2, ROOM3, ROOM4, ROOM5, ROOM6";
 const char* const kDefaultCrews = "Reds, Blues, Greens";
+const char* const kDefaultChat[4] = {"Follow me!", "Wait for me!", "Help!", "Nice one!"};
+const char* const kChatKeys[4] = {"chat_up", "chat_down", "chat_left", "chat_right"};
 
 void Sleep10ms()
 {
@@ -139,7 +142,21 @@ NetConfig LoadNetConfig(const std::string& confDir)
                 room = value;
             else if (key == "crews")
                 crews = value;
+            else if (key == "show_chat")
+                c.showChat = value != "0" && value != "off" && value != "false";
+            else if (key == "show_waypoints")
+                c.showWaypoints = value != "0" && value != "off" && value != "false";
+            for (int i = 0; i < 4; ++i)
+            {
+                if (key == kChatKeys[i] && !value.empty())
+                    c.chat[i] = value.substr(0, 60);
+            }
         }
+    }
+    for (int i = 0; i < 4; ++i)
+    {
+        if (c.chat[i].empty())
+            c.chat[i] = kDefaultChat[i];
     }
     c.fileUrl = server;
     c.filePassword = password;
@@ -180,7 +197,15 @@ void SaveNetConfig(const NetConfig& c)
         << "name = " << c.name << "\n"
         << "rooms = " << JoinList(c.rooms) << "\n"
         << "room = " << c.room << "\n"
-        << "crews = " << JoinList(c.crews) << "\n";
+        << "crews = " << JoinList(c.crews) << "\n"
+        << "# in a match: Select + up, down, left, right sends one of these\n"
+        << "chat_up = " << c.chat[0] << "\n"
+        << "chat_down = " << c.chat[1] << "\n"
+        << "chat_left = " << c.chat[2] << "\n"
+        << "chat_right = " << c.chat[3] << "\n"
+        << "# show the other players' chat messages and waypoints (also in Options)\n"
+        << "show_chat = " << (c.showChat ? 1 : 0) << "\n"
+        << "show_waypoints = " << (c.showWaypoints ? 1 : 0) << "\n";
 }
 
 bool JoinRoom(const NetConfig& config, const std::string& name, const std::string& room, bool host, std::string* error)
@@ -373,7 +398,9 @@ using namespace gta2net;
 // Returns 0 once the match can start (cmd then has -N), or the exit code (1: the player quit).
 extern "C" int Gta2Net_PreGame(char* cmd, int size, const char* confDir)
 {
-    NetConfig config = LoadNetConfig(confDir);
+    static NetConfig config;
+    config = LoadNetConfig(confDir);
+    gConfig = &config;
     int r;
 #if defined(GTA2_NATIVE_HEADLESS)
     r = AutoLobby(config);
@@ -385,6 +412,12 @@ extern "C" int Gta2Net_PreGame(char* cmd, int size, const char* confDir)
     const size_t len = strlen(cmd);
     snprintf(cmd + len, static_cast<size_t>(size) - len, "%s-N", len ? " " : "");
     return 0;
+}
+
+// True while a match runs (input_sdl.cpp: Select's multiplayer gestures).
+extern "C" bool Gta2Net_InMatch()
+{
+    return gInMatch && gLobby != nullptr;
 }
 
 // Once per main-loop iteration.

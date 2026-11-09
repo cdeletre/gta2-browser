@@ -192,6 +192,7 @@ void SetupCoop(Lobby* lobby, const Json& match)
     };
     lobby->onChat = [](int slot, const std::string& text) {
         fprintf(stderr, "gta2: co-op: chat from %s: %s\n", PlayerName(slot).c_str(), text.c_str());
+        CoopChatLine(slot, text);
     };
     // GTA2_NET_SYNC_DUMP=tick: the live peds at that tick (as ?syncdump in the browser), logged once
     if (getenv("GTA2_NET_SYNC_DUMP"))
@@ -310,6 +311,24 @@ void WatchCoop(double nowMs)
         if (d[9])
             fprintf(stderr, "gta2: co-op: %sthe match ends here (a player quit, or the host left)\n", Stamp().c_str());
     }
+}
+
+const Json& CoopMatch()
+{
+    return gMatch;
+}
+
+int CoopMySlot()
+{
+    return gMySlot;
+}
+
+// hud_net.cpp shows chat lines; headless builds have no screen.
+void HudChat(int slot, const std::string& text) __attribute__((weak));
+void CoopChatLine(int slot, const std::string& text)
+{
+    if (HudChat)
+        HudChat(slot, text);
 }
 
 // The latest checksum this player shared and whether a drift was seen (status line, tests).
