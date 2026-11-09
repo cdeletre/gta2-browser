@@ -1,4 +1,4 @@
-From dfc8f9053117528926f0869d7fcc66196b8249f7 Mon Sep 17 00:00:00 2001
+From 820ded60af9b10a371b987d1b79e92a7559e8fea Mon Sep 17 00:00:00 2001
 From: GTA2 port <port@localhost>
 Date: Sat, 7 Nov 2026 20:20:06 -0500
 Subject: [PATCH 11/16] native: radio emitters keep the original's 0x1C-byte

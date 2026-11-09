@@ -1,4 +1,4 @@
-From 9b01cba4cae5de7a2f950c3ca13a1000a06addad Mon Sep 17 00:00:00 2001
+From e92b3b77de40ce02e992492aec9ea0b8ebc37799 Mon Sep 17 00:00:00 2001
 From: GTA2 port <port@localhost>
 Date: Sat, 7 Nov 2026 19:35:23 -0500
 Subject: [PATCH 03/16] native: script commands keep 4-byte pointer slots

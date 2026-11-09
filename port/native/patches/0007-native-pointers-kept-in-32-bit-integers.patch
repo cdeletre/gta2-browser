@@ -1,4 +1,4 @@
-From 8217f2ae5aa97a45f73ca147886e9238bfe1e47b Mon Sep 17 00:00:00 2001
+From 387927d536ba6b12d5d87471f5663ca55be95424 Mon Sep 17 00:00:00 2001
 From: GTA2 port <port@localhost>
 Date: Sat, 7 Nov 2026 20:00:57 -0500
 Subject: [PATCH 07/16] native: pointers kept in 32-bit integers

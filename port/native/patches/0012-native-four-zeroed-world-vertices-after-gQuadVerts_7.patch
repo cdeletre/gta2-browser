@@ -1,4 +1,4 @@
-From 669d6571ee0807f7d173f2c2689f0d36b130c981 Mon Sep 17 00:00:00 2001
+From 2e7733b67d2004a4994de89b567aebd4131188e6 Mon Sep 17 00:00:00 2001
 From: GTA2 port <port@localhost>
 Date: Sat, 7 Nov 2026 20:20:06 -0500
 Subject: [PATCH 12/16] native: four zeroed world vertices after

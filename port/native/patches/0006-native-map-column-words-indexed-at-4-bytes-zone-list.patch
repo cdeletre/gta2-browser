@@ -1,4 +1,4 @@
-From a7d5af6b606eca62bb7abd7361ed3779e3a70dfe Mon Sep 17 00:00:00 2001
+From 533028f785f800b43f0fdde23b945b3dc4abfcfa Mon Sep 17 00:00:00 2001
 From: GTA2 port <port@localhost>
 Date: Sat, 7 Nov 2026 20:00:57 -0500
 Subject: [PATCH 06/16] native: map column words indexed at 4 bytes; zone list

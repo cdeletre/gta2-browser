@@ -1,4 +1,4 @@
-From cf1030b507a9c22f4cb518be180737e5af540d1c Mon Sep 17 00:00:00 2001
+From e39c3d92754fd154566d9ba7911cabb3da2df742 Mon Sep 17 00:00:00 2001
 From: GTA2 port <port@localhost>
 Date: Sun, 8 Nov 2026 18:08:05 -0500
 Subject: [PATCH 16/16] native: the station count starts at 0 in each game

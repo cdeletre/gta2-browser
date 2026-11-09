@@ -1,4 +1,4 @@
-From f311c65d1d2744f4c3352848e76b7938ea96348a Mon Sep 17 00:00:00 2001
+From ce31de4e00ed2c6bffb21f4dade660e7b73a17a2 Mon Sep 17 00:00:00 2001
 From: cdeletre <cyril.deletre@gmail.com>
 Date: Sun, 8 Nov 2026 07:26:19 -0500
 Subject: [PATCH 15/16] native: tall view for screens taller than 4:3

@@ -1,4 +1,4 @@
-From a95775373618c83e108193cc3cb8960132e1d0bb Mon Sep 17 00:00:00 2001
+From 65ebe9e25a66d6b8d13ff3909f23731ad3b53378 Mon Sep 17 00:00:00 2001
 From: GTA2 port <port@localhost>
 Date: Sat, 7 Nov 2026 20:16:26 -0500
 Subject: [PATCH 09/16] native: Car_18_Cmd keeps its 4-byte thread slot

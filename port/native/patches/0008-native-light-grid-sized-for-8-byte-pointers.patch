@@ -1,4 +1,4 @@
-From 5c94baa0c58c9277e9144098d91c17fc3602c57a Mon Sep 17 00:00:00 2001
+From e1461be6d6519f325747090620af91b99d2489d6 Mon Sep 17 00:00:00 2001
 From: GTA2 port <port@localhost>
 Date: Sat, 7 Nov 2026 20:00:57 -0500
 Subject: [PATCH 08/16] native: light grid sized for 8-byte pointers

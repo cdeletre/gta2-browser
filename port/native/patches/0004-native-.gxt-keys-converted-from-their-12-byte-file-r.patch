@@ -1,4 +1,4 @@
-From b01b50235a4a20b8ff338d52ab04b6fd33394284 Mon Sep 17 00:00:00 2001
+From 64378e524e27718a50bbead0d46e09a1de5cbb88 Mon Sep 17 00:00:00 2001
 From: GTA2 port <port@localhost>
 Date: Sat, 7 Nov 2026 20:00:56 -0500
 Subject: [PATCH 04/16] native: .gxt keys converted from their 12-byte file

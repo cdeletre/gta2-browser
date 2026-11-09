@@ -1,4 +1,4 @@
-From 60a842056d3218ed1b4edc39aa4792e8921a1e07 Mon Sep 17 00:00:00 2001
+From b1862b85c620da5630f787037ad410ab99c3bdc4 Mon Sep 17 00:00:00 2001
 From: GTA2 port <port@localhost>
 Date: Sat, 7 Nov 2026 20:00:56 -0500
 Subject: [PATCH 05/16] native: style sprite index and sprite deltas sized for
