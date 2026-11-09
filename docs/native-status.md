@@ -1,8 +1,77 @@
 # Port natif Linux aarch64 : statut
 
-Mis à jour le 8 novembre 2026. **Jalons 1 à 5 atteints** ; jalon 6 en cours (paquet PortMaster de l'utilisateur, WIP). Le jeu s'affiche sur la console (MANGMI Air X, ROCKNIX 20261101)
-en 1920×1080 par Wayland, avec le GPU (Adreno 610) : menu, puis Downtown, à 60 images/s et
-30,3 ticks/s ; manette et clavier ; son par PulseAudio.
+Mis à jour le 9 novembre 2026. **Jalons 1 à 5 atteints ; jalon 6 presque fini** : le jeu
+tourne sur 8 consoles (tableau ci-dessous), de 640×480 à 1920×1080, par Wayland, KMS/DRM ou
+fbdev, avec Mali (pilote propriétaire), Panfrost et Adreno ; 30,3 ticks/s en jeu ; manette,
+écran Options, son. Le paquet PortMaster est dans `packaging/portmaster/` (script
+`GTA 2.sh` et dossier `gta2/` du propriétaire, avec `README.md`, `port.json`,
+`gameinfo.xml`, images et outils d'extraction de l'installateur). Reste pour le jalon 6 :
+l'adresse du dépôt (`<FORK_URL>` dans `gta2/README.md`). Jalon 7 (multijoueur) pas
+commencé.
+
+| Console | Puce, GPU, pilote | Système | Écran |
+|---|---|---|---|
+| MANGMI Air X | SD662, Adreno 610, Mesa (freedreno) | ROCKNIX | 1920×1080, Wayland |
+| RG353VS | RK3566, Mali-G52, Panfrost ou libmali | ROCKNIX (et dArkOS avant) | 640×480 |
+| TrimUI Smart Pro S | A523, Mali-G57, Panfrost | REG Linux | 1280×720, Wayland |
+| R36S | RK3326, Mali-G31, libmali | AmberELEC | 640×480, KMS |
+| G350 | RK3326, Mali-G31, libmali | dArkOS | 640×480, KMS |
+| RG CubeXX | H700, Mali-G31, libmali | muOS | 720×720, fbdev |
+| RG34XX-H | H700, Mali-G31, libmali | muOS | 720×480, fbdev |
+| RG40XX-H | H700, Mali-G31, libmali | muOS | 640×480, fbdev |
+
+## Soak de nuit, 8 consoles (observé, 9 novembre 2026)
+
+Binaire release `4a8c9e1e` (commit 4caf9cb : textures 16 bits, libération des textures,
+pages d'atlas vidées). Démos du menu sans entrée pendant **4 h (14 400 s)** sur les 8
+consoles en même temps, lancées par SSH frontend arrêté (`night.sh` : un relevé toutes les
+30 s du CPU du jeu, de la charge, de la mémoire du jeu, de la mémoire GPU lue dans
+`fdinfo` pour Mesa, de la mémoire libre, de la température et de la fréquence ; une ligne
+d'état du jeu par minute). Les trois H700 en gouverneur `schedutil` (`FRONTEND stop` les
+laisse en `powersave` à 288 MHz), `CAFFEINE on`.
+
+**Résultat : les 8 vont au bout (arrêt par `GTA2_RUN_SECONDS`, code 0) ; aucun plantage,
+blocage ou arrêt du noyau faute de mémoire.** 69 démos par console, chacune avec un
+chargement du menu et un du district.
+
+| Console | CPU du jeu moy. / max (% d'un cœur) | Charge moy. | Mémoire du jeu h1 → h4 | Mémoire GPU moy. (pic) | Mémoire libre min. | Temp. max |
+|---|---|---|---|---|---|---|
+| Air X | 52 / 100 | 1,99 | 96 → 99 Mo | 184 Mo (189) | 2 325 Mo | 62 °C |
+| RG353VS (Panfrost) | 60 / 94 | 2,23 | 97 → 97 Mo | 117 Mo (130) | 439 Mo | 68 °C |
+| TSP S | 56 / 98 | 1,66 | 90 → 91 Mo | 124 Mo (156) | 403 Mo | 55 °C |
+| R36S | 70 / 97 | 1,39 | 181 → 183 Mo | (dans la mémoire du jeu) | 640 Mo | 61 °C |
+| G350 | 66 / 95 | 1,39 | 182 → 186 Mo | (idem) | 649 Mo | 57 °C |
+| CubeXX | 78 / 106 | 2,20 | 192 → 196 Mo | (idem) | 713 Mo | 56 °C |
+| RG34XX-H | 85 / 108 | 2,13 | 192 → 197 Mo | (idem) | 715 Mo | 58 °C |
+| RG40XX-H | 79 / 106 | 2,23 | 208 → 214 Mo | (idem) | 698 Mo | 66 °C |
+
+- **Plus de fuite :** la mémoire prend 2 à 5 Mo la première heure puis reste plate (avant
+  la correction, plus de 470 Mo en 15 min sur Mali).
+- **En jeu, 30,3 ticks/s partout** ; les minutes sous 29,5 sont toutes celles d'un
+  chargement.
+- **Chargements** (médiane, et max) :
+
+| Console | Envoi des textures | Menu | District |
+|---|---|---|---|
+| Air X | direct | 0,95 s (1,07) | 2,09 s (2,25) |
+| RG353VS | par pages | 0,75 s (1,40) | 2,77 s (3,23) |
+| TSP S | par pages | 0,75 s (1,67) | 2,30 s (2,55) |
+| R36S (816 MHz, voir plus bas) | direct | 2,15 s (2,22) | 5,19 s (5,70) |
+| G350 | direct | 1,58 s (1,62) | 3,63 s (4,13) |
+| CubeXX | direct | 0,95 s (4,75) | 2,04 s (2,84) |
+| RG34XX-H | direct | 0,94 s (4,06) | 2,05 s (2,78) |
+| RG40XX-H | par pages | 0,73 s (3,47) | 1,48 s (2,24) |
+
+- Chaque chargement de district renvoie environ 37 500 textures au GPU, même pour un
+  district déjà vu : le cache ne garde que 16 Mo de textures non affichées. C'est le coût
+  des chargements ci-dessus (optimisation possible, pas un défaut).
+- Quelques chargements du menu bien plus longs que la médiane, sur les trois muOS
+  seulement (jusqu'à 4,75 s). Cause pas cherchée.
+- Un à-coup de 100 à 170 ms à la fin de chaque démo (le district est déchargé avant le
+  retour au menu), jamais en jeu.
+- G350 : 4 « underrun » ALSA en 4 h. Messages sans effet : « muOS-Keys has no controller
+  mapping » (muOS), « xkbcommon Compose file » (TSP S).
+- Le blocage sans son vu une fois sur la RG34XX-H (plus bas) ne s'est pas reproduit.
 
 ## Build release (jalon 6, préparation)
 
@@ -309,9 +378,14 @@ compositeur ; son ALSA (rk817). Lancé par SSH, EmulationStation arrêté pendan
   fluide ; de légères saccades quand des voitures se percutent avec les points qui
   s'affichent, jugées acceptables pour une première version de test. Les essais étaient en
   `powersave` (processeur à 816 MHz, GPU 400 MHz, mémoire 450 MHz), sauf quelques minutes
-  en `performance` : la config d'AmberELEC n'a pas `maxperf` pour les ports
-  (`global.maxperf=0`), un lancement depuis EmulationStation sera donc en `powersave`
-  aussi, sauf réglage du joueur.
+  en `performance`. **Corrigé le 9 novembre :** EmulationStation elle-même tourne en
+  `powersave` (`powersave_es=1`), mais la config de cette console a
+  `ports["GTA 2.sh"].maxperf=1` : un lancement depuis EmulationStation passe en
+  `performance` (1 368 MHz) par `runemu.py`, qui remet `powersave` en sortant. Un test
+  lancé par SSH, EmulationStation arrêtée, reste à 816 MHz : faire `. /etc/profile;
+  performance` d'abord.
+- **En `performance` (9 novembre, 10 min de démos) :** menu en 1,38 à 1,45 s (2,15 s à
+  816 MHz), district en 3,26 à 3,77 s (5,19 s), 30,3 ticks/s en jeu, 181 Mo.
 - **Manette :** sans correspondance fournie par le lanceur, SDL prend pour la manette
   intégrée une correspondance de repli sans Start, Select ni boutons de sticks
   (`crc:3ebb`) : Start ne faisait rien. Celle de PortMaster (`SDL_GAMECONTROLLERCONFIG`)
@@ -324,8 +398,7 @@ compositeur ; son ALSA (rk817). Lancé par SSH, EmulationStation arrêté pendan
   sur la disposition des menus : A deux fois quitte (« ARE YOU SURE? »), B ou Start
   reprend. Vérifié sur la console. `GTA2_LOG_INPUT=1` écrit la correspondance, chaque
   bouton et les touches envoyées.
-- Reste à faire : lancement par le script PortMaster de l'utilisateur depuis
-  EmulationStation, temps de chargement des autres districts, saccades lors des chocs.
+- Reste à faire : saccades lors des chocs (pas mesurées depuis les textures 16 bits).
 
 ## Résolutions d'écran (observé, 8 novembre 2026)
 
@@ -656,8 +729,10 @@ suivait en mémoire, par une valeur fixe :
 ## Ce qui n'est pas encore vérifié
 
 - Que (159,5 ; 139,5 ; 2) est bien le départ à l'église du build web.
-- Le paquet PortMaster (jalon 6) : pour l'instant, le binaire et les fichiers du jeu sont
-  copiés à la main dans `/roms/ports/gta2/` et lancés par SSH.
+- Le paquet PortMaster complet (`packaging/portmaster/`) installé tel quel depuis
+  PortMaster : jusqu'ici, le propriétaire installe le port avec son script et les tests
+  remplacent le binaire par SSH. L'extraction de `GTA2INSTALLER.exe` par le script n'a
+  pas été observée par Claude.
 
 ## Corrigé en route
 
