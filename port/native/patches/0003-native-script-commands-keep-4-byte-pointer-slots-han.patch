@@ -1,8 +1,8 @@
-From 1c805f440a53122de93d6d1592cf3b7040fab48e Mon Sep 17 00:00:00 2001
+From 9b01cba4cae5de7a2f950c3ca13a1000a06addad Mon Sep 17 00:00:00 2001
 From: GTA2 port <port@localhost>
 Date: Sat, 7 Nov 2026 19:35:23 -0500
-Subject: [PATCH] native: script commands keep 4-byte pointer slots (handles on
- LP64)
+Subject: [PATCH 03/16] native: script commands keep 4-byte pointer slots
+ (handles on LP64)
 
 The .scr script is loaded as bytes and its commands are read in place
 through the SCR_* structures, ten of which hold a run-time pointer in a

@@ -1,8 +1,8 @@
-From 74cb7f214d575f3d64c32b1d7023fc6a4b29de09 Mon Sep 17 00:00:00 2001
+From 60a842056d3218ed1b4edc39aa4792e8921a1e07 Mon Sep 17 00:00:00 2001
 From: GTA2 port <port@localhost>
 Date: Sat, 7 Nov 2026 20:00:56 -0500
-Subject: [PATCH] native: style sprite index and sprite deltas sized for 8-byte
- pointers
+Subject: [PATCH 05/16] native: style sprite index and sprite deltas sized for
+ 8-byte pointers
 
 The SPRX chunk (8-byte records) was read straight into sprite_index, whose first
 field becomes a pointer; it is now converted record by record. The in-memory

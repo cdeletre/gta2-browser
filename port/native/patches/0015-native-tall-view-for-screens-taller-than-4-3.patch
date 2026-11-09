@@ -1,7 +1,7 @@
-From 04a1c4968057747a9c1b470ad60031e47f7f782e Mon Sep 17 00:00:00 2001
+From f311c65d1d2744f4c3352848e76b7938ea96348a Mon Sep 17 00:00:00 2001
 From: cdeletre <cyril.deletre@gmail.com>
 Date: Sun, 8 Nov 2026 07:26:19 -0500
-Subject: [PATCH] native: tall view for screens taller than 4:3
+Subject: [PATCH 15/16] native: tall view for screens taller than 4:3
 
 A screen taller than 4:3 (720x720, 1920x1680) gets a 640-wide view as tall
 as its shape. The 4:3 box keeps its scale: the projection, HUD scale and

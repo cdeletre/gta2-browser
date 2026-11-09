@@ -1,7 +1,8 @@
-From e713cbc71028a81aa4ace956db248d07ea2a6653 Mon Sep 17 00:00:00 2001
+From 669d6571ee0807f7d173f2c2689f0d36b130c981 Mon Sep 17 00:00:00 2001
 From: GTA2 port <port@localhost>
 Date: Sat, 7 Nov 2026 20:20:06 -0500
-Subject: [PATCH] native: four zeroed world vertices after gQuadVerts_706B88
+Subject: [PATCH 12/16] native: four zeroed world vertices after
+ gQuadVerts_706B88
 
 A lit gbh_DrawQuad reads world positions after the four screen vertices;
 DrawFigure_5D7EC0 fills only these four, so the renderer read the next globals

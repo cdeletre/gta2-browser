@@ -1,7 +1,7 @@
-From b02d8c77c7cb9f59ed28f09f33210c59e924132b Mon Sep 17 00:00:00 2001
+From 8217f2ae5aa97a45f73ca147886e9238bfe1e47b Mon Sep 17 00:00:00 2001
 From: GTA2 port <port@localhost>
 Date: Sat, 7 Nov 2026 20:00:57 -0500
-Subject: [PATCH] native: pointers kept in 32-bit integers
+Subject: [PATCH 07/16] native: pointers kept in 32-bit integers
 
 Memory::Aligned_malloc_4FE510 aligned through (u32)pointer, dropping the upper
 half of the address (SEGV at 0x82590000 while loading the style).

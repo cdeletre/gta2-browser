@@ -1,7 +1,7 @@
-From ca477c9029b98d6890708cf8ec762fa6a72304a7 Mon Sep 17 00:00:00 2001
+From 610aaac5e50881005c02fe0c16809d85ee558c8e Mon Sep 17 00:00:00 2001
 From: GTA2 port <port@localhost>
 Date: Sat, 7 Nov 2026 19:32:57 -0500
-Subject: [PATCH] native: size asserts of in-memory structures that hold
+Subject: [PATCH 01/16] native: size asserts of in-memory structures that hold
  pointers; asserts on the save formats
 
 Under GTA2_PORT_NATIVE (LP64, 8-byte pointers) these structures grow and
