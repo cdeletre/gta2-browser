@@ -790,13 +790,39 @@ reporter l'un d'eux, il suffit de retirer sa garde `#if defined(GTA2_PORT_NATIVE
   `fix16.hpp` s'ouvrent tous les deux) : les alias ne sont donc pas créés ici, mais le
   seraient sur un système de fichiers sensible à la casse.
 
-## Multijoueur (jalon 7, à faire)
+## Multijoueur (jalon 7, en cours, branche `native-multiplayer`)
 
-Pas encore commencé : les ponts réseau `gta2_js_net_*` sont vides en natif
-(`js_bridge_null.cpp`), mais `net_web.cpp`, `coop_web.cpp` et les patches `port_coop.cpp`
-sont déjà compilés. Le plan est dans `CLAUDE.md` (« Multijoueur ») : transport WebSocket vers
-le relais de `server/` (compatible avec le build web), lobby à la manette, vérification du
-déterminisme aarch64 ↔ wasm32, puis tests entre deux consoles et avec un navigateur.
+Plan : option A d'abord (client WebSocket vers `/relay` de `server/server.mjs`, compatible
+avec le build web), puis D (partie directe en réseau local, sans serveur). Le multijoueur
+est un **binaire à part, `gta2-mp`**, avec son propre lanceur : le binaire solo `gta2`
+ne contient aucun code réseau (vérifié : aucun symbole `gta2net::`, `dist/gta2.aarch64`
+toujours 1,5 Mo). Comme dans le navigateur, le lobby a lieu avant le démarrage du jeu, qui
+entre ensuite en partie réseau par `-N`.
+
+**A0, le socle (fait, 9 novembre)**, dans `port/native/net/` (compilé seulement dans
+`gta2-mp` et `gta2-net-test`, option CMake `GTA2_MULTIPLAYER`, activée par défaut) :
+- `json.*` : JSON (clés dans l'ordre, nombres comme `JSON.stringify`, `\u` et UTF-8) ;
+- `transport.h` : l'interface des transports de `web/net.js` (rejoindre, envoyer à un joueur
+  ou à tous, ping, arrivées et départs), sans fil d'exécution : `Poll()` à chaque tour de
+  boucle ; `memory_transport.*` : un transport en mémoire pour les tests ;
+- `lobby.*` : `CoopLobby` porté (mêmes messages `hello`, `crew`, `side`, `roster`, `start`,
+  `loaded`, `go`, `chat`, `sync`, `wp`, mêmes règles : roster et réglages de l'hôte, équipes
+  et gangs de Gang Wars, délai d'entrée `inputDelayFor`, messages arrivés avant que le jeu
+  soit prêt). Joueurs et réglages gardés en JSON, pour qu'un roster venu d'un navigateur
+  revienne intact ;
+- `coop_native.*` : `setupCoop` et `watchCoop` de `web/shell.js` (session du moteur, règles,
+  équipes, carte multijoueur du district, noms, marge d'activation à 0 ; contrôle toutes
+  les 90 ticks, joueurs attendus) ; remplace le `gta2_js_net_send` vide du binaire solo.
+- `gta2-net-test` : 98 vérifications (JSON ; règles ; une salle hôte + 2 joueurs en mémoire,
+  avec latence simulée, jusqu'au départ d'un joueur ; un roster et un départ au format d'un
+  hôte navigateur) : toutes passent, aussi sous ASan + UBSan. Elles ont trouvé une référence
+  pendante (`for (… : Crews().Items())` sur un temporaire) dans `ApplySide`.
+
+Reste : A1 (client WebSocket `ws://`, connexion au serveur, déroulé avant le jeu dans
+`main.cpp`), A2 (natif contre natif dans Docker, `-ffp-contract=off`), A3 (natif contre
+navigateur), A4 (lobby à la manette, noms prédéfinis ; clavier à l'écran plus tard), A5
+(consoles), A6 (`wss://` si le serveur public est en HTTPS), A7 (scores, chat, points de
+passage), puis D1-D4 (transport TCP local, découverte UDP, consoles, paquet).
 
 ## Reste à faire
 

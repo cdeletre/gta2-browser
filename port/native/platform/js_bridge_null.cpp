@@ -23,10 +23,13 @@ void gta2_js_file_removed(const char*)
 {
 }
 
-// --- platform/net_web.cpp: no co-op transport natively -------------------------------
+// --- platform/net_web.cpp: no co-op transport in the solo binary ---------------------
+// (gta2-mp: net/coop_native.cpp sends the game messages through its lobby)
+#if !defined(GTA2_NATIVE_NET)
 void gta2_js_net_send(int, const void*, int)
 {
 }
+#endif
 
 // --- platform/options_web.cpp: the front end's Options item ---------------------------
 // With a window, platform/options_native.cpp shows the port's Options screen; headless

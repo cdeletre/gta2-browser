@@ -142,11 +142,6 @@ set(GTA2_PORT_SHARED
 file(GLOB GTA2_NATIVE_SOURCES CONFIGURE_DEPENDS
   "${NATIVE}/*.cpp" "${NATIVE}/platform/*.cpp" "${NATIVE}/render/*.cpp" "${NATIVE}/audio/*.cpp")
 
-add_executable(gta2 ${GTA2_PORT_SHARED} ${GTA2_NATIVE_SOURCES})
-target_compile_options(gta2 PRIVATE ${GTA2_COMMON_FLAGS} ${GTA2_OPT} ${GTA2_SAN})
-target_compile_definitions(gta2 PRIVATE ${GTA2_DEFINES})
-target_include_directories(gta2 PRIVATE ${GTA2_INCLUDES} "${PORT}")
-target_link_libraries(gta2 PRIVATE gta2_core m dl pthread)
 if(NOT GTA2_HEADLESS)
   # SDL2 window and events, OpenGL ES 2.0 (platform/window_sdl.cpp, render/gles_renderer.cpp)
   # SDL2 is linked by path, not with sdl2.pc's link flags: the build image's sdl2.pc adds
@@ -155,15 +150,55 @@ if(NOT GTA2_HEADLESS)
   pkg_check_modules(SDL2 REQUIRED sdl2)
   find_library(SDL2_LIBRARY NAMES SDL2 HINTS ${SDL2_LIBRARY_DIRS} REQUIRED)
   find_library(GLESV2_LIBRARY NAMES GLESv2 REQUIRED)
-  target_include_directories(gta2 PRIVATE ${SDL2_INCLUDE_DIRS})
-  target_compile_options(gta2 PRIVATE ${SDL2_CFLAGS_OTHER})
-  target_link_libraries(gta2 PRIVATE ${SDL2_LIBRARY} ${GLESV2_LIBRARY})
 endif()
-target_link_options(gta2 PRIVATE ${GTA2_SAN} ${GTA2_SAN_LINK} -Wl,--gc-sections)
-# No RUNPATH: the console's loader finds SDL2 and GLESv2 in its own directories.
-set_target_properties(gta2 PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" SKIP_BUILD_RPATH ON)
-if(CMAKE_BUILD_TYPE STREQUAL "Release" AND NOT GTA2_SANITIZE)
-  # The C++ runtime inside the binary: it then needs only glibc (2.17 at most), SDL2 and
-  # GLESv2 from the system, as is usual for PortMaster ports.
-  target_link_options(gta2 PRIVATE -static-libstdc++ -static-libgcc)
+
+# One game binary: the solo gta2, or gta2-mp with the network code (port/native/net).
+function(gta2_add_game target)
+  add_executable(${target} ${GTA2_PORT_SHARED} ${GTA2_NATIVE_SOURCES} ${ARGN})
+  target_compile_options(${target} PRIVATE ${GTA2_COMMON_FLAGS} ${GTA2_OPT} ${GTA2_SAN})
+  target_compile_definitions(${target} PRIVATE ${GTA2_DEFINES})
+  target_include_directories(${target} PRIVATE ${GTA2_INCLUDES} "${PORT}")
+  target_link_libraries(${target} PRIVATE gta2_core m dl pthread)
+  if(NOT GTA2_HEADLESS)
+    target_include_directories(${target} PRIVATE ${SDL2_INCLUDE_DIRS})
+    target_compile_options(${target} PRIVATE ${SDL2_CFLAGS_OTHER})
+    target_link_libraries(${target} PRIVATE ${SDL2_LIBRARY} ${GLESV2_LIBRARY})
+  endif()
+  target_link_options(${target} PRIVATE ${GTA2_SAN} ${GTA2_SAN_LINK} -Wl,--gc-sections)
+  # No RUNPATH: the console's loader finds SDL2 and GLESv2 in its own directories.
+  set_target_properties(${target} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" SKIP_BUILD_RPATH ON)
+  if(CMAKE_BUILD_TYPE STREQUAL "Release" AND NOT GTA2_SANITIZE)
+    # The C++ runtime inside the binary: it then needs only glibc (2.17 at most), SDL2 and
+    # GLESv2 from the system, as is usual for PortMaster ports.
+    target_link_options(${target} PRIVATE -static-libstdc++ -static-libgcc)
+  endif()
+endfunction()
+
+gta2_add_game(gta2)
+
+# ---------------------------------------------------------------------------
+# Multiplayer (branch native-multiplayer): a separate binary, gta2-mp, so that the solo
+# gta2 carries no network code. port/native/net: the lobby (web/net.js's CoopLobby) and
+# the transports; gta2_net has no engine code, so gta2-net-test checks it on its own.
+# ---------------------------------------------------------------------------
+option(GTA2_MULTIPLAYER "Build gta2-mp and gta2-net-test" ON)
+if(GTA2_MULTIPLAYER)
+  add_library(gta2_net STATIC
+    "${NATIVE}/net/json.cpp"
+    "${NATIVE}/net/lobby.cpp"
+    "${NATIVE}/net/memory_transport.cpp")
+  target_compile_options(gta2_net PRIVATE ${GTA2_COMMON_FLAGS} ${GTA2_OPT} ${GTA2_SAN})
+  target_compile_definitions(gta2_net PRIVATE ${GTA2_DEFINES} GTA2_NATIVE_NET=1)
+
+  gta2_add_game(gta2-mp "${NATIVE}/net/coop_native.cpp")
+  target_compile_definitions(gta2-mp PRIVATE GTA2_NATIVE_NET=1)
+  target_link_libraries(gta2-mp PRIVATE gta2_net)
+
+  add_executable(gta2-net-test "${NATIVE}/net/tests/net_test.cpp")
+  target_compile_options(gta2-net-test PRIVATE ${GTA2_COMMON_FLAGS} ${GTA2_OPT} ${GTA2_SAN})
+  target_compile_definitions(gta2-net-test PRIVATE GTA2_NATIVE_NET=1)
+  target_include_directories(gta2-net-test PRIVATE "${NATIVE}/net")
+  target_link_libraries(gta2-net-test PRIVATE gta2_net)
+  target_link_options(gta2-net-test PRIVATE ${GTA2_SAN} ${GTA2_SAN_LINK})
+  set_target_properties(gta2-net-test PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 endif()
