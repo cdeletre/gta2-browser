@@ -37,7 +37,7 @@ if [ ! -d "$GAMEDIR/gamedata/data" ]; then
 
     cd "$GAMEDIR/gamedata"
 
-    $ESUDO chmod u+x tools/iss_extract tools/unshield
+    $ESUDO chmod u+x "$GAMEDIR/tools/iss_extract" "$GAMEDIR/tools/unshield"
 
     $ESUDO iss_extract x "GTA2INSTALLER.exe" data1.cab data1.hdr data2.cab
     [ $? -ne 0 ] && echo "Error extracting GTA2INSTALLER.exe" && exit 1
