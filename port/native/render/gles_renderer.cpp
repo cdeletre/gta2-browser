@@ -422,15 +422,28 @@ Slot Allocate(int w, int h)
     }
     const int pw = w + 2;
     const int ph = h + 2;
-    for (int pass = 0; pass < 3; ++pass)
+    for (int pass = 0; pass < 4; ++pass)
     {
         for (size_t p = 0; p < gR.pages.size(); ++p)
         {
             Page& page = gR.pages[p];
-            // Pass 0: pages with a copy in memory; then any page; pass 2 after a new page.
+            // Pass 0: pages with a copy in memory; pass 1: empty pages (emptied by freed
+            // textures, Release), which take a copy as a new page does when uploads are
+            // batched; pass 2: any page; pass 3 after a new page.
             if (pass == 0 && page.shadow.empty())
             {
                 continue;
+            }
+            if (pass == 1)
+            {
+                if (page.live != 0 || page.bottom != 0)
+                {
+                    continue;
+                }
+                if (gR.batch == 1 && page.shadow.empty())
+                {
+                    GiveShadow(p); // empty: a fresh, zeroed copy loses nothing
+                }
             }
             Shelf* best = nullptr;
             for (Shelf& sh : page.shelves)
@@ -460,7 +473,7 @@ Slot Allocate(int w, int h)
                 return s;
             }
         }
-        if (pass == 1)
+        if (pass == 2)
         {
             Page page;
             glGenTextures(1, &page.tex);
@@ -486,7 +499,11 @@ void Release(const Slot& s)
     else if (--gR.pages[s.page].live == 0)
     {
         // The page holds no texture any more (the game freed them, render/gbh_web.cpp): its
-        // shelves start again, and the free rectangles listed for it go.
+        // shelves start again, and the free rectangles listed for it go. Allocate fills empty
+        // pages before partly full ones and, with batched uploads, gives them a copy in memory
+        // as it does a new page: without that every load after the first uploaded directly
+        // (TrimUI Smart Pro S, Panfrost: 37 000 textures in 10 s instead of 1.5 s). Only an
+        // empty page can take a fresh, zeroed copy: GLES 2 cannot read a texture back.
         Page& page = gR.pages[s.page];
         page.shelves.clear();
         page.bottom = 0;

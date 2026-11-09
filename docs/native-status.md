@@ -123,11 +123,25 @@ essais mesurés par SSH, binaire dans `/tmp`, cache disque vidé avant chaque es
   - mémoire libre au plus bas : 125 Mo (34 à 81 Mo en 32 bits) ;
   - 92 à 94 Mo de textures dans l'atlas ;
   - deux captures en jeu correctes (couleurs, transparence, HUD).
-- **Toujours un pic d'environ 200 Mo aux changements de démo**, même en 16 bits : il ne
-  vient donc pas des textures du port, dont le compte reste à 92–94 Mo. Avec l'envoi groupé,
-  la ligne d'état (toutes les 5 s) se tait environ 70 s entre deux démos (de 211 à 281 s),
-  sans doute un long tour de boucle, pendant lequel le pic se produit. En envoi direct, les
-  pics ne durent que 5 à 10 s. À examiner.
+- **Pics de 200 Mo et chargements lents après le premier : trouvé et corrigé.** Depuis que les
+  pages vidées sont réutilisées, elles n'avaient plus la copie en mémoire de l'envoi groupé
+  (donnée seulement aux pages neuves) : sous Panfrost, chaque chargement après le premier
+  envoyait ses textures une à une (37 566 en 10 à 11 s), et ces envois en rafale faisaient
+  monter la mémoire du pilote. Maintenant l'atlas remplit d'abord les pages vides, et une
+  page vide reçoit sa copie quand on commence à la remplir, comme une page neuve (seule une
+  page vide le peut : GLES 2 ne relit pas une texture, une copie à zéro effacerait celles
+  d'une page occupée). TSP S, 9 min de démos, cache chaud :
+
+| | Avant | Après |
+|---|---|---|
+| District après le premier | 11,7 à 12,4 s | 1,8 à 2,1 s |
+| Retour au menu entre deux démos | 4,6 s | moins de 1 s |
+| Mémoire GPU au maximum | 332 Mo | 145 Mo |
+| Mémoire libre au plus bas | 178 Mo | 415 Mo |
+
+- **Session de l'utilisateur sur la TSP S** (binaire `a274d863`, environ 18 min dans Downtown) :
+  30,3 ticks/s tout du long, 37 800 à 38 400 textures, 43 à 45 pages, 92 à 94 Mo ; pas de
+  ralentissement ressenti.
 - **Point ouvert :** pendant un premier essai sur la RG34XX-H (le son n'avait pas pu s'ouvrir,
   « ALSA: Host is down »), le jeu est resté bloqué dans le menu, le fil principal à 100 % dans
   l'horloge (`emscripten_get_now`), avant la première ligne d'état. Pas reproduit en deux
