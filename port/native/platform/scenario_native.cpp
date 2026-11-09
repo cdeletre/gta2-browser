@@ -26,6 +26,9 @@
 //                          moved one block north of the next player, walks south into them
 //                          and attacks (fists, or GTA2_TEST_WEAPON=kind with ammo first);
 //                          the other player's health, height and state are logged each second
+//   GTA2_TEST=boom         network game, one machine only: the next player is seated in a car
+//                          beside this one, which then explodes with them in it (as a rocket
+//                          or a fire does: Car_BC::TriggerExplosion_43D7B0)
 //   GTA2_TEST_DAMAGE_PVP=1  network game: this player hits the next player instead, through
 //                          the player-on-player path (killer id set, friendly fire rules;
 //                          gta2_dev_test_friendly_fire). One machine only: it drifts apart.
@@ -45,6 +48,8 @@
 
 #include "Game_0x40.hpp"
 #include "Player.hpp"
+#include "Car_BC.hpp"
+#include "explosion_type.hpp"
 #include "Weapon_30.hpp"
 #include "ScriptManager_C1EA8.hpp"
 #include "Object_2C_Pool.hpp"
@@ -54,6 +59,7 @@ extern "C" const s32* gta2_dev_state();
 extern "C" int gta2_dev_add_cash(int cash);
 extern "C" int gta2_dev_give_weapon(int kind, int ammo);
 extern "C" int gta2_dev_test_friendly_fire(int victim, int attacker, int damage);
+extern "C" int gta2_dev_seat_player_driver(int slot, int model, int dx, int dy);
 extern "C" int gta2_dev_teleport(int x, int y);
 extern "C" int gta2_dev_unlock_areas();
 extern "C" void gta2_port_key(int scancode, int vk, int down, int ch);
@@ -70,7 +76,8 @@ enum Test
     kPhone,
     kWatch,
     kDamage,
-    kPvp
+    kPvp,
+    kBoom
 };
 Test gTest = kNone;
 int gPhone = 0;
@@ -279,6 +286,7 @@ extern "C" void Gta2Native_ScenarioInit()
         : !strcmp(test, "watch")     ? kWatch
         : !strcmp(test, "damage")    ? kDamage
         : !strcmp(test, "pvp")       ? kPvp
+        : !strcmp(test, "boom")      ? kBoom
                                      : kNone;
     if (const char* delay = getenv("GTA2_TEST_DELAY"))
     {
@@ -463,6 +471,42 @@ extern "C" void Gta2Native_ScenarioStep(double now)
             AnswerPhone();
             gStep = 1;
         }
+    }
+    else if (gTest == kBoom)
+    {
+        const int other = player->get_idx_4219D0() == 0 ? 1 : 0;
+        Player* op = gGame_0x40_67E008->get_player_4219E0(static_cast<u8>(other));
+        Ped* target = op ? op->field_2C4_player_ped : nullptr;
+        if (gStep == 0 && inGame > gDelay)
+        {
+            fprintf(stderr, "gta2: test: seating player %d in a car beside us: %d\n", other,
+                    gta2_dev_seat_player_driver(other, 10, 1, 0));
+            gStep = 1;
+            gStepAt = now;
+        }
+        else if (gStep == 1 && now - gStepAt > 2000)
+        {
+            Car_BC* car = target ? target->get_car_416B60() : nullptr;
+            fprintf(stderr, "gta2: test: blowing up player %d's car (%p), health %d\n", other, static_cast<void*>(car),
+                    target ? target->get_health_433B70() : -1);
+            if (car)
+            {
+                // blamed on this player, as when they shot the car: the friendly fire rule applies
+                target->field_204_killer_id = player->GetPlayerPed_41D020()->field_200_id;
+                car->TriggerExplosion_43D7B0(explosion_type::large_20);
+            }
+            gStep = 2;
+            gStepAt = now;
+        }
+        else if (gStep >= 2 && gStep < 12 && now - gStepAt > 1000)
+        {
+            ++gStep;
+            gStepAt = now;
+            fprintf(stderr, "gta2: test: player %d health %d, state %d, in a car %d\n", other,
+                    target ? target->get_health_433B70() : -1, target ? static_cast<int>(target->field_278_ped_state_1) : -1,
+                    target && target->get_car_416B60() ? 1 : 0);
+        }
+        return;
     }
     else if (gTest == kPvp)
     {

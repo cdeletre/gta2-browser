@@ -485,6 +485,7 @@ EMSCRIPTEN_KEEPALIVE int gta2_dev_seat_player_driver(int slot, int model, int dx
         gChar_B4_Pool_6FDB44->DeAllocate(body);
         driver->field_168_game_object = nullptr;
     }
+    car->SetupCarPhysicsAndSpriteBinding_43BC30(); // as a ped getting in does: the car moves
     driver->SpawnPedInCar_45C730(car);
     driver->field_27C_ped_state_2 = ped_state_2::ped2_driving_10;
     return 1;

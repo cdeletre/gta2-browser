@@ -756,7 +756,8 @@ suivait en mémoire, par une valeur fixe :
 **Reportés dans le web le 9 novembre** (multijoueur entre navigateur et natif, choix du
 propriétaire ; ils changent `gta2.wasm`) : les entrées et départs à 3 joueurs et plus
 (`net_web.cpp`, plus de garde `GTA2_PORT_NATIVE`), et les émetteurs radio hors de 1..5
-(`port/patches/0026`, la même borne que le patch natif 0013).
+(`port/patches/0026`, la même borne que le patch natif 0013) ; puis la mort des occupants
+d'une voiture détruite avec le tir ami coupé (`port/patches/0027`).
 
 Défauts trouvés en natif qui existent aussi dans le build web, corrigés sous
 `GTA2_PORT_NATIVE` seulement. Ils ne sont pas reportés pour l'instant, à la demande du
@@ -922,6 +923,17 @@ correction (natif) : tableau « Correctifs à reporter dans le build web » ci-d
   réseau irrégulier, 120 s, aucun blocage ni abandon, 600 premiers relevés identiques.
 - Les lignes `co-op:` du log portent l'heure depuis le début de la partie et l'image réseau,
   et disent quand le jeu abandonne un joueur ou termine la partie.
+
+**Voiture explosée avec un joueur dedans (9 novembre)** : les deux consoles clientes ont
+planté (SIGSEGV à l'adresse 0x48, `CarPhysics_B0::HandleUserInputs_55A860` depuis
+`Player::DoCarControlInputs_566C30`) quand le joueur du navigateur a fait exploser la voiture
+d'un autre joueur en Free roam, tir ami coupé ; le navigateur continuait (en wasm l'adresse 0
+est de la mémoire). Cause : `Ped::Kill_46F9D0` ignorait la mort des occupants imputée à un
+autre joueur (patch 0021), alors que l'explosion retire le conducteur et libère la physique
+de la voiture : le joueur restait vivant dans l'épave. Choix du propriétaire (option A) : un
+piéton dans une voiture meurt toujours (patch partagé 0027, `COOP_VERSION` 3) ; les balles et
+les coups restent bloqués par le tir ami. Reproduit et vérifié avec `GTA2_TEST=boom` sous ASan
+(le joueur meurt puis réapparaît, plus de plantage).
 
 Reste : A5 (consoles), A6 (`wss://` si le serveur public est en HTTPS), A7 (scores, chat,
 points de passage), puis D1-D4 (transport TCP local, découverte UDP, consoles, paquet).
