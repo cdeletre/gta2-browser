@@ -249,18 +249,22 @@ echo "   SDL : ${sdl_dep:-non lié dynamiquement (attendu : libSDL2-2.0.so.0)}"
 # (./gta2.${DEVICE_ARCH}). La sortie du linker reste intacte.
 if [[ "$PRESET" == "release" && $SANITIZE -eq 0 ]]; then
   DIST="$BUILD_DIR/dist"
-  NAME="gta2.$(uname -m)"
   mkdir -p "$DIST"
-  objcopy --only-keep-debug "$BIN" "$DIST/$NAME.debug"
-  objcopy --strip-all --add-gnu-debuglink="$DIST/$NAME.debug" "$BIN" "$DIST/$NAME"
-  needed=$(objdump -p "$DIST/$NAME" | awk '/NEEDED/ {print $2}' | tr '\n' ' ')
-  echo "   dist/$NAME : $(du -h "$DIST/$NAME" | cut -f1), bibliothèques : $needed"
-  if objdump -p "$DIST/$NAME" | grep -qE 'RPATH|RUNPATH'; then
-    die "dist/$NAME a un RPATH/RUNPATH : $(objdump -p "$DIST/$NAME" | grep -E 'RPATH|RUNPATH')"
-  fi
-  if echo "$needed" | grep -qE 'libstdc\+\+|libgcc_s'; then
-    die "dist/$NAME dépend encore de libstdc++/libgcc_s (attendu : liés en statique)"
-  fi
+  # gta2 (solo) and, when built, gta2-mp (multiplayer, its own launch script)
+  for target in gta2 gta2-mp; do
+    [[ -x "$BUILD_DIR/$target" ]] || continue
+    NAME="$target.$(uname -m)"
+    objcopy --only-keep-debug "$BUILD_DIR/$target" "$DIST/$NAME.debug"
+    objcopy --strip-all --add-gnu-debuglink="$DIST/$NAME.debug" "$BUILD_DIR/$target" "$DIST/$NAME"
+    needed=$(objdump -p "$DIST/$NAME" | awk '/NEEDED/ {print $2}' | tr '\n' ' ')
+    echo "   dist/$NAME : $(du -h "$DIST/$NAME" | cut -f1), bibliothèques : $needed"
+    if objdump -p "$DIST/$NAME" | grep -qE 'RPATH|RUNPATH'; then
+      die "dist/$NAME a un RPATH/RUNPATH : $(objdump -p "$DIST/$NAME" | grep -E 'RPATH|RUNPATH')"
+    fi
+    if echo "$needed" | grep -qE 'libstdc\+\+|libgcc_s'; then
+      die "dist/$NAME dépend encore de libstdc++/libgcc_s (attendu : liés en statique)"
+    fi
+  done
   echo "   ok  pas de RPATH, runtime C++ inclus"
 fi
 
