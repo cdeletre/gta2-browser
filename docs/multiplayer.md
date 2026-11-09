@@ -91,8 +91,20 @@ model and replaces the transport.
 
 On the live server, two tabs ran at a 13 ms round trip with matching checksums.
 
+**Three players** (November 2026, with the native build, `docs/native-status.md`): three
+native players, then two native players and a browser, over the game server's relay, with
+an uneven network simulated (`GTA2_NET_LAG_MS`) and on three handheld consoles over Wi-Fi:
+matching checksums for minutes, and players leaving mid-match. Two bugs only showed from
+three players, fixed in `port/platform/net_web.cpp` for both builds:
+- while the game waited for a slow player's inputs for a tick, it could read a faster
+  player's next inputs, which overwrote the current ones on that machine only;
+- a leaving player was dropped one tick apart on different machines (the departure read
+  while waiting for someone else; and inputs sent once per player, so a player closing in
+  the middle reached some players and not others: inputs for everyone now go as one
+  message, which the relay copies to each player).
+
 **Not tested yet:**
-- more than two players;
+- more than three players;
 - two computers far apart over the internet;
 - players behind strict NATs on the public site (there's no TURN relay, so WebRTC can fail
   there; the private server's relay doesn't have this problem);
@@ -101,6 +113,12 @@ On the live server, two tabs ran at a 13 ms round trip with matching checksums.
 
 **Known limits:**
 - 6 players (the original's limit).
+- Every player needs the same co-op version (`COOP_VERSION` in `web/net.js`,
+  `kCoopVersion` natively): a host turns away a player of another version, and a player
+  leaves a host of another version, with a message, instead of a match that drifts apart.
+- Over WebRTC (no server) a broadcast is one message per player, so a player leaving in the
+  middle of one can still be dropped a tick apart in matches of three or more; the relay
+  does not have this problem.
 - A player who disconnects is dropped after about 6 seconds and can't rejoin.
 - Passengers can't shoot from the car (yet).
 - Finding peers through public trackers takes 10 to 60 seconds.

@@ -753,6 +753,11 @@ suivait en mémoire, par une valeur fixe :
 
 ## Correctifs à reporter dans le build web
 
+**Reportés dans le web le 9 novembre** (multijoueur entre navigateur et natif, choix du
+propriétaire ; ils changent `gta2.wasm`) : les entrées et départs à 3 joueurs et plus
+(`net_web.cpp`, plus de garde `GTA2_PORT_NATIVE`), et les émetteurs radio hors de 1..5
+(`port/patches/0026`, la même borne que le patch natif 0013).
+
 Défauts trouvés en natif qui existent aussi dans le build web, corrigés sous
 `GTA2_PORT_NATIVE` seulement. Ils ne sont pas reportés pour l'instant, à la demande du
 propriétaire (7 novembre 2026) : changer le code du jeu web rend « older version »
@@ -763,9 +768,7 @@ reporter l'un d'eux, il suffit de retirer sa garde `#if defined(GTA2_PORT_NATIVE
 |---|---|---|
 | `port/audio/miles_web.cpp`, `AIL_release_sample_handle` | handle nul déréférencé (`cSampleManager::Terminate_58DAE0` libère des cases encore vides au premier `AllocSamples_58D9F0`) | écriture silencieuse à l'adresse 0x30 de la mémoire wasm, à chaque initialisation du son |
 | `port/render/gbh_web.cpp` (`Draw`, lumières) avec `gQuadVerts_706B88` (`Draw.cpp`) | un dessin éclairé lit les positions monde après les 4 sommets ; `DrawFigure_5D7EC0` n'en remplit que 4 | les chiffres du score qui explose sont éclairés d'après des globaux sans rapport (lecture hors du tableau) |
-| `sound_obj::RadioEmitter` (`sound_obj.hpp`) | index 102, 103 ou 128 quand `field_54F7[0]` vaut 101, 0x66 ou 127 | lectures et écritures 2 à 3 Ko après `gSound_obj_66F680` ; la voiture de police quittée reçoit un « statut d'émetteur » quelconque |
 | `PublicTransport_181C::SetupTrainAndBusStops_5794B0` (patch natif 0016) | `gStationCount_6FF1CC` jamais remis à zéro : il grossit à chaque district chargé, et au-delà des 100 stations de `field_0_stations` la boucle des arrêts de bus lit hors du tableau | plantage (ou lecture hors de l'objet) après plusieurs chargements de districts dans la même session, par exemple les démos du menu |
-| `port/platform/net_web.cpp`, `ReceiveGameMessage_521890` (multijoueur, 9 novembre) | à 3 joueurs ou plus, pendant que le jeu attend les entrées d'un joueur lent pour un tick, il lit aussi l'entrée du tick suivant d'un joueur en avance, qui écrase la sienne (`PortNetReceivePoll`, `winmain.cpp`) : chaque machine applique alors des entrées différentes selon l'ordre d'arrivée | les parties à 3 joueurs et plus divergent dès les premiers ticks (vu : tick 2 dans le conteneur, tick 180 sur deux consoles avec un navigateur) ; à 2 joueurs rien. Tant que le web n'a pas la correction, un navigateur dans une partie à 3+ divergera des natifs |
 | `port/render/gbh_web.cpp`, cache des textures par contenu | une texture GPU n'est jamais libérée, même quand plus aucune texture du jeu ne l'affiche ; chaque nouveau texte, chiffre ou dégât de voiture et chaque district chargé en ajoute | la mémoire WebGL grossit pendant toute la session |
 
 ## À reprendre plus tard (64 bits, hors jalon 1)
