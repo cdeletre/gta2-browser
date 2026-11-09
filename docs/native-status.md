@@ -115,6 +115,19 @@ essais mesurés par SSH, binaire dans `/tmp`, cache disque vidé avant chaque es
   de textures (43 pages). Il reste alors 34 à 62 Mo libres sur la console. Ce ne sont pas
   les copies temporaires des envois de pages : un `glFinish` tous les 32 Mo n'y change rien.
   Avant ce correctif, le jeu a été tué une fois par le noyau (OOM) à 8 min.
+- **Textures en 16 bits (RGB5_A1) :** 2 octets par pixel au lieu de 4. La transparence sur
+  1 bit correspond exactement à la couleur 0 des palettes. `GTA2_TEXTURE_BITS=32` revient à
+  RGBA8, et le log indique le format au démarrage. TSP S, 9 min de démos, envoi groupé :
+  - mémoire GPU hors chargement : 114 à 131 Mo (211 à 222 Mo en 32 bits) ;
+  - pics : 274 à 351 Mo (400 à 435 Mo en 32 bits) ;
+  - mémoire libre au plus bas : 125 Mo (34 à 81 Mo en 32 bits) ;
+  - 92 à 94 Mo de textures dans l'atlas ;
+  - deux captures en jeu correctes (couleurs, transparence, HUD).
+- **Toujours un pic d'environ 200 Mo aux changements de démo**, même en 16 bits : il ne
+  vient donc pas des textures du port, dont le compte reste à 92–94 Mo. Avec l'envoi groupé,
+  la ligne d'état (toutes les 5 s) se tait environ 70 s entre deux démos (de 211 à 281 s),
+  sans doute un long tour de boucle, pendant lequel le pic se produit. En envoi direct, les
+  pics ne durent que 5 à 10 s. À examiner.
 - **Point ouvert :** pendant un premier essai sur la RG34XX-H (le son n'avait pas pu s'ouvrir,
   « ALSA: Host is down »), le jeu est resté bloqué dans le menu, le fil principal à 100 % dans
   l'horloge (`emscripten_get_now`), avant la première ligne d'état. Pas reproduit en deux

@@ -120,7 +120,7 @@ struct Shelf
     int y, h, x;
 };
 
-constexpr int kMaxShadows = 8;      // pages with a copy in memory (4 MB each)
+constexpr int kMaxShadows = 8;      // pages with a copy in memory (2 MB each in 16-bit, 4 in 32)
 constexpr unsigned kCalibrationUploads = 1000;
 constexpr double kBatchAboveMs = 0.10;
 constexpr unsigned kShadowIdle = 300; // frames without writes before a copy is dropped
@@ -158,6 +158,9 @@ struct Renderer
     std::vector<Page> pages;
     std::unordered_map<uint32_t, std::vector<Slot>> freeSlots; // by (w << 16 | h)
     std::vector<uint8_t> padded;                                // upload scratch
+    std::vector<uint8_t> packed;                                // the image in the texture format
+    int bpp = 2;                                                // bytes a texel: 2 (RGB5_A1) or 4
+    GLenum texType = GL_UNSIGNED_SHORT_5_5_5_1;
     std::vector<FrameVertex> verts;                             // present scratch
     unsigned frame = 0;                                         // presents so far
     int shadows = 0;                                            // pages with a copy
@@ -239,6 +242,15 @@ void Init()
     glDisable(GL_CULL_FACE);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     fprintf(stderr, "gta2: GL_RENDERER %s, GL_VERSION %s\n", glGetString(GL_RENDERER), glGetString(GL_VERSION));
+    // Textures are 16-bit RGB5_A1: half the memory of RGBA8 (with the Mali blob and Panfrost
+    // that memory is the console's RAM), and the palette colour 0's transparency is exactly the
+    // 1-bit alpha. GTA2_TEXTURE_BITS=32 keeps RGBA8.
+    if (const char* bits = getenv("GTA2_TEXTURE_BITS"); bits && atoi(bits) == 32)
+    {
+        gR.bpp = 4;
+        gR.texType = GL_UNSIGNED_BYTE;
+    }
+    fprintf(stderr, "gta2: textures: %s\n", gR.bpp == 2 ? "16-bit (RGB5_A1)" : "32-bit (RGBA8, GTA2_TEXTURE_BITS)");
     if (const char* batch = getenv("GTA2_ATLAS_BATCH"))
     {
         gR.batch = atoi(batch) != 0 ? 1 : 0;
@@ -342,7 +354,7 @@ void FlushPage(Page& page)
     }
     glBindTexture(GL_TEXTURE_2D, page.tex);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, page.dirtyTop, kPage, page.dirtyBottom - page.dirtyTop + 1, GL_RGBA,
-                    GL_UNSIGNED_BYTE, page.shadow.data() + static_cast<size_t>(page.dirtyTop) * kPage * 4);
+                    gR.texType, page.shadow.data() + static_cast<size_t>(page.dirtyTop) * kPage * gR.bpp);
     page.dirtyTop = kPage;
     page.dirtyBottom = -1;
 }
@@ -373,7 +385,7 @@ void GiveShadow(size_t index)
             DropShadow(*oldest);
         }
     }
-    gR.pages[index].shadow.assign(static_cast<size_t>(kPage) * kPage * 4, 0);
+    gR.pages[index].shadow.assign(static_cast<size_t>(kPage) * kPage * gR.bpp, 0);
     gR.pages[index].lastWrite = gR.frame;
     ++gR.shadows;
 }
@@ -453,7 +465,7 @@ Slot Allocate(int w, int h)
             Page page;
             glGenTextures(1, &page.tex);
             glBindTexture(GL_TEXTURE_2D, page.tex);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, kPage, kPage, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, kPage, kPage, 0, GL_RGBA, gR.texType, nullptr);
             SetParams();
             gR.pages.push_back(std::move(page));
             if (gR.batch == 1)
@@ -490,20 +502,40 @@ void Release(const Slot& s)
     }
 }
 
-// The image with a copy of its edge rows and columns around it.
-void UploadPadded(const Slot& s, const uint8_t* rgba)
+// RGBA8 pixels in the texture format (gR.bpp bytes each).
+const uint8_t* Pack(const uint8_t* rgba, int w, int h)
+{
+    if (gR.bpp == 4)
+    {
+        return rgba;
+    }
+    const size_t n = static_cast<size_t>(w) * h;
+    gR.packed.resize(n * 2);
+    uint16_t* out = reinterpret_cast<uint16_t*>(gR.packed.data());
+    for (size_t i = 0; i < n; ++i, rgba += 4)
+    {
+        const unsigned r = (rgba[0] * 31u + 127u) / 255u, g = (rgba[1] * 31u + 127u) / 255u;
+        const unsigned b = (rgba[2] * 31u + 127u) / 255u;
+        out[i] = static_cast<uint16_t>(r << 11 | g << 6 | b << 1 | (rgba[3] >= 128 ? 1u : 0u));
+    }
+    return gR.packed.data();
+}
+
+// The image (texture format) with a copy of its edge rows and columns around it.
+void UploadPadded(const Slot& s, const uint8_t* texels)
 {
     const int pw = s.w + 2;
     const int ph = s.h + 2;
-    gR.padded.resize(static_cast<size_t>(pw) * ph * 4);
+    const size_t bpp = static_cast<size_t>(gR.bpp);
+    gR.padded.resize(static_cast<size_t>(pw) * ph * bpp);
     for (int y = 0; y < ph; ++y)
     {
         const int sy = y == 0 ? 0 : y > s.h ? s.h - 1 : y - 1;
-        const uint8_t* src = rgba + static_cast<size_t>(sy) * s.w * 4;
-        uint8_t* dst = gR.padded.data() + static_cast<size_t>(y) * pw * 4;
-        memcpy(dst, src, 4);
-        memcpy(dst + 4, src, static_cast<size_t>(s.w) * 4);
-        memcpy(dst + static_cast<size_t>(pw - 1) * 4, src + static_cast<size_t>(s.w - 1) * 4, 4);
+        const uint8_t* src = texels + static_cast<size_t>(sy) * s.w * bpp;
+        uint8_t* dst = gR.padded.data() + static_cast<size_t>(y) * pw * bpp;
+        memcpy(dst, src, bpp);
+        memcpy(dst + bpp, src, static_cast<size_t>(s.w) * bpp);
+        memcpy(dst + static_cast<size_t>(pw - 1) * bpp, src + static_cast<size_t>(s.w - 1) * bpp, bpp);
     }
     Page& page = gR.pages[static_cast<size_t>(s.page)];
     if (page.shadow.empty())
@@ -511,7 +543,7 @@ void UploadPadded(const Slot& s, const uint8_t* rgba)
         const bool timing = gR.batch < 0;
         const double t0 = timing ? NowSeconds() : 0.0;
         glBindTexture(GL_TEXTURE_2D, s.tex);
-        glTexSubImage2D(GL_TEXTURE_2D, 0, s.x - 1, s.y - 1, pw, ph, GL_RGBA, GL_UNSIGNED_BYTE, gR.padded.data());
+        glTexSubImage2D(GL_TEXTURE_2D, 0, s.x - 1, s.y - 1, pw, ph, GL_RGBA, gR.texType, gR.padded.data());
         if (timing)
         {
             gR.timedMs.push_back(static_cast<float>((NowSeconds() - t0) * 1000.0));
@@ -530,8 +562,8 @@ void UploadPadded(const Slot& s, const uint8_t* rgba)
     }
     for (int y = 0; y < ph; ++y)
     {
-        memcpy(page.shadow.data() + (static_cast<size_t>(s.y - 1 + y) * kPage + (s.x - 1)) * 4,
-               gR.padded.data() + static_cast<size_t>(y) * pw * 4, static_cast<size_t>(pw) * 4);
+        memcpy(page.shadow.data() + (static_cast<size_t>(s.y - 1 + y) * kPage + (s.x - 1)) * bpp,
+               gR.padded.data() + static_cast<size_t>(y) * pw * bpp, static_cast<size_t>(pw) * bpp);
     }
     page.dirtyTop = s.y - 1 < page.dirtyTop ? s.y - 1 : page.dirtyTop;
     page.dirtyBottom = s.y - 2 + ph > page.dirtyBottom ? s.y - 2 + ph : page.dirtyBottom;
@@ -574,14 +606,15 @@ void gta2_js_upload_texture(int id, int w, int h, const void* rgba)
             slot.h = h;
         }
     }
+    const uint8_t* texels = Pack(static_cast<const uint8_t*>(rgba), w, h);
     if (atlas)
     {
-        UploadPadded(slot, static_cast<const uint8_t*>(rgba));
+        UploadPadded(slot, texels);
     }
     else
     {
         glBindTexture(GL_TEXTURE_2D, slot.tex);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, gR.texType, texels);
         SetParams();
     }
     if (logUploads)
@@ -658,12 +691,12 @@ void Gta2Native_OverlayText(float x, float y, float px, uint32_t rgba, const cha
 // The status line (main.cpp): GPU textures alive, atlas pages, and the pixels they hold in MB.
 void Gta2Native_TextureStats(int* textures, int* pages, int* mb)
 {
-    size_t bytes = gR.pages.size() * static_cast<size_t>(kPage) * kPage * 4;
+    size_t bytes = gR.pages.size() * static_cast<size_t>(kPage) * kPage * gR.bpp;
     for (const auto& kv : gR.textures)
     {
         if (kv.second.page < 0)
         {
-            bytes += static_cast<size_t>(kv.second.w) * kv.second.h * 4;
+            bytes += static_cast<size_t>(kv.second.w) * kv.second.h * gR.bpp;
         }
     }
     *textures = static_cast<int>(gR.textures.size());
