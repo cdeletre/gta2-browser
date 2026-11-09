@@ -144,4 +144,22 @@ uint32_t gta2_port_present_count()
     return gPresents;
 }
 
+#if defined(GTA2_PORT_NATIVE)
+uint32_t Gta2Port_TexturesInUse(uint32_t* out, uint32_t capacity)
+{
+    uint32_t n = 0;
+    for (const std::vector<FrameCommand>* list : {&gCmds, &gHudCmds})
+    {
+        for (const FrameCommand& c : *list)
+        {
+            if (c.kind == 0 && n < capacity)
+            {
+                out[n++] = c.texture;
+            }
+        }
+    }
+    return n;
+}
+#endif
+
 } // extern "C"

@@ -36,4 +36,9 @@ void Gta2Port_SetFrameLayout(int32_t width, int32_t hudOffsetX);
 void Gta2Port_HudBegin();
 void Gta2Port_HudEnd();
 void Gta2Port_HudReplay();
+#if defined(GTA2_PORT_NATIVE)
+// The textures the queued draws of this frame, or the HUD kept for replay, use: these cannot be
+// freed yet (render/gbh_web.cpp). out gets the ids; returns their count.
+uint32_t Gta2Port_TexturesInUse(uint32_t* out, uint32_t capacity);
+#endif
 }

@@ -15,6 +15,7 @@
 #include <string.h>
 #include <unordered_map>
 #include <unordered_set>
+#include <algorithm>
 #include <set>
 #include <vector>
 
@@ -100,8 +101,10 @@ std::unordered_set<STexture*> gLiveTextures;
 // quarter of an hour in the menu's attract replays, until a 1 GB console ran out of memory).
 // Each GPU texture counts the game textures showing it. One that none shows any more stays
 // cached (it often comes back: digits, text) while the unshown ones total under
-// kUnshownBudget; past that the longest unshown are freed, never before the frame that last
-// drew them has been presented (the draws are queued until gta2_frame_present). The web
+// kUnshownBudget; past that the longest unshown are freed, except those a queued draw of
+// this frame or the HUD kept for interpolated draws still uses (Gta2Port_TexturesInUse:
+// the draws wait for gta2_frame_present). During a district change nothing is drawn, so the
+// old district's textures go as the new ones arrive, instead of both being held. The web
 // build has the same growth (docs/native-status.md, "Correctifs à reporter dans le build web").
 struct GpuTexture
 {
@@ -169,11 +172,23 @@ void StopShowing(STexture* t)
 
 void FreeUnshown()
 {
-    const uint32_t now = gta2_port_present_count();
-    while (gUnshownBytes > kUnshownBudget && !gUnshown.empty() && gUnshown.begin()->first < now)
+    if (gUnshownBytes <= kUnshownBudget)
     {
-        const intptr_t id = gUnshown.begin()->second;
-        gUnshown.erase(gUnshown.begin());
+        return;
+    }
+    static std::vector<uint32_t> inUse;
+    inUse.resize(65536);
+    inUse.resize(Gta2Port_TexturesInUse(inUse.data(), static_cast<uint32_t>(inUse.size())));
+    std::sort(inUse.begin(), inUse.end());
+    for (auto u = gUnshown.begin(); u != gUnshown.end() && gUnshownBytes > kUnshownBudget;)
+    {
+        const intptr_t id = u->second;
+        if (std::binary_search(inUse.begin(), inUse.end(), static_cast<uint32_t>(id)))
+        {
+            ++u; // drawn this frame, or by the HUD replay: later
+            continue;
+        }
+        u = gUnshown.erase(u);
         const auto it = gGpu.find(id);
         gUnshownBytes -= it->second.bytes;
         if (it->second.keyed)

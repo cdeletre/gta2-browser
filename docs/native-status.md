@@ -103,6 +103,18 @@ essais mesurés par SSH, binaire dans `/tmp`, cache disque vidé avant chaque es
   - RG34XX-H, 30 min de démos : 352 Mo à 2 min, 354 à 359 Mo ensuite, jusqu'à 30 min ;
     52 pages d'atlas (221 à 223 Mo de textures), environ 37 800 textures en jeu ;
   - Air X, build ASan, 12 min de démos : aucune erreur, 51 pages, 216 à 220 Mo.
+- **Ne libérer que ce qu'aucun dessin n'utilise :** une texture non affichée n'est libérée
+  que si ni les dessins en attente de l'image en cours, ni le HUD gardé pour les images
+  intermédiaires de l'interpolation (active par défaut) ne s'en servent
+  (`Gta2Port_TexturesInUse`). La première version attendait l'image suivante, ce qui gardait
+  l'ancien district pendant un chargement, et pouvait libérer une texture du HUD encore
+  rejouée. TSP S, 9 min de démos : 211 à 221 Mo de mémoire GPU hors chargement (248 avant),
+  43 pages d'atlas au lieu de 52. Air X, build ASan, 10 min : aucune erreur.
+- **Pics de Panfrost aux changements de démo (TSP S), cause non trouvée :** la mémoire GPU
+  du pilote monte à 400–435 Mo pendant environ 70 s, alors que le port ne compte que 188 Mo
+  de textures (43 pages). Il reste alors 34 à 62 Mo libres sur la console. Ce ne sont pas
+  les copies temporaires des envois de pages : un `glFinish` tous les 32 Mo n'y change rien.
+  Avant ce correctif, le jeu a été tué une fois par le noyau (OOM) à 8 min.
 - **Point ouvert :** pendant un premier essai sur la RG34XX-H (le son n'avait pas pu s'ouvrir,
   « ALSA: Host is down »), le jeu est resté bloqué dans le menu, le fil principal à 100 % dans
   l'horloge (`emscripten_get_now`), avant la première ligne d'état. Pas reproduit en deux
