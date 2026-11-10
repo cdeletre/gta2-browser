@@ -149,6 +149,10 @@ const server = createServer(async (req, res) => {
       res.writeHead(result.ok ? 200 : 400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
       return res.end(JSON.stringify(result));
     }
+    if (url.pathname === '/games' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      return res.end(JSON.stringify(gamesNow()));
+    }
     if (url.pathname === '/config.json') {
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
       return res.end(JSON.stringify({ server: true, relay: '/relay', invite: PASSWORD ? INVITE : null }));
@@ -211,6 +215,78 @@ function readBody(req, limit) {
 
 const rooms = new Map(); // room -> Map(id -> socket)
 const MAX_ROOM = 12;
+
+// ---- the games in each room (GET /games), read from the lobby messages the relay passes on ----
+//
+// No message of the protocol is added: the host's roster gives the players and the settings,
+// a player's hello its name before that, start and go the match, sync (every 90 ticks) its tick.
+// A room with no one left is gone; a roster from someone who was not in the match (the players
+// come back to the lobby after it) puts the room back in its lobby.
+
+const games = new Map(); // room -> what it does
+const SETTINGS = ['mode', 'district', 'friendlyFire', 'minutes', 'killLimit', 'pointsTarget'];
+const clean = (v, n = 16) => String(v ?? '').replace(/[\u0000-\u001f]/g, '').slice(0, n);
+
+function gameOf(room) {
+  let g = games.get(room);
+  if (!g) {
+    g = { state: 'lobby', host: null, players: [], settings: {}, names: new Map(), since: Date.now(), startedAt: null, tick: 0, inMatch: new Set() };
+    games.set(room, g);
+  }
+  return g;
+}
+
+function watch(room, from, data) {
+  if (!data || typeof data !== 'object' || typeof data.lobby !== 'string') return;
+  const g = gameOf(room);
+  if (data.lobby === 'hello') {
+    g.names.set(from, clean(data.name));
+  } else if (data.lobby === 'roster' && Array.isArray(data.players)) {
+    if (g.state !== 'lobby' && !g.inMatch.has(from)) {
+      // after a match: its players are back in the room's lobby
+      Object.assign(g, { state: 'lobby', since: Date.now(), startedAt: null, tick: 0, inMatch: new Set() });
+    }
+    if (g.state === 'lobby') {
+      g.host = from;
+      g.players = data.players.slice(0, MAX_ROOM).map((p) => ({ id: clean(p && p.id, 64), name: clean(p && p.name), crew: clean(p && p.crew) }));
+      const s = data.settings && typeof data.settings === 'object' ? data.settings : {};
+      g.settings = Object.fromEntries(SETTINGS.filter((k) => k in s && ['string', 'number', 'boolean'].includes(typeof s[k])).map((k) => [k, typeof s[k] === 'string' ? clean(s[k]) : s[k]]));
+    }
+  } else if (data.lobby === 'start' && from === g.host && g.state === 'lobby') {
+    Object.assign(g, { state: 'starting', since: Date.now(), inMatch: new Set(g.players.map((p) => p.id)) });
+  } else if (data.lobby === 'go' && from === g.host && g.state === 'starting') {
+    Object.assign(g, { state: 'playing', since: Date.now(), startedAt: Date.now() });
+  } else if (data.lobby === 'sync' && g.state === 'playing' && Number.isFinite(data.tick)) {
+    g.tick = Math.max(g.tick, Math.floor(data.tick));
+  }
+}
+
+function gamesNow() {
+  const now = Date.now();
+  const out = [];
+  for (const [room, members] of rooms) {
+    const g = games.get(room) || gameOf(room);
+    const here = new Set(members.keys());
+    // the roster's players still connected; before any roster, those who said hello
+    const players = g.players.length
+      ? g.players.filter((p) => here.has(p.id)).map(({ name, crew }) => ({ name, crew }))
+      : [...here].map((id) => ({ name: g.names.get(id) || '', crew: '' }));
+    const host = g.players.find((p) => p.id === g.host);
+    out.push({
+      room,
+      state: g.state, // lobby, starting, playing
+      host: host && here.has(g.host) ? host.name : null,
+      players,
+      connected: members.size,
+      settings: g.settings,
+      since: new Date(g.since).toISOString(),
+      playingSeconds: g.startedAt ? Math.round((now - g.startedAt) / 1000) : null,
+      tick: g.state === 'playing' ? g.tick : null,
+    });
+  }
+  out.sort((a, b) => (a.state === b.state ? a.room.localeCompare(b.room) : a.state === 'playing' ? -1 : 1));
+  return { rooms: out, now: new Date(now).toISOString() };
+}
 const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
 
 server.on('upgrade', (req, socket, head) => {
@@ -255,6 +331,7 @@ function relay(ws) {
       members.set(id, ws);
       rooms.set(room, members);
     } else if (room && ['msg', 'ping', 'pong'].includes(m.t)) {
+      if (m.t === 'msg') watch(room, id, m.data);
       const out = JSON.stringify({ ...m, from: id });
       for (const [, peer] of target(m.to)) peer.send(out);
     }
@@ -264,7 +341,10 @@ function relay(ws) {
     const members = rooms.get(room);
     if (!members) return;
     members.delete(id);
-    if (!members.size) rooms.delete(room);
+    if (!members.size) {
+      rooms.delete(room);
+      games.delete(room);
+    }
     for (const [, peer] of members) peer.send(JSON.stringify({ t: 'left', id }));
   });
 }

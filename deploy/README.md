@@ -143,6 +143,28 @@ GTA2_PASSWORD=local-test node server/server.mjs    # http://127.0.0.1:8790
 
 Without `GTA2_PASSWORD` the server only listens on this computer.
 
+## The games in progress (`GET /games`)
+
+Behind the login, like everything else. The relay reads the lobby messages it passes on (the
+host's roster, a player's hello, start, go, sync every 90 ticks): no message is added to the
+protocol, so browsers and `gta2-mp` of any version show up.
+
+```json
+{ "rooms": [ { "room": "ROOM1", "state": "playing", "host": "Kdog",
+               "players": [ { "name": "Kdog", "crew": "" }, { "name": "Nina", "crew": "" } ],
+               "connected": 2,
+               "settings": { "mode": "ffa", "district": "downtown", "killLimit": 10, ... },
+               "since": "2026-11-10T16:33:36.393Z", "playingSeconds": 26, "tick": 720 } ],
+  "now": "2026-11-10T16:34:02.813Z" }
+```
+
+- `state`: `lobby`, `starting` (everyone loading) or `playing`. Rooms in play come first.
+- `players`: those of the host's roster still connected. A host alone in its room has sent
+  nothing yet, so its name is empty until someone joins.
+- `tick` comes from the sync checks, so it moves every 3 seconds.
+- A room with no one left is gone. After a match, a roster from someone who was not in it (the
+  players come back to the lobby) puts the room back in `lobby`.
+
 ## Settings (environment)
 
 | Variable | Default | Meaning |
