@@ -153,6 +153,8 @@ NetConfig LoadNetConfig(const std::string& confDir)
                 room = value;
             else if (key == "crews")
                 crews = value;
+            else if (key == "crew")
+                c.crew = value.substr(0, 16);
             else if (key == "show_chat")
                 c.showChat = value != "0" && value != "off" && value != "false";
             else if (key == "show_waypoints")
@@ -209,6 +211,8 @@ void SaveNetConfig(const NetConfig& c)
         << "rooms = " << JoinList(c.rooms) << "\n"
         << "room = " << c.room << "\n"
         << "crews = " << JoinList(c.crews) << "\n"
+        << "# the crew joined last, joined again on entering a room (as the browser does)\n"
+        << "crew = " << c.crew << "\n"
         << "# in a match: Select + up, down, left, right sends one of these\n"
         << "chat_up = " << c.chat[0] << "\n"
         << "chat_down = " << c.chat[1] << "\n"

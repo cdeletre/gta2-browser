@@ -990,6 +990,18 @@ tard le match se termine (classement final « … win the Gang War », puis le l
 conteneur (`GTA2_NET_POINTS=100`, soak) : victoire annoncée à 102 points, fin du match 6 s
 après.
 
+**Gang Wars, équipes dans le lobby (9 novembre)** : comme les cartes du navigateur. Une ligne
+par équipe, dans la couleur de son gang, avec ses membres (« * » : la sienne) ; A la rejoint ou
+la quitte ; gauche/droite changent son gang, pour ses membres ou, pour toute équipe, l'hôte
+(`Lobby::HostSetSide`, mêmes refus que le choix d'un membre : gang du district, pas déjà pris) ;
+un gang tenu par une autre équipe est sauté. « New crew » propose les noms de `net.ini` (`crews`)
+non utilisés puis « Type a name… » (clavier à l'écran) ; A crée l'équipe et la rejoint. Une
+ligne nomme les joueurs sans équipe ; une équipe vide disparaît (les équipes viennent des
+joueurs). L'équipe rejointe en dernier est gardée (`crew` dans `net.ini`) et rejointe en entrant
+dans une salle, comme le navigateur. La liste défile quand elle dépasse l'écran ; l'aide suit la
+ligne choisie. Vu dans le conteneur (captures) : équipe d'un invité rejointe, créée depuis New
+crew, gang imposé par l'hôte à l'équipe d'un invité, gang pris sauté ; tests unitaires (109).
+
 Reste : A5 (consoles), A6 (`wss://` si le serveur public est en HTTPS), A7 (scores, chat,
 points de passage), puis D1-D4 (transport TCP local, découverte UDP, consoles, paquet).
 

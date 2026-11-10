@@ -23,6 +23,7 @@ struct NetConfig
     std::vector<std::string> rooms;  // the rooms to pick from
     std::string room;                // the last one used
     std::vector<std::string> crews;  // Gang Wars crew names to pick from
+    std::string crew;                // the crew joined last (joined again on entering a room)
     std::string chat[4];             // the quick messages: Select + up, down, left, right
     bool showChat = true;            // other players' chat messages on screen (Options)
     bool showWaypoints = true;       // other players' waypoints on screen (Options)

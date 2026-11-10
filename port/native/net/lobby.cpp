@@ -397,7 +397,20 @@ void Lobby::ApplySide(const std::string& from, const std::string& side)
     {
         return;
     }
-    const std::string crew = (*p)["crew"].Str();
+    SetCrewSide((*p)["crew"].Str(), side);
+}
+
+void Lobby::HostSetSide(const std::string& crew, const std::string& side)
+{
+    if (mHost && !crew.empty())
+    {
+        SetCrewSide(crew, side);
+    }
+}
+
+// A crew's gang, with the same checks for a member's choice and the host's.
+void Lobby::SetCrewSide(const std::string& crew, const std::string& side)
+{
     const Gang* gangs = GangsOf(mSettings["district"].Str());
     bool valid = side.empty();
     for (int g = 0; g < 3; ++g)

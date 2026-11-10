@@ -85,6 +85,9 @@ class Lobby
     Json Crews() const;
     // This player's crew sides with a gang ("" to clear).
     void PickSide(const std::string& side);
+    // Host: any crew sides with a gang ("" to clear), as the browser's host can set it; refused
+    // when the gang is not this district's or another crew has it.
+    void HostSetSide(const std::string& crew, const std::string& side);
     // Host: why the match cannot start yet ("" when it can): waitingPlayer, needCrew,
     // twoCrews, threeCrews, or "waitingGang:" followed by the crews' names.
     std::string StartProblem() const;
@@ -114,6 +117,7 @@ class Lobby
     void OnMessage(const std::string& from, const Message& m);
     void BroadcastRoster();
     void ApplySide(const std::string& from, const std::string& side);
+    void SetCrewSide(const std::string& crew, const std::string& side);
     void Left(const std::string& id);
     void Begin(Json match);
     void CheckLoaded();

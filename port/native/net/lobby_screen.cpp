@@ -56,6 +56,9 @@ struct Item
     std::function<void(int)> change;    // left/right (-1, +1); null: not changeable
     std::function<void()> act;          // A; null: A changes it forward
     std::function<void()> remove;       // X; null: nothing to delete
+    uint32_t colour = 0;                // 0: the screen's; else the line's own (a crew's gang)
+    bool info = false;                  // a line to read, not to choose
+    std::string help;                   // the help line while it is chosen ("" for the default)
 };
 
 struct Screen
@@ -75,6 +78,9 @@ struct Screen
     bool otherHost = false; // host: someone else hosts this room too
     bool nameDefault = false; // the Name line shows its "DEFAULT" entry
     bool roomDefault = false; // the Room line shows its "DEFAULT" entry
+    int newCrew = 0;          // New crew: the name offered (an index; past the names: type one)
+    bool crewSent = false;    // the crew joined last went to the host
+    int scroll = 0;           // the first line shown
 };
 Screen gS;
 
@@ -155,6 +161,8 @@ void Leave(const std::string& why, bool error)
 
 void Enter(bool host)
 {
+    gS.crewSent = false;
+    gS.scroll = 0;
     gS.nameDefault = false;
     gS.roomDefault = false;
     std::string error;
@@ -211,6 +219,120 @@ void Forget(std::vector<std::string>& list, std::string& current, bool onDefault
     list.erase(pos);
     current = list[std::min(i, list.size() - 1)];
     SaveNetConfig(*gS.config);
+}
+
+// "#rrggbb" as the overlay's colour (ABGR).
+uint32_t Colour(const std::string& hex)
+{
+    if (hex.size() != 7 || hex[0] != '#')
+        return 0;
+    const unsigned v = static_cast<unsigned>(strtoul(hex.c_str() + 1, nullptr, 16));
+    return 0xff000000u | ((v & 0xff) << 16) | (v & 0xff00) | ((v >> 16) & 0xff);
+}
+
+// This player joins a crew ("" leaves it), remembered for the next room.
+void JoinCrew(const std::string& name)
+{
+    gLobby->SetCrew(name);
+    gS.config->crew = CleanCrew(name);
+    SaveNetConfig(*gS.config);
+}
+
+// Gang Wars: the crews as the browser shows them (web/shell.js render): one line each, in its
+// gang's colour, with its members; A joins it (or leaves it, for this player's own); left/right
+// change its gang, for its members, or for any crew by the host; a gang another crew has is
+// skipped. Then New crew (a name from conf/net.ini's crews not in use, or one typed) and who has
+// no crew yet. A crew with no one left is gone (crews come from the players).
+void CrewLines(std::vector<Item>& it, bool host)
+{
+    const Json& s = gLobby->Settings();
+    const Json crews = gLobby->Crews();
+    const Json* me = Me();
+    const std::string mine = me ? (*me)["crew"].Str() : "";
+    const Gang* gangs = GangsOf(s["district"].Str());
+    it.push_back({"-- Crews --", nullptr, nullptr, nullptr, nullptr, 0, true});
+    for (const Json& cr : crews.Items())
+    {
+        const std::string name = cr["name"].Str();
+        const std::string side = cr["side"].IsString() ? cr["side"].Str() : "";
+        const bool member = name == mine;
+        std::string members;
+        for (const Json& id : cr["members"].Items())
+            for (const Json& p : gLobby->Players().Items())
+                if (p["id"].Str() == id.Str())
+                    members += (members.empty() ? "" : ", ") + p["name"].Str();
+        // the gangs this crew may take: none, or one no other crew has
+        std::vector<std::string> options = {""};
+        for (int g = 0; g < 3; ++g)
+        {
+            bool held = false;
+            for (const Json& o : crews.Items())
+                held = held || (o["name"].Str() != name && o["side"].Str() == gangs[g].code && o["side"].IsString());
+            if (!held)
+                options.push_back(gangs[g].code);
+        }
+        const std::string gangName = cr["gang"].IsString() ? cr["gang"].Str() : std::string("no gang");
+        Item line;
+        line.label = (member ? "* " : "  ") + name + ": " + members;
+        line.value = [gangName] { return gangName; };
+        if (member || host)
+        {
+            line.change = [options, side, name, member](int d) {
+                auto pos = std::find(options.begin(), options.end(), side);
+                const int i = pos == options.end() ? 0 : static_cast<int>(pos - options.begin());
+                const std::string next = options[static_cast<size_t>(Wrap(i + d, static_cast<int>(options.size())))];
+                if (member)
+                    gLobby->PickSide(next);
+                else
+                    gLobby->HostSetSide(name, next);
+            };
+        }
+        line.act = [name, member] { JoinCrew(member ? "" : name); };
+        line.colour = Colour(cr["colour"].Str());
+        line.help = std::string(member ? "A: leave" : "A: join") + (member || host ? "  Left/right: gang" : "");
+        it.push_back(line);
+    }
+    // New crew: the names of conf/net.ini not in use, then "Type a name..."
+    std::vector<std::string> offered;
+    for (const std::string& n : gS.config->crews)
+    {
+        bool used = false;
+        for (const Json& cr : crews.Items())
+            used = used || cr["name"].Str() == CleanCrew(n);
+        if (!used)
+            offered.push_back(n);
+    }
+    const int count = static_cast<int>(offered.size()) + 1;
+    gS.newCrew = std::min(gS.newCrew, count - 1);
+    const bool typing = gS.newCrew == count - 1;
+    const std::string candidate = typing ? std::string("Type a name...") : offered[static_cast<size_t>(gS.newCrew)];
+    Item add;
+    add.label = "New crew";
+    add.value = [candidate] { return candidate; };
+    add.change = [count](int d) { gS.newCrew = Wrap(gS.newCrew + d, count); };
+    add.act = [typing, candidate] {
+        if (!typing)
+        {
+            JoinCrew(candidate);
+            return;
+        }
+        Gta2Native_OskStart("New crew", "", 16, [](bool ok, const char* text) {
+            const std::string name = CleanCrew(text);
+            if (ok && !name.empty())
+            {
+                RememberIn(gS.config->crews, name);
+                JoinCrew(name);
+            }
+        });
+    };
+    add.help = "A: create  Left/right: name";
+    it.push_back(add);
+    std::string loners;
+    for (const Json& p : gLobby->Players().Items())
+        if (p["crew"].Str().empty())
+            loners += (loners.empty() ? "" : ", ") + p["name"].Str();
+    if (!loners.empty())
+        it.push_back({"No crew yet: " + loners, nullptr, nullptr, nullptr, nullptr, 0, true});
 }
 
 // The lines of the current phase.
@@ -319,37 +441,7 @@ void BuildItems()
         it.push_back({"Points target", [points] { return points > 0 ? MoneyText(points) : std::string("None"); },
                       hostOnly([pi](int d) { SetSetting("pointsTarget", kPoints[Wrap(pi + d, 8)]); }),
                       nullptr});
-        const Json* me = Me();
-        const std::string crew = me ? (*me)["crew"].Str() : "";
-        std::vector<std::string> crews = {""};
-        crews.insert(crews.end(), c.crews.begin(), c.crews.end());
-        auto pos = std::find(crews.begin(), crews.end(), crew);
-        if (pos == crews.end())
-        {
-            crews.push_back(crew); // a crew from a browser's list
-            pos = crews.end() - 1;
-        }
-        const int ci = static_cast<int>(pos - crews.begin());
-        it.push_back({"Crew", [crew] { return crew.empty() ? std::string("None") : crew; },
-                      [crews, ci](int d) { gLobby->SetCrew(crews[Wrap(ci + d, static_cast<int>(crews.size()))]); },
-                      nullptr});
-        if (!crew.empty())
-        {
-            const Gang* gangs = GangsOf(s["district"].Str());
-            std::string side;
-            for (const Json& cr : gLobby->Crews().Items())
-                if (cr["name"].Str() == crew)
-                    side = cr["side"].Str();
-            int gi = 0;
-            for (int g = 0; g < 3; ++g)
-                gi = side == gangs[g].code ? g + 1 : gi;
-            it.push_back({"Crew's gang", [gangs, gi] { return gi ? std::string(gangs[gi - 1].name) : std::string("None"); },
-                          [gangs, gi](int d) {
-                              const int n = Wrap(gi + d, 4);
-                              gLobby->PickSide(n ? gangs[n - 1].code : "");
-                          },
-                          nullptr});
-        }
+        CrewLines(it, host);
     }
     if (host)
     {
@@ -376,8 +468,16 @@ void Input(int action)
     Item& item = gS.items[static_cast<size_t>(gS.line)];
     switch (action)
     {
-        case 0: gS.line = Wrap(gS.line - 1, n); break;
-        case 1: gS.line = Wrap(gS.line + 1, n); break;
+        case 0:
+        case 1:
+            // the next line that can be chosen (lines to read are passed over)
+            for (int k = 0; k < n; ++k)
+            {
+                gS.line = Wrap(gS.line + (action == 0 ? -1 : 1), n);
+                if (!gS.items[static_cast<size_t>(gS.line)].info)
+                    break;
+            }
+            break;
         case 2:
         case 3:
             if (item.change)
@@ -464,23 +564,43 @@ void Draw(int dw, int dh)
     {
         const int n = static_cast<int>(gS.items.size());
         gS.line = std::min(gS.line, std::max(0, n - 1));
-        for (int i = 0; i < n; ++i, y += lineH)
+        while (gS.line < n - 1 && gS.items[static_cast<size_t>(gS.line)].info)
+            ++gS.line; // never on a line to read
+        // as many lines as fit above the hints; scrolled to keep the chosen one in view
+        const float listBottom = (dh + kRows * lineH) / 2 - 4 * lineH;
+        const int fits = std::max(3, static_cast<int>((listBottom - y) / lineH));
+        if (gS.line < gS.scroll)
+            gS.scroll = gS.line;
+        if (gS.line >= gS.scroll + fits)
+            gS.scroll = gS.line - fits + 1;
+        gS.scroll = std::max(0, std::min(gS.scroll, std::max(0, n - fits)));
+        if (gS.scroll > 0)
+            Gta2Native_OverlayText(x0 + width - cell, y - lineH, px, kGrey, "^");
+        for (int i = gS.scroll; i < n && i < gS.scroll + fits; ++i, y += lineH)
         {
             const Item& item = gS.items[static_cast<size_t>(i)];
             const bool sel = i == gS.line;
             if (sel)
                 Gta2Native_OverlayRect(x0 - cell, y - 3 * px, width + 2 * cell, lineH, kBar);
-            const uint32_t colour = sel ? kYellow : item.change || item.act ? kWhite : kGrey;
-            Gta2Native_OverlayText(x0, y, px, colour, item.label.c_str());
+            const uint32_t colour = item.info ? kGrey
+                : sel                         ? kYellow
+                : item.colour                 ? item.colour
+                : item.change || item.act     ? kWhite
+                                              : kGrey;
+            // crew lines carry players' names: as typed
+            (item.colour || item.info ? Gta2Native_OverlayTextExact : Gta2Native_OverlayText)(
+                x0, y, px, colour, item.label.substr(0, item.value ? 30 : kCols).c_str());
             const std::string value = item.value ? item.value() : "";
             if (!value.empty())
             {
                 snprintf(buf, sizeof(buf), sel && item.change ? "< %s >" : "%s", value.c_str());
                 // a name as typed (lower case too); the other values in the screen's capitals
-                (item.label == "Name" ? Gta2Native_OverlayTextExact : Gta2Native_OverlayText)(
+                (item.label == "Name" || item.label == "New crew" ? Gta2Native_OverlayTextExact : Gta2Native_OverlayText)(
                     x0 + width - static_cast<float>(strlen(buf)) * cell, y, px, colour, buf);
             }
         }
+        if (gS.scroll + fits < n)
+            Gta2Native_OverlayText(x0 + width - cell, y, px, kGrey, "v");
     }
     const float bottom = (dh + kRows * lineH) / 2 - 2 * lineH;
     // hints for the two ways a room goes wrong
@@ -505,6 +625,11 @@ void Draw(int dw, int dh)
     }
     if (!gS.message.empty())
         Gta2Native_OverlayText(x0, bottom, px, gS.messageError ? kRed : kGrey, gS.message.substr(0, kCols).c_str());
+    const std::string& lineHelp =
+        gS.line < static_cast<int>(gS.items.size()) ? gS.items[static_cast<size_t>(gS.line)].help : std::string();
+    if (!lineHelp.empty() && gS.phase == kRoom)
+        Gta2Native_OverlayText(x0, bottom + lineH, px, kGrey, (lineHelp + "  B: leave").substr(0, kCols).c_str());
+    else
     Gta2Native_OverlayText(x0, bottom + lineH, px, kGrey,
                            gS.phase == kRoom ? "A: choose  Left/right: change  B: leave"
                                               : "A: choose/type  Left/right: change  X: delete");
@@ -581,6 +706,12 @@ bool Frame()
         {
             Leave("Lost the connection to the server.", true);
         }
+    }
+    if (gLobby && gS.phase == kRoom && !gS.crewSent && !gS.config->crew.empty() &&
+        (gLobby->IsHost() || !gLobby->HostId().empty()))
+    {
+        gS.crewSent = true;
+        gLobby->SetCrew(gS.config->crew); // the crew joined last, as the browser does
     }
     if (gLobby && gLobby->IsHost() && gS.phase == kRoom && NowMs() - gS.lastPing > 2000)
     {

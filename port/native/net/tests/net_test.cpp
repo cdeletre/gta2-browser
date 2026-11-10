@@ -212,6 +212,27 @@ void TestLobby()
     CHECK(!host.Settings()["sides"].Has("Red Team"));
     b.PickSide("rus");
     room.Poll();
+    // the host sets a guest crew's gang (a taken one is refused), then gives it back
+    host.HostSetSide("Blue", "rus");
+    CHECK_EQ(host.Settings()["sides"]["Blue"].Str(), std::string("kri"));
+    host.HostSetSide("Blue", "");
+    room.Poll();
+    CHECK(!c.Settings()["sides"].Has("Blue"));
+    host.HostSetSide("Blue", "zai");
+    room.Poll();
+    CHECK_EQ(c.Crews()[1]["gang"].Str(), std::string("Zaibatsu"));
+    b.HostSetSide("Reds", ""); // not the host: nothing
+    room.Poll();
+    CHECK_EQ(host.Settings()["sides"]["Red Team"].Str(), std::string("rus"));
+    // a player switching crews: the crew left empty is gone
+    c.SetCrew("Red Team");
+    room.Poll();
+    CHECK_EQ(host.Crews().size(), size_t(1));
+    c.SetCrew("Blue");
+    room.Poll();
+    CHECK_EQ(host.Crews().size(), size_t(2));
+    host.HostSetSide("Blue", "kri");
+    room.Poll();
 
     // pings set the input delay (40 ms of latency: about 80 ms round trip -> 2 ticks)
     room.hub.latencyMs = 40;
