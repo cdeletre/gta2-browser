@@ -1010,6 +1010,21 @@ function watchCoop(Module, coop) {
   const banner = $('coop-banner');
   const name = (slot) => (players[slot] ? players[slot].name : t('shell.playerN', { n: slot + 1 }));
   const history = Module.cwrap('gta2_dev_sync_history', 'number', []);
+  const scores = Module.cwrap('gta2_port_coop_scores', 'number', []);
+  let lastScore = 0;
+  // every 150 ticks, the standings at that tick to the game server (lobby.reportScore)
+  const reportScores = () => {
+    const p = scores();
+    const ROW = 1 + 6 * 3;
+    const v = Module.HEAP32.subarray(p >> 2, (p >> 2) + 8 * ROW);
+    const due = [];
+    for (let i = 0; i < 8; i++) if (v[i * ROW] > lastScore) due.push(i * ROW);
+    due.sort((a, b) => v[a] - v[b]);
+    for (const o of due) {
+      lobby.reportScore(v[o], players.map((pl, s) => ({ id: pl.id, kills: v[o + 1 + s * 3], deaths: v[o + 2 + s * 3], points: v[o + 3 + s * 3] })));
+      lastScore = v[o];
+    }
+  };
   const netDebug = Module.cwrap('gta2_port_net_debug', 'number', []);
   const EVERY = 90;
   const mine = new Map();   // tick -> checksum
@@ -1049,6 +1064,7 @@ function watchCoop(Module, coop) {
       compare(tick);
     }
     for (const t of [...mine.keys()]) if (t < lastSent - EVERY * 20) { mine.delete(t); theirs.delete(t); }
+    reportScores();
     // who are we waiting for?
     const p = netDebug();
     const v = Module.HEAP32.subarray(p >> 2, (p >> 2) + 10);

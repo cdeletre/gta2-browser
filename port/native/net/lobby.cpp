@@ -684,6 +684,15 @@ void Lobby::SendChat(const std::string& text)
     }
 }
 
+void Lobby::ReportScore(int tick, const Json& players)
+{
+    Json msg = Json::Object();
+    msg.Set("lobby", "score");
+    msg.Set("tick", tick);
+    msg.Set("players", players);
+    mT->Send("@server", Message::Of(msg));
+}
+
 void Lobby::ShareSync(int tick, const std::string& h)
 {
     Json msg = Json::Object();

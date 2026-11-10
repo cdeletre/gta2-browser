@@ -221,14 +221,28 @@ const MAX_ROOM = 12;
 
 // ---- the games in each room (GET /games), read from the lobby messages the relay passes on ----
 //
-// No message of the protocol is added: the host's roster gives the players and the settings,
-// a player's hello its name before that, start and go the match, sync (every 90 ticks) its tick.
-// A room with no one left is gone; a roster from someone who was not in the match (the players
-// come back to the lobby after it) puts the room back in its lobby.
+// The host's roster gives the players and the settings, a player's hello its name before that,
+// start and go the match, sync (every 90 ticks) its tick. A room with no one left is gone; a
+// roster from someone who was not in the match (the players come back to the lobby after it)
+// puts the room back in its lobby.
+//
+// The score: every 150 ticks (5 s), each player reports the standings at that tick
+// ({lobby: 'score', tick, players: [{id, kills, deaths, points}]}) to "@server", which is no one
+// in the room: the relay reads it and passes it on to no one. Lockstep makes every player's
+// report of a tick the same, so they are compared: the score shown is the one most players
+// sent for the latest tick, confirmed once two agree; reports that differ are a drift (or a
+// client that lies) and are flagged. A report is taken only from a player of the match, while
+// it plays, for a tick that is a multiple of 150, not older than the score shown, and not
+// ahead of the match (its sync ticks, or 30 ticks a second since go, give or take 10 s).
 
 const games = new Map(); // room -> what it does
+const recent = [];       // the last finished matches with a score, newest first
 const SETTINGS = ['mode', 'district', 'friendlyFire', 'minutes', 'killLimit', 'pointsTarget'];
+const SCORE_EVERY = 150;
+const RECENT_KEPT = 10;
+const RECENT_FOR = 60 * 60 * 1000;
 const clean = (v, n = 16) => String(v ?? '').replace(/[\u0000-\u001f]/g, '').slice(0, n);
+const int = (v, lo, hi) => (Number.isInteger(v) && v >= lo && v <= hi ? v : null);
 
 function gameOf(room) {
   let g = games.get(room);
@@ -239,6 +253,50 @@ function gameOf(room) {
   return g;
 }
 
+// A match that had a score goes to the recent ones (it ended, or its room emptied).
+function finish(room, g) {
+  if (!g.score || !g.startedAt) return;
+  recent.unshift({ room, endedAt: Date.now(), settings: g.settings, playingSeconds: Math.round((g.lastActive - g.startedAt) / 1000), score: scoreView(g) });
+  recent.splice(RECENT_KEPT);
+}
+
+function scoreView(g) {
+  if (!g.score) return null;
+  const who = new Map(g.matchPlayers.map((p) => [p.id, p]));
+  return {
+    tick: g.score.tick,
+    confirmed: g.score.votes >= 2,
+    reporters: g.score.votes,
+    disagree: g.score.disagree,
+    players: g.score.players.map(([id, kills, deaths, points]) => ({ name: (who.get(id) || {}).name || '', crew: (who.get(id) || {}).crew || '', kills, deaths, points })),
+  };
+}
+
+function takeScore(g, from, data) {
+  if (g.state !== 'playing' || !g.inMatch.has(from)) return;
+  const tick = int(data.tick, SCORE_EVERY, 1e9);
+  if (tick === null || tick % SCORE_EVERY || (g.score && tick < g.score.tick)) return;
+  const ahead = Math.max(g.tick, ((Date.now() - g.startedAt) / 1000) * 30) + 300;
+  if (tick > ahead || !Array.isArray(data.players) || data.players.length > MAX_ROOM) return;
+  const rows = [];
+  for (const p of data.players) {
+    const row = p && typeof p === 'object' ? [clean(p.id, 64), int(p.kills, -9999, 9999), int(p.deaths, 0, 9999), int(p.points, -1e9, 1e9)] : null;
+    if (!row || !g.inMatch.has(row[0]) || row.slice(1).includes(null)) return;
+    rows.push(row);
+  }
+  const reports = g.reports.get(tick) || new Map();
+  if (reports.has(from)) return; // one report per player and tick
+  reports.set(from, JSON.stringify(rows));
+  g.reports.set(tick, reports);
+  for (const t of g.reports.keys()) if (t < tick - SCORE_EVERY * 4) g.reports.delete(t);
+  // the version most players sent for this tick
+  const votes = new Map();
+  for (const key of reports.values()) votes.set(key, (votes.get(key) || 0) + 1);
+  const [best, n] = [...votes].sort((x, y) => y[1] - x[1])[0];
+  g.score = { tick, players: JSON.parse(best), votes: n, disagree: votes.size > 1 ? { tick, versions: votes.size } : (g.score && g.score.disagree) || null };
+  g.lastActive = Date.now();
+}
+
 function watch(room, from, data) {
   if (!data || typeof data !== 'object' || typeof data.lobby !== 'string') return;
   const g = gameOf(room);
@@ -247,7 +305,8 @@ function watch(room, from, data) {
   } else if (data.lobby === 'roster' && Array.isArray(data.players)) {
     if (g.state !== 'lobby' && !g.inMatch.has(from)) {
       // after a match: its players are back in the room's lobby
-      Object.assign(g, { state: 'lobby', since: Date.now(), startedAt: null, tick: 0, inMatch: new Set() });
+      finish(room, g);
+      Object.assign(g, { state: 'lobby', since: Date.now(), startedAt: null, tick: 0, inMatch: new Set(), score: null });
     }
     if (g.state === 'lobby') {
       g.host = from;
@@ -256,11 +315,14 @@ function watch(room, from, data) {
       g.settings = Object.fromEntries(SETTINGS.filter((k) => k in s && ['string', 'number', 'boolean'].includes(typeof s[k])).map((k) => [k, typeof s[k] === 'string' ? clean(s[k]) : s[k]]));
     }
   } else if (data.lobby === 'start' && from === g.host && g.state === 'lobby') {
-    Object.assign(g, { state: 'starting', since: Date.now(), inMatch: new Set(g.players.map((p) => p.id)) });
+    Object.assign(g, { state: 'starting', since: Date.now(), inMatch: new Set(g.players.map((p) => p.id)), matchPlayers: g.players.slice(), score: null, reports: new Map() });
   } else if (data.lobby === 'go' && from === g.host && g.state === 'starting') {
-    Object.assign(g, { state: 'playing', since: Date.now(), startedAt: Date.now() });
+    Object.assign(g, { state: 'playing', since: Date.now(), startedAt: Date.now(), lastActive: Date.now() });
   } else if (data.lobby === 'sync' && g.state === 'playing' && Number.isFinite(data.tick)) {
     g.tick = Math.max(g.tick, Math.floor(data.tick));
+    g.lastActive = Date.now();
+  } else if (data.lobby === 'score') {
+    takeScore(g, from, data);
   }
 }
 
@@ -275,20 +337,25 @@ function gamesNow() {
       ? g.players.filter((p) => here.has(p.id)).map(({ name, crew }) => ({ name, crew }))
       : [...here].map((id) => ({ name: g.names.get(id) || '', crew: '' }));
     const host = g.players.find((p) => p.id === g.host);
+    // a match whose players stopped sending anything for 30 s is over (they are on its results)
+    const state = g.state === 'playing' && now - g.lastActive > 30000 ? 'ended' : g.state;
     out.push({
       room,
-      state: g.state, // lobby, starting, playing
+      state, // lobby, starting, playing, ended
       host: host && here.has(g.host) ? host.name : null,
       players,
       connected: members.size,
       settings: g.settings,
       since: new Date(g.since).toISOString(),
-      playingSeconds: g.startedAt ? Math.round((now - g.startedAt) / 1000) : null,
+      playingSeconds: g.startedAt ? Math.round(((state === 'ended' ? g.lastActive : now) - g.startedAt) / 1000) : null,
       tick: g.state === 'playing' ? g.tick : null,
+      score: g.state === 'playing' ? scoreView(g) : null,
     });
   }
-  out.sort((a, b) => (a.state === b.state ? a.room.localeCompare(b.room) : a.state === 'playing' ? -1 : 1));
-  return { rooms: out, now: new Date(now).toISOString() };
+  const order = { playing: 0, ended: 1, starting: 2, lobby: 3 };
+  out.sort((a, b) => order[a.state] - order[b.state] || a.room.localeCompare(b.room));
+  while (recent.length && now - recent[recent.length - 1].endedAt > RECENT_FOR) recent.pop();
+  return { rooms: out, recent: recent.map((r) => ({ ...r, endedAt: new Date(r.endedAt).toISOString() })), now: new Date(now).toISOString() };
 }
 const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
 
@@ -346,6 +413,7 @@ function relay(ws) {
     members.delete(id);
     if (!members.size) {
       rooms.delete(room);
+      if (games.has(room)) finish(room, games.get(room));
       games.delete(room);
     }
     for (const [, peer] of members) peer.send(JSON.stringify({ t: 'left', id }));

@@ -498,6 +498,16 @@ export class CoopLobby {
   }
 
   /** A checksum of this player's game at a tick, for the others to compare. */
+  /**
+   * The standings at a score tick (every 150), for the game server only: "@server" is no one in
+   * the room, so the relay passes it on to no one (server/server.mjs compares the players'
+   * reports for GET /games). Not over WebRTC or between tabs: there is no server to tell.
+   * players: [{id, kills, deaths, points}] in slot order.
+   */
+  reportScore(tick, players) {
+    if (this.slots && this.t instanceof ServerTransport) this.t.send('@server', { lobby: 'score', tick, players });
+  }
+
   shareSync(tick, h) {
     if (!this.slots) return;
     for (const id of Object.keys(this.slots)) if (id !== this.t.id) this.t.send(id, { lobby: 'sync', tick, h });

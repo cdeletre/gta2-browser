@@ -1105,6 +1105,17 @@ serveur ouvert, `wss://`, serveur absent), aussi sous ASan + UBSan ; captures : 
 fenêtre du mot de passe, « pw » tapé, connecté, écrit dans `net.ini`, salle créée ; lobby
 automatique à deux joueurs inchangé.
 
+**Parties en cours et score sur le serveur (10 novembre)** : `GET /games` (page pour un navigateur,
+JSON sinon et sur `/games.json`, `server/games-page.mjs`), lu dans les messages du lobby que le
+relais fait passer. Score : tous les 150 ticks, `Gta2Port_CoopSnapshot` (partagé) relève kills,
+morts et points de chaque slot (`gta2_port_coop_scores`) ; chaque joueur (`coop_native.cpp`,
+`web/shell.js`) les envoie à `@server` (le relais ne les passe à personne) ; le serveur compare
+les rapports d'un même tick (majorité, confirmé à deux, désaccord signalé). Vu (copie du serveur
+sur 10.20.0.158) : trois natifs, score confirmé par 3 ; un natif en `GTA2_TEST=pvp` (sa partie
+diverge) : désaccord signalé au tick 2550, version de la majorité (2 sur 3) affichée ; un natif
+et un navigateur (build web reconstruit) : mêmes rapports dès le tick 150, partie synchronisée ;
+fin de match dans « Recent matches ».
+
 Reste : A5 (consoles), A7 (scores, chat, points de passage), puis D1-D4 (transport TCP local,
 découverte UDP, consoles, paquet).
 

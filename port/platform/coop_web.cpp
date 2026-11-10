@@ -84,11 +84,41 @@ EMSCRIPTEN_KEEPALIVE const s32* gta2_port_coop_players()
     return gPlayers;
 }
 
+// Every 150 ticks (5 s) of a network game: each slot's kills, deaths and points at that tick.
+// Lockstep makes them the same on every machine, so every player reports them to the game
+// server, which compares the reports of one tick (server/server.mjs, GET /games).
+namespace
+{
+constexpr s32 kScoreEvery = 150;
+constexpr s32 kScoresKept = 8;
+s32 gScores[kScoresKept][1 + MAX_PLAYERS * 3]; // tick (0: none yet), then kills, deaths, points per slot
+} // namespace
+extern "C" s32 Gta2Port_SyncTick(); // dev_hooks.cpp
+
 // After every tick of a network game (winmain.cpp): keeps the standings, so the end-of-match
 // results include the winning kill even though the game is gone by the time the shell looks.
 void Gta2Port_CoopSnapshot()
 {
     gta2_port_coop_players();
+    const s32 tick = Gta2Port_SyncTick();
+    if (tick > 0 && tick % kScoreEvery == 0)
+    {
+        s32* row = gScores[(tick / kScoreEvery) % kScoresKept];
+        row[0] = tick;
+        for (s32 i = 0; i < MAX_PLAYERS; ++i)
+        {
+            row[1 + i * 3] = gPlayers[i * kFields + 7];
+            row[2 + i * 3] = gPlayers[i * kFields + 8];
+            row[3 + i * 3] = gPlayers[i * kFields + 11];
+        }
+    }
+}
+
+// The last 8 score ticks (rows of 1 + 6 * 3: tick, then kills, deaths, points per slot; any
+// order, tick 0 for an unused row).
+EMSCRIPTEN_KEEPALIVE const s32* gta2_port_coop_scores()
+{
+    return &gScores[0][0];
 }
 
 // Gang Wars: player slot's crew (-1: none) and the district gang the crew sides with, as its

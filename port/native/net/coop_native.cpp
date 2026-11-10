@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <algorithm>
 #include <map>
 #include <string>
 #include <vector>
@@ -28,6 +29,7 @@ void gta2_port_net_peer_left(int idx);
 const int32_t* gta2_dev_sync_history();
 const int32_t* gta2_port_net_debug();
 const int32_t* gta2_port_coop_players();
+const int32_t* gta2_port_coop_scores(); // port/platform/coop_web.cpp: every 150 ticks
 const int32_t* gta2_dev_sync_dump(int at);
 const int32_t* gta2_dev_sync_peds();
 }
@@ -49,6 +51,9 @@ constexpr int kSyncRow = 9;
 std::map<int, std::string> gMine;                            // tick -> checksum
 std::map<int, std::vector<std::pair<int, std::string>>> gTheirs; // tick -> [slot, checksum]
 int gLastSent = -1;
+constexpr int kScoreRows = 8;     // gta2_port_coop_scores(): the last 8 score ticks
+constexpr int kScoreRow = 1 + 6 * 3;
+int gLastScore = 0;               // the last score tick reported
 bool gDesync = false;
 int gHeldFrame = -1;
 double gHeldSince = 0;
@@ -240,6 +245,32 @@ void WatchCoop(double nowMs)
             gLastSent = tick;
             Compare(tick);
         }
+    }
+    // the standings at each new score tick, to the game server (as web/shell.js watchCoop)
+    const int32_t* scores = gta2_port_coop_scores();
+    std::vector<const int32_t*> due;
+    for (int i = 0; i < kScoreRows; ++i)
+    {
+        const int32_t* row = scores + i * kScoreRow;
+        if (row[0] > gLastScore)
+            due.push_back(row);
+    }
+    std::sort(due.begin(), due.end(), [](const int32_t* a, const int32_t* b) { return a[0] < b[0]; });
+    const Json& who = gMatch["players"];
+    for (const int32_t* row : due)
+    {
+        Json players = Json::Array();
+        for (size_t s = 0; s < who.size() && s < 6; ++s)
+        {
+            Json p = Json::Object();
+            p.Set("id", who[s]["id"]);
+            p.Set("kills", row[1 + s * 3]);
+            p.Set("deaths", row[2 + s * 3]);
+            p.Set("points", row[3 + s * 3]);
+            players.Push(p);
+        }
+        gLobby->ReportScore(row[0], players);
+        gLastScore = row[0];
     }
     for (auto it = gMine.begin(); it != gMine.end();)
     {

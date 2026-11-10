@@ -145,25 +145,39 @@ Without `GTA2_PASSWORD` the server only listens on this computer.
 
 ## The games in progress (`GET /games`)
 
-Behind the login, like everything else. The relay reads the lobby messages it passes on (the
-host's roster, a player's hello, start, go, sync every 90 ticks): no message is added to the
-protocol, so browsers and `gta2-mp` of any version show up.
+Behind the login, like everything else. In a browser, `/games` is a page (cards for the rooms,
+their live score, the recent matches; refreshed every 10, 30 or 60 s, 60 by default). Scripts
+get the JSON (`/games` without `Accept: text/html`, or `/games.json`):
 
 ```json
 { "rooms": [ { "room": "ROOM1", "state": "playing", "host": "Kdog",
                "players": [ { "name": "Kdog", "crew": "" }, { "name": "Nina", "crew": "" } ],
                "connected": 2,
                "settings": { "mode": "ffa", "district": "downtown", "killLimit": 10, ... },
-               "since": "2026-11-10T16:33:36.393Z", "playingSeconds": 26, "tick": 720 } ],
+               "since": "2026-11-10T16:33:36.393Z", "playingSeconds": 26, "tick": 720,
+               "score": { "tick": 600, "confirmed": true, "reporters": 2, "disagree": null,
+                          "players": [ { "name": "Kdog", "crew": "", "kills": 1, "deaths": 0, "points": 2000 }, ... ] } } ],
+  "recent": [ { "room": "ROOM2", "endedAt": "...", "settings": { ... }, "playingSeconds": 540, "score": { ... } } ],
   "now": "2026-11-10T16:34:02.813Z" }
 ```
 
-- `state`: `lobby`, `starting` (everyone loading) or `playing`. Rooms in play come first.
+- The relay reads the lobby messages it passes on: the host's roster, a player's hello, start,
+  go, and sync every 90 ticks.
+- `state`: `lobby`, `starting` (everyone loading), `playing`, or `ended` (no sync or score for
+  30 s: the players are on the results). Rooms in play come first.
 - `players`: those of the host's roster still connected. A host alone in its room has sent
   nothing yet, so its name is empty until someone joins.
-- `tick` comes from the sync checks, so it moves every 3 seconds.
-- A room with no one left is gone. After a match, a roster from someone who was not in it (the
-  players come back to the lobby) puts the room back in `lobby`.
+- **The score.** Every 150 ticks (5 s), each player of the match (`gta2-mp`, or a browser on
+  this server) sends the standings at that tick to `@server`, which is no one in the room, so
+  the relay passes it on to no one. Lockstep makes every report of one tick the same, so they
+  are compared: `score` is the version most players sent for the latest tick, `confirmed` once
+  two agree. Reports that differ (a drift, or a client that lies) set `disagree`. A report
+  counts only if it is from a player of the match while it plays, for a multiple of 150, not
+  older than the score shown, and not ahead of the match (its sync ticks, or 30 ticks a second
+  since go, plus 10 s). Older clients send no score: their rooms show none.
+- `recent`: the last 10 matches with a score, for an hour, newest first (a match ends when its
+  players come back to the room's lobby or the room empties).
+- A room with no one left is gone.
 
 ## Settings (environment)
 

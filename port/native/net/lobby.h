@@ -102,6 +102,10 @@ class Lobby
 
     void SendChat(const std::string& text);
     void ShareSync(int tick, const std::string& h);
+    // The standings at a score tick (every 150), for the game server only ("@server": the relay
+    // passes it on to no one; server/server.mjs compares the players' reports for GET /games).
+    // players: [{id, kills, deaths, points}] in slot order.
+    void ReportScore(int tick, const Json& players);
     void ShareWaypoint(bool set, double x, double y);
     // Game messages from the core: to one slot, or -1 for everyone.
     void SendGame(int slot, const Bytes& bytes);

@@ -406,6 +406,13 @@ extern "C" void Gta2Port_SyncRecord()
     ++gSyncTick;
 }
 
+// The tick being recorded next: during Gta2Port_CoopSnapshot (before Gta2Port_SyncRecord),
+// the number of the tick that just ran, as the sync record and its checks number it.
+extern "C" s32 Gta2Port_SyncTick()
+{
+    return gSyncTick;
+}
+
 EMSCRIPTEN_KEEPALIVE const s32* gta2_dev_sync_peds()
 {
     return gSyncPeds;
