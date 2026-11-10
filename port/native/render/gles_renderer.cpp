@@ -690,11 +690,15 @@ void Gta2Native_OverlayRect(float x, float y, float w, float h, uint32_t rgba)
 }
 
 // One line of text, px screen pixels to a font pixel; a character is 6 font pixels wide.
-void Gta2Native_OverlayText(float x, float y, float px, uint32_t rgba, const char* text)
+static void OverlayTextCase(float x, float y, float px, uint32_t rgba, const char* text, bool exact)
 {
     for (; *text; ++text, x += 6 * px)
     {
-        const int c = toupper(static_cast<unsigned char>(*text)) & 127;
+        int c = static_cast<unsigned char>(*text) & 127;
+        if (!exact || !gR.glyphIndex[c])
+        {
+            c = toupper(c) & 127;
+        }
         const int i = gR.glyphIndex[c];
         if (i == 0)
         {
@@ -703,6 +707,17 @@ void Gta2Native_OverlayText(float x, float y, float px, uint32_t rgba, const cha
         const float u0 = ((i % 16) * 8) / 128.0f, v0 = ((i / 16) * 8) / 64.0f;
         OverlayQuad(x, y, kGlyphW * px, kGlyphH * px, u0, v0, u0 + kGlyphW / 128.0f, v0 + kGlyphH / 64.0f, rgba);
     }
+}
+
+void Gta2Native_OverlayText(float x, float y, float px, uint32_t rgba, const char* text)
+{
+    OverlayTextCase(x, y, px, rgba, text, false);
+}
+
+// As typed: lower case too (the on-screen keyboard).
+void Gta2Native_OverlayTextExact(float x, float y, float px, uint32_t rgba, const char* text)
+{
+    OverlayTextCase(x, y, px, rgba, text, true);
 }
 
 // The status line (main.cpp): GPU textures alive, atlas pages, and the pixels they hold in MB.

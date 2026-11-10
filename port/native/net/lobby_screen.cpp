@@ -162,6 +162,14 @@ void Enter(bool host)
     gS.messageError = false;
 }
 
+// A value typed on the on-screen keyboard joins the front of its list (left/right then turn
+// from it, and it is offered next time; conf/net.ini keeps the list).
+void RememberIn(std::vector<std::string>& list, const std::string& value)
+{
+    if (std::find(list.begin(), list.end(), value) == list.end())
+        list.insert(list.begin(), value);
+}
+
 // The lines of the current phase.
 void BuildItems()
 {
@@ -182,6 +190,7 @@ void BuildItems()
                           Gta2Native_OskStart("Your name", c.name.c_str(), 16, [](bool ok, const char* text) {
                               if (ok && text[0])
                               {
+                                  RememberIn(gS.config->names, text);
                                   gS.config->name = text;
                                   SaveNetConfig(*gS.config);
                               }
@@ -202,6 +211,7 @@ void BuildItems()
                                   room.pop_back();
                               if (ok && !room.empty())
                               {
+                                  RememberIn(gS.config->rooms, room);
                                   gS.config->room = room;
                                   SaveNetConfig(*gS.config);
                               }

@@ -961,14 +961,20 @@ Navigateur (`web/map.js`) : les points des autres, loin, sont maintenant sur le 
 (losange) ; avant, ils n'y apparaissaient que dans son rayon.
 Reste : le geste et les points de passage à la manette, sur console.
 
-**Clavier à l'écran (9 novembre)** : `platform/osk_native.cpp`, dans les deux binaires. Grille
-de lettres et chiffres, `aA`, Espace, Del, OK ; croix pour se déplacer, A tape, B efface, X
-espace, Y casse, Start valide, Select annule ; un clavier physique tape directement. Dans le
+**Clavier à l'écran (9 novembre)** : `platform/osk_native.cpp`, dans les deux binaires.
+Disposition QWERTY (chiffres, `-`, `=`, Back ; QWERTYUIOP ; ASDFGHJKL, OK ; Shift, ZXCVBNM) ;
+Shift (touche ou Y) passe de minuscules à majuscule pour la touche suivante puis majuscules
+verrouillées (fond vert puis rouge) ; décalée, la rangée du haut donne `! @ # $ % ? & * ( ) _ +`.
+Croix pour se déplacer, A appuie, B efface, X espace, Start valide, Select annule ; un clavier
+physique tape directement. La police de la surcouche a gagné les minuscules et `@ # & * _`
+(dessinées pour le port ; seul le clavier affiche les minuscules, les autres écrans restent en
+majuscules). Dans le
 menu du jeu, il s'ouvre seul quand le jeu attend un nom de joueur ou un mot de passe (états 3
 et 5 du `Frontend`) et tape comme un clavier (touche enfoncée puis relâchée, une par une, ce
 que `HandlePlayerNameTyping_4B2F60` attend) ; le texte affiché est celui du jeu. Dans le lobby
 de `gta2-mp`, A sur « Name » ou « Room » l'ouvre (salle en majuscules, comme le navigateur) :
-une console peut rejoindre une salle créée par un navigateur, dont le code est aléatoire.
+une console peut rejoindre une salle créée par un navigateur, dont le code est aléatoire ;
+la valeur tapée rejoint la tête de sa liste dans `net.ini` (gauche/droite repartent d'elle).
 Vu dans le conteneur (captures) : saisie et validation du nom et de la salle dans le lobby.
 Pas encore vérifié : l'ouverture automatique dans le menu solo (les appuis scriptés n'y
 arrivent pas de façon fiable) ; à tester sur console.
