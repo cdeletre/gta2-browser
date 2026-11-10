@@ -1,0 +1,101 @@
+From adc7c6aea7373886167420ebdd93b94881ea5ce7 Mon Sep 17 00:00:00 2001
+From: GTA2 port <port@localhost>
+Date: Tue, 10 Nov 2026 18:39:07 -0500
+Subject: [PATCH] native: adaptive input delay, this player's inputs as a
+ stream
+
+The local inputs wait in a queue instead of a ring of the match's fixed delay. When
+Gta2Port_NetDelayStep (net/net_delay.cpp, weak) asks for one tick more, the same inputs go out
+twice; for one tick less, none go out that tick. Every machine plays this player's stream one
+entry a tick, so all still play the same entry at the same tick; the receivers (a browser
+too) need no change. Under GTA2_PORT_NATIVE; the browser keeps its ring.
+---
+ Source/winmain.cpp | 58 ++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 58 insertions(+)
+
+diff --git a/Source/winmain.cpp b/Source/winmain.cpp
+index dde1000d..119f78b3 100644
+--- a/Source/winmain.cpp
++++ b/Source/winmain.cpp
+@@ -1489,6 +1489,34 @@ EXPORT void __stdcall do_network_and_local_inputs_4DAF30()
+ extern "C" s32 gGta2PortNetInputDelay; // port/platform/net_web.cpp
+ static u32 sPortInputDelay[16];         // this player's inputs waiting for their tick (input delay)
+ static u32 sPortInputDelaySlot;
++#if defined(GTA2_PORT_NATIVE)
++// This player's inputs not yet played, oldest first (the adaptive delay, see PortNetworkInputsBegin).
++// Returns how many ticks to add to the delay (+1, -1 or 0); weak: single player builds have none.
++extern "C" s32 Gta2Port_NetDelayStep(s32 delay) __attribute__((weak));
++static constexpr s32 kPortOwnMax = 16;
++static u32 sPortOwn[kPortOwnMax];
++static s32 sPortOwnHead;
++static s32 sPortOwnCount;
++static bool sPortOwnStarted;
++static void PortOwnPush(u32 inputs)
++{
++    if (sPortOwnCount < kPortOwnMax)
++    {
++        sPortOwn[(sPortOwnHead + sPortOwnCount++) % kPortOwnMax] = inputs;
++    }
++}
++static u32 PortOwnPop()
++{
++    if (sPortOwnCount == 0)
++    {
++        return 0;
++    }
++    const u32 inputs = sPortOwn[sPortOwnHead];
++    sPortOwnHead = (sPortOwnHead + 1) % kPortOwnMax;
++    --sPortOwnCount;
++    return inputs;
++}
++#endif
+ static u32 sPortNetWaiting;
+ static DWORD sPortNetStart;
+ static s32 sPortNetRetries;
+@@ -1671,6 +1699,35 @@ static bool PortNetworkInputsBegin()
+     // player plays the ones sent delay ticks ago, as everyone else does.
+     const u32 fresh = gInputRecorder_67F8B0.get_input_bits_4CEAC0();
+     gCurrentNetInputs_6F57D8.field_0_inputs[gNetworkPlayerIdx_6F56C8].field_0_Inputs = fresh;
++#if defined(GTA2_PORT_NATIVE)
++    // Adaptive input delay (native): this player's inputs are a stream that every machine,
++    // this one included, plays one entry a tick. Sending one more entry this tick (the same
++    // inputs twice) makes the delay a tick longer, sending none a tick shorter: every machine
++    // still plays the same entry at the same tick, so nothing else has to agree on the change.
++    // The others need no change either (a browser too): they play what comes, in order.
++    // net/net_delay.cpp decides; without it (single player builds) the delay stays.
++    if (!sPortOwnStarted)
++    {
++        sPortOwnStarted = true;
++        for (s32 i = 0; i < gGta2PortNetInputDelay; ++i)
++        {
++            PortOwnPush(0); // the first `delay` ticks: the empty inputs the others start with too
++        }
++    }
++    const s32 step = Gta2Port_NetDelayStep ? Gta2Port_NetDelayStep(gGta2PortNetInputDelay) : 0;
++    if (step >= 0 || sPortOwnCount < 2)
++    {
++        Net_Send_Our_Inputs_4DACB0();
++        PortOwnPush(fresh);
++        if (step > 0 && sPortOwnCount < kPortOwnMax)
++        {
++            gNetPlay_7071E8.SendToAll_521B20(&gInputSendData_6F5B18); // the same message again
++            PortOwnPush(fresh);
++        }
++    }
++    gCurrentNetInputs_6F57D8.field_0_inputs[gNetworkPlayerIdx_6F56C8].field_0_Inputs = PortOwnPop();
++    gGta2PortNetInputDelay = sPortOwnCount; // the entries still ahead of this tick
++#else
+     Net_Send_Our_Inputs_4DACB0();
+     if (gGta2PortNetInputDelay > 0)
+     {
+@@ -1678,6 +1735,7 @@ static bool PortNetworkInputsBegin()
+         gCurrentNetInputs_6F57D8.field_0_inputs[gNetworkPlayerIdx_6F56C8].field_0_Inputs = sPortInputDelay[slot];
+         sPortInputDelay[slot] = fresh;
+     }
++#endif
+     Draw_4DA7B0();
+     PortNetReceiveBegin();
+     return true;
+-- 
+2.54.0
+

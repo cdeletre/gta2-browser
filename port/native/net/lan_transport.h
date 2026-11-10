@@ -93,6 +93,7 @@ class LanTransport : public Transport
     void Leave() override;
     void Poll() override;
     bool Connected() const override { return mListen >= 0; }
+    bool LinkInfo(const std::string& id, LinkStats* out) const override;
 
     int Port() const { return mPort; }
     const std::string& RoomId() const { return mOpt.roomId; }

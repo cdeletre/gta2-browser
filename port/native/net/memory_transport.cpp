@@ -1,7 +1,10 @@
 // See memory_transport.h.
 #include "memory_transport.h"
 
+#include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <stdio.h>
+#include <sys/socket.h>
 #include <time.h>
 
 #include <random>
@@ -20,6 +23,17 @@ std::string RandomId()
         snprintf(out + 2 * i, 3, "%02x", byte(engine));
     }
     return out;
+}
+
+bool TcpLinkInfo(int fd, LinkStats* out)
+{
+    tcp_info info{};
+    socklen_t len = sizeof(info);
+    if (fd < 0 || getsockopt(fd, IPPROTO_TCP, TCP_INFO, &info, &len) != 0)
+        return false;
+    out->rttMs = info.tcpi_rtt / 1000.0;
+    out->retransmits = info.tcpi_total_retrans;
+    return true;
 }
 
 double NowMs()

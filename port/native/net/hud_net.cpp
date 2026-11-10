@@ -544,6 +544,20 @@ extern "C" void Gta2Net_HudDraw(int dw, int dh)
     }
     DrawWaypoints(dw, dh);
     DrawChat(dw, dh);
+    if (const uint32_t waiting = CoopWaitingFor())
+    {
+        // held up more than half a second (a slower console loading, a Wi-Fi drop): say for whom
+        std::string t;
+        for (int s = 0; s < 6; ++s)
+            if (waiting & (1u << s))
+                t += (t.empty() ? "Waiting for " : ", ") + NameOf(s);
+        t += "...";
+        const float px = PixelSize(dw, dh, 30, 14);
+        const float w = static_cast<float>(t.size()) * 6 * px;
+        const float x = (dw - w) / 2, y = dh * 0.30f;
+        Gta2Native_OverlayRect(x - 6 * px, y - 4 * px, w + 12 * px, 15 * px, 0xd0000000);
+        Gta2Native_OverlayTextExact(x, y, px, kWhite, t.c_str());
+    }
     if (!CoopWinner().empty())
     {
         // the browser's banner: who won, until the match ends

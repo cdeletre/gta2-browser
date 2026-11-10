@@ -57,6 +57,10 @@ class Lobby
     std::function<void(int slot, bool set, double x, double y)> onWaypoint;
     std::function<void(int slot, int tick, const std::string& h)> onSync;
     std::function<void(int slot, const std::string& text)> onChat;
+    // A player's report on this player's inputs (net_delay.cpp): how long their game was held up
+    // waiting for them (ms), the smallest and the average margin they had (ticks; the average in
+    // tenths), over their last period, and their own input delay (ticks).
+    std::function<void(int slot, int heldMs, int minMargin, int avgMargin10, int delay)> onMargin;
     // Host: another player in the room also hosts it (sent a roster): two hosts in one room.
     std::function<void(const std::string& id)> onOtherHost;
     // The relay refused us ("full" or "taken"), or the room runs another version of the game
@@ -105,6 +109,10 @@ class Lobby
 
     void SendChat(const std::string& text);
     void ShareSync(int tick, const std::string& h);
+    // To one player: how their inputs did here (see onMargin). Native only: a browser ignores it.
+    void ShareMargin(int slot, int heldMs, int minMargin, int avgMargin10, int delay);
+    // The TCP state of the link to a player (Transport::LinkInfo), false when there is none.
+    bool LinkInfo(int slot, LinkStats* out) const;
     // The standings at a score tick (every 150), for the game server only ("@server": the relay
     // passes it on to no one; server/server.mjs compares the players' reports for GET /games).
     // players: [{id, kills, deaths, points}] in slot order.

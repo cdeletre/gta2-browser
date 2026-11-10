@@ -724,6 +724,16 @@ et « Écarts par rapport à l'original » ci-dessous).
   côtés (D07). Avec la marge d'activation (active par défaut, comme dans le web), les
   limites de la caméra qui décident de l'apparition et de la disparition des peds et des
   voitures couvrent aussi cette hauteur. En 4:3 et plus large, rien ne change.
+- **Rythme des ticks en multijoueur** (patch natif 0018, branche `native-multiplayer-experimental`) :
+  une console en avance sur les autres attend 1 ms de plus un tick sur deux (1,5 % plus lente),
+  une console en retard 1 ms de moins, au plus 30 ms par tranche de 2 s, jusqu'à être à moins
+  d'un demi-tick des autres. Le jeu reste à 30 ticks/s en moyenne. Ce que fait un tick ne change
+  pas ; la partie reste identique sur toutes les machines.
+- **Délai d'entrée variable en multijoueur** (patch natif 0017, même branche) : le délai entre
+  l'appui et l'action de son propre joueur monte ou descend d'un tick en cours de partie (1 à 8),
+  au lieu de rester celui choisi au lancement. Les entrées de chaque joueur forment un flux joué
+  une entrée par tick sur toutes les machines : la partie reste identique partout, un
+  navigateur compris.
 
 Les deux suivants remplacent une lecture hors de son objet, dont le résultat dépendait de ce qui
 suivait en mémoire, par une valeur fixe :
@@ -1179,6 +1189,47 @@ Vu dans le conteneur (`scripts/native/test_lan_stats.sh`, deux gta2-lan hors éc
 aléatoire, `GTA2_SOAK_AIDS=0`, sinon les aides de test désynchronisent au tick 90) : lignes
 cohérentes, aucune désynchronisation ; les chiffres eux-mêmes ne valent rien là (deux jeux en
 rendu logiciel sur un processeur partagé : images jusqu'à 150 ms). Les consoles diront.
+
+**Essais sur consoles (10 novembre, gta2-lan, free-for-all et free roam, 3 à 5 min)** :
+- A, Air X + RP Mini en Wi-Fi, délai 2 : 30,2-30,3 ticks/s ; jeu retenu 0,1 % du temps hors
+  démarrage ; travail par image 1 à 2,5 ms ; aller-retour 17 ms (médiane) ; marges cumulées
+  3,5 ticks pour un délai de 2, donc 1 tick suffit.
+- B, Air X (Wi-Fi) + R36S (Ethernet), délai 1 : 30 ticks/s, R36S à 4,6 ms par image (13 au
+  pire), jamais retenue en cours de partie.
+- B', Air X + G350 en Wi-Fi (dongle), délai 2 : même chose, plus un gel d'environ 1 s vers
+  180 s, sur les deux consoles à la fois, avec un ping de 936 ms : une coupure du lien Wi-Fi.
+  La G350 n'a jamais dépassé 7,7 ms par image.
+- Dans les trois : 1,2 à 1,8 s de blocage au tout début (la console la plus lente finit de
+  charger le niveau), et un délai choisi au lobby qui varie d'une partie à l'autre (2, 1, 2)
+  sur le même réseau : le ping du lobby compte l'attente d'une image de chaque côté.
+Conclusion : ni le processeur ni le réseau ne pèsent en temps normal ; le levier est le délai,
+puis les coupures Wi-Fi (à confirmer par les retransmissions TCP).
+
+**Étapes 2 et 3, le délai adaptatif et le rythme (10 novembre)** : `net/net_delay.cpp`, patches
+natifs 0017 et 0018. Les entrées de chaque joueur forment un flux que toutes les machines
+jouent une entrée par tick (0017 : une file au lieu d'un anneau de taille fixe) : envoyer deux
+fois la même entrée allonge son délai d'un tick, n'en envoyer aucune le raccourcit, sans accord
+entre machines ni changement chez les autres (un navigateur compris). Toutes les 2 s, chaque
+machine dit à chaque autre comment ses entrées sont arrivées (temps retenu, marge mini et
+moyenne, son propre délai : message de lobby `margin`, qu'un navigateur ignore). D'après les
+marges dans les deux sens, chacune sait de combien de ticks elle est en avance ; plus d'un
+demi-tick : elle ralentit ou accélère de 1,5 % (0018), pour la moitié de l'écart, au plus 30 ms
+par tranche. Le délai ne change qu'une fois les machines à moins d'un tick l'une de l'autre :
++1 si une autre a été retenue plus de 50 ms en 2 s par ses entrées, -1 après 10 s de marge d'au
+moins un tick partout et 15 s sans hausse ; rien dans les 10 premières secondes.
+Trouvé en route : sans le rythme, le délai adaptatif empire les choses. Une machine retenue
+parce que l'autre tourne en avance fait allonger le délai de l'autre, ce qui laisse l'avance
+grandir d'autant (vu dans le conteneur : hôte à 1 tick, invité à 6, soit 200 ms de réactivité
+perdue pour lui).
+Les lignes `net stats` donnent aussi le délai, l'avance estimée et, par lien TCP, l'aller-retour
+du noyau et les segments renvoyés (`TCP_INFO`). Le HUD affiche « Waiting for <nom>... » après
+une demi-seconde d'attente. `GTA2_NET_ADAPT=0`, `GTA2_NET_PACE=0`, `GTA2_NET_DELAY_MIN/MAX`,
+`GTA2_NET_START_DELAY` (tests).
+Vu dans le conteneur (`PLAYERS=2|3 scripts/native/test_lan_stats.sh`, départ à 3 ou 4 ticks) :
+délais qui descendent (4 → 2, 4 → 3), aucune désynchronisation à 2 et 3 joueurs avec des délais
+différents par joueur, aussi sous ASan + UBSan (rapports UBSan : ceux déjà connus du moteur) ;
+`gta2-net-test` 169 vérifications. Le rythme n'a pas pu être réglé là : les jeux en rendu
+logiciel n'y tiennent pas 30 ticks/s sans à-coups. À régler sur les consoles.
 
 ## Reste à faire
 

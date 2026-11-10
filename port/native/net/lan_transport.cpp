@@ -197,6 +197,16 @@ struct LanTransport::Peer
     std::string in, out;
 };
 
+bool LanTransport::LinkInfo(const std::string& id, LinkStats* out) const
+{
+    for (const auto& p : mPeers)
+    {
+        if (p->id == id && p->joined && !p->dead)
+            return TcpLinkInfo(p->fd, out);
+    }
+    return false;
+}
+
 std::unique_ptr<LanTransport> LanTransport::Create(const LanOptions& o, LanDiscovery* discovery, std::string* error)
 {
     const int fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);

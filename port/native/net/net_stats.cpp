@@ -9,6 +9,7 @@
 #include <string>
 
 #include "lobby.h"
+#include "net_delay.h"
 
 extern "C" const int32_t* gta2_port_net_debug(); // winmain.cpp (patch 0017): [3] waiting, [4] tick, [6] for whom
 // window_sdl.cpp: the time spent in SDL_GL_SwapWindow so far (none in a headless build)
@@ -31,6 +32,8 @@ struct Peer
     double rttLast = -1, rttSum = 0, rttMax = 0;
     int rttN = 0, rttFail = 0;
     bool pingOut = false;
+    uint32_t retransStart = 0; // TCP retransmits when the window began
+    bool linkKnown = false;
 };
 
 Lobby* gLobby = nullptr;
@@ -75,6 +78,12 @@ void ResetWindow(double now, uint32_t frame)
         p.rttSum = p.rttMax = 0;
         p.rttN = p.rttFail = 0;
     }
+    for (int s = 0; s < gCount; ++s)
+    {
+        LinkStats link;
+        gPeers[s].linkKnown = gLobby && s != gMe && gLobby->LinkInfo(s, &link);
+        gPeers[s].retransStart = gPeers[s].linkKnown ? link.retransmits : 0;
+    }
 }
 
 void PingAll()
@@ -108,8 +117,10 @@ void Report(double now, uint32_t frame)
     const uint32_t ticks = frame - gWindowFrame;
     std::string line;
     char buf[256];
-    snprintf(buf, sizeof(buf), "[%.1f s, tick %u] %u ticks (%.1f/s); held up %d times, %.0f ms (max %.0f)",
-             (now - gMatchStart) / 1000.0, frame, ticks, span > 0 ? ticks * 1000.0 / span : 0.0, gWaits, gWaitMs,
+    double ahead = 0;
+    const bool known = NetDelayOffset(&ahead);
+    snprintf(buf, sizeof(buf), "[%.1f s, tick %u] delay %d, %s%.1f ahead; %u ticks (%.1f/s); held up %d times, %.0f ms (max %.0f)",
+             (now - gMatchStart) / 1000.0, frame, NetDelayNow(), known ? "" : "?", ahead, ticks, span > 0 ? ticks * 1000.0 / span : 0.0, gWaits, gWaitMs,
              gWaitMax);
     line += buf;
     std::string who;
@@ -145,6 +156,13 @@ void Report(double now, uint32_t frame)
             snprintf(buf, sizeof(buf), ", rtt %.0f/%.0f ms", p.rttSum / p.rttN, p.rttMax);
             line += buf;
         }
+        LinkStats link;
+        if (gLobby->LinkInfo(s, &link))
+        {
+            snprintf(buf, sizeof(buf), ", tcp %.0f ms, %u resent", link.rttMs,
+                     p.linkKnown ? link.retransmits - p.retransStart : 0u);
+            line += buf;
+        }
         if (p.rttFail)
         {
             snprintf(buf, sizeof(buf), ", %d pings lost", p.rttFail);
@@ -158,8 +176,8 @@ void Report(double now, uint32_t frame)
 void NetStatsStart(Lobby* lobby, const Json& match)
 {
     const char* env = getenv("GTA2_NET_STATS");
-    gPeriodMs = (env ? atof(env) : 5.0) * 1000.0;
-    gLobby = gPeriodMs > 0 ? lobby : nullptr;
+    gPeriodMs = (env ? atof(env) : 5.0) * 1000.0; // 0: measured (net_delay.cpp uses it), not shown
+    gLobby = lobby;
     gMe = match["mySlot"].Int(-1);
     const Json& players = match["players"];
     gCount = std::min(static_cast<int>(players.size()), kMaxPlayers);
@@ -169,7 +187,7 @@ void NetStatsStart(Lobby* lobby, const Json& match)
         gPeers[s].name = players[static_cast<size_t>(s)]["name"].Str();
     }
     gMatchStart = -1;
-    if (gLobby)
+    if (gPeriodMs > 0)
         fprintf(stderr, "gta2: net stats: every %.0f s; margin min/avg/max in ticks, rtt avg/max; input delay %d ticks\n",
                 gPeriodMs / 1000.0, match["delay"].Int(1));
 }
@@ -188,6 +206,7 @@ void NetStatsGameMessage(int slot, const Bytes& bytes)
     p.slackSum += slack;
     p.slackMin = std::min(p.slackMin, slack);
     p.slackMax = std::max(p.slackMax, slack);
+    NetDelayMargin(slot, slack);
 }
 
 } // namespace gta2net
@@ -243,7 +262,10 @@ extern "C" void Gta2Net_AfterSlice(double startMs, double endMs)
         gCurWait += held;
         for (int s = 0; s < gCount; ++s)
             if (gPrevWaiting & (1u << s))
+            {
                 gPeers[s].waitMs += held;
+                NetDelayHeld(s, held);
+            }
     }
     if ((!pending || frame != gLastFrame) && gCurWait > 0)
     {
@@ -259,7 +281,8 @@ extern "C" void Gta2Net_AfterSlice(double startMs, double endMs)
     gPrevWaiting = pending ? static_cast<uint32_t>(d[6]) & ~(1u << gMe) : 0;
     gPrevEnd = endMs;
     gLastFrame = frame;
-    if (endMs - gWindowStart >= gPeriodMs)
+    NetDelayFrame(endMs, frame);
+    if (gPeriodMs > 0 && endMs - gWindowStart >= gPeriodMs)
     {
         Report(endMs, frame);
         ResetWindow(endMs, frame);

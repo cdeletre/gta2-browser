@@ -53,6 +53,7 @@ class WsTransport : public Transport
     void Leave() override;
     void Poll() override;
     bool Connected() const override { return mConn != nullptr; }
+    bool LinkInfo(const std::string& id, LinkStats* out) const override;
 
   private:
     WsTransport(std::unique_ptr<Conn> conn, std::string room, std::string leftover);

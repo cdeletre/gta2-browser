@@ -1,0 +1,46 @@
+From 293b6f99890a47ca7b13ca66844b748162e1e48a Mon Sep 17 00:00:00 2001
+From: GTA2 port <port@localhost>
+Date: Tue, 10 Nov 2026 18:44:32 -0500
+Subject: [PATCH] native: network tick pacing hook
+
+Gta2Port_NetTickAdjustMs (net/net_delay.cpp, weak) adds -1, 0 or +1 ms to the wait before the
+next network tick: a machine ahead of the others slows a little, one behind speeds up, until
+they are in step. Only when ticks run changes, not what a tick does. Under GTA2_PORT_NATIVE.
+---
+ Source/winmain.cpp | 13 ++++++++++++-
+ 1 file changed, 12 insertions(+), 1 deletion(-)
+
+diff --git a/Source/winmain.cpp b/Source/winmain.cpp
+index 119f78b3..ab94678b 100644
+--- a/Source/winmain.cpp
++++ b/Source/winmain.cpp
+@@ -1493,6 +1493,8 @@ static u32 sPortInputDelaySlot;
+ // This player's inputs not yet played, oldest first (the adaptive delay, see PortNetworkInputsBegin).
+ // Returns how many ticks to add to the delay (+1, -1 or 0); weak: single player builds have none.
+ extern "C" s32 Gta2Port_NetDelayStep(s32 delay) __attribute__((weak));
++// Milliseconds to add to the wait before the next tick (-1, 0 or +1); weak, as above.
++extern "C" s32 Gta2Port_NetTickAdjustMs() __attribute__((weak));
+ static constexpr s32 kPortOwnMax = 16;
+ static u32 sPortOwn[kPortOwnMax];
+ static s32 sPortOwnHead;
+@@ -1798,7 +1800,16 @@ EXPORT u8 RunGameFrame_4DA850()
+             // The next tick is due one frame after this one was due, not after it ran: a browser only
+             // checks once per display frame, and "now + frame" lost up to a display frame every tick.
+             // After a long wait (the network, a hidden tab) the schedule restarts from now.
+-            const s32 frame_ms = gGame_0x40_67E008->GetFrameDurationMs_4B8BB0();
++            s32 frame_ms = gGame_0x40_67E008->GetFrameDurationMs_4B8BB0();
++#if defined(GTA2_PORT_NATIVE)
++            // Pacing (native, net/net_delay.cpp): a machine ahead of the others in the match
++            // waits a millisecond more between some ticks, one behind a millisecond less, until
++            // they are in step. Only when the ticks run, not what a tick does.
++            if (Gta2Port_NetTickAdjustMs)
++            {
++                frame_ms += Gta2Port_NetTickAdjustMs();
++            }
++#endif
+             gMatchStartTime_6F5A28 = Time - gMatchStartTime_6F5A28 > static_cast<DWORD>(frame_ms * 4)
+                 ? Time + frame_ms
+                 : gMatchStartTime_6F5A28 + frame_ms;
+-- 
+2.54.0
+

@@ -44,6 +44,14 @@ struct Message
     }
 };
 
+// The kernel's view of a TCP link (TCP_INFO): its smoothed round trip, and the segments it had
+// to send again since the connection opened (lost, or late enough to look lost).
+struct LinkStats
+{
+    double rttMs = 0;
+    uint32_t retransmits = 0;
+};
+
 class Transport
 {
   public:
@@ -62,6 +70,14 @@ class Transport
     virtual void Poll() = 0;
     // False once the connection is gone for good.
     virtual bool Connected() const { return true; }
+    // The TCP link the messages to a player take (gta2-lan: to them; gta2-online: to the server,
+    // the same for everyone). False when there is none to look at.
+    virtual bool LinkInfo(const std::string& id, LinkStats* out) const
+    {
+        (void)id;
+        (void)out;
+        return false;
+    }
 
     std::function<void(const std::string& from, const Message&)> onMessage;
     std::function<void(const std::string& id)> onPeerJoined;
@@ -72,6 +88,9 @@ class Transport
   protected:
     std::string mId;
 };
+
+// TCP_INFO of a connected socket, for Transport::LinkInfo; false if the kernel does not say.
+bool TcpLinkInfo(int fd, LinkStats* out);
 
 // 12 random hex digits (randomId in web/net.js).
 std::string RandomId();
