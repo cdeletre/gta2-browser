@@ -10,9 +10,10 @@
 //     1 2 3 4 5 6 7 8 9 0 - = [Back]
 //      Q W E R T Y U I O P
 //       A S D F G H J K L [OK]
-//   [Shift] Z X C V B N M
+//   [Shift] Z X C V B N M .
 // Shift turns between lower case, upper case for the next key, and upper case kept (its key
-// lights up in two colours); shifted, the top row is ! @ # $ % ? & * ( ) _ +.
+// lights up in two colours); shifted, the top row is ! @ # $ % ? & * ( ) _ +, and . stays .
+// (addresses: gta2-lan's Join by address).
 // D-pad: move; A: press the key; B: delete; X: space; Y: shift; Start: done (Return);
 // Select: cancel (Escape). A keyboard still types directly.
 // For the game's own name and password the game takes one character a key from its keyboard
@@ -88,6 +89,7 @@ std::vector<std::vector<Key>> MakeLayout()
     rows[3].push_back({0, 0, 0x2A, 0x10, 0x2A, 0, 1.5f, kShift});
     for (int i = 0; i < 7; ++i)
         rows[3].push_back({r3[i].c, char(r3[i].c - 32), r3[i].dik, r3[i].c - 32, r3[i].dik, 1.5f + i, 1, kChar});
+    rows[3].push_back({'.', '.', 0x34, 0xBE, 0x34, 8.5f, 1, kChar}); // the same with Shift
     return rows;
 }
 const std::vector<std::vector<Key>>& Layout()
@@ -156,7 +158,8 @@ void Type(char c, int dik, int vk, bool shift)
 // capitals and digits).
 bool Offered(const Key& k)
 {
-    return !(gMode == kGameKeys && k.special == kChar && (k.lo == '-' || k.lo == '='));
+    // the game's own name entry has no - = or . (its key table types capitals and digits)
+    return !(gMode == kGameKeys && k.special == kChar && (k.lo == '-' || k.lo == '=' || k.lo == '.'));
 }
 
 void TypeKey(const Key& k)

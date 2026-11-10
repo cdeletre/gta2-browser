@@ -1140,6 +1140,12 @@ liste d'un autre, messages, ping, PIN faux refusé, départ, annonces, lobby hô
 maillage), aussi sous ASan + UBSan ; trois `gta2-lan` sans tête qui se trouvent par les annonces
 (cinq essais : aucun faux départ) et quatre en Gang Wars : contrôles identiques jusqu'au tick 1 800,
 30,3 ticks/s ; captures : liste, cadenas « 0 <1> 0 0 », PIN faux refusé, salle rejointe.
+Essai du propriétaire : 6 consoles en LAN, « ça fonctionne, pas de lag ». Corrigé ensuite : la
+touche « . » du clavier à l'écran (après M, « . » aussi avec Shift ; cachée dans la saisie du nom
+du jeu, comme - et =), pour Join by address ; un joueur parti reste au tableau des scores (Select)
+et sur l'écran de fin, en gris, « (left) », avec ses derniers chiffres (notés à chaque image du
+match ; avant, sa place libérée le faisait disparaître), dans gta2-lan comme gta2-online. Vu dans
+le conteneur (capture) : « Nina (left) 2 0 $0 » après son départ.
 Pas encore fait : les départs brutaux (perte du Wi-Fi en pleine partie : un joueur peut avoir
 reçu la dernière entrée du partant et pas un autre), consoles, lanceur et paquet.
 

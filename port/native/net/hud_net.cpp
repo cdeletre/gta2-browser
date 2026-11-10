@@ -109,6 +109,26 @@ struct Row
     bool strong;
 };
 
+// Each player's standings as last seen in the match (their slot is freed when they leave).
+struct LastStandings
+{
+    bool seen;
+    int kills, deaths, points;
+};
+LastStandings gLastStandings[6];
+
+// Every frame of a match, whether the scoreboard shows or not.
+void RememberStandings()
+{
+    const int32_t* v = gta2_port_coop_players();
+    for (int s = 0; s < 6; ++s)
+    {
+        const int32_t* o = v + s * kFields;
+        if (o[0])
+            gLastStandings[s] = {true, o[7], o[8], o[11]};
+    }
+}
+
 // The standings in the browser's order and columns; title: who leads.
 std::vector<Row> Standings(std::string* title)
 {
@@ -118,12 +138,26 @@ std::vector<Row> Standings(std::string* title)
     const int me = CoopMySlot();
     std::vector<Row> players;
     std::vector<int> slots;
+    // a player who left: their slot is freed and reads 0, so their last standings stay, marked
+    // (as the live score on the game server keeps them; RememberStandings notes them each frame)
+    const auto& last = gLastStandings;
     for (int s = 0; s < 6; ++s)
     {
         const int32_t* o = v + s * kFields;
-        if (!o[0] || s >= static_cast<int>(match["players"].size()))
+        if (s >= static_cast<int>(match["players"].size()))
             continue;
-        players.push_back({NameOf(s) + (s == me ? " (you)" : ""), o[7], o[8], o[11], kColours[s], s == me});
+        if (o[0])
+        {
+            players.push_back({NameOf(s) + (s == me ? " (you)" : ""), o[7], o[8], o[11], kColours[s], s == me});
+        }
+        else if (last[s].seen)
+        {
+            players.push_back({NameOf(s) + " (left)", last[s].kills, last[s].deaths, last[s].points, kGrey, false});
+        }
+        else
+        {
+            continue;
+        }
         slots.push_back(s);
     }
     std::vector<Row> rows;
@@ -476,9 +510,12 @@ extern "C" void Gta2Net_HudDraw(int dw, int dh)
 {
     if (CoopMatch().IsNull())
         return;
+    if (!gMatchOver)
+        RememberStandings();
     // GTA2_NET_TEST_HUD=1, for screenshots: two quick messages 5 and 7 s into the match, the
-    // scoreboard from 9 to 14 s
+    // scoreboard from 9 to 14 s (GTA2_NET_TEST_BOARD=s: from s, for 5 s)
     static const bool test = getenv("GTA2_NET_TEST_HUD") != nullptr;
+    static const double boardAt = getenv("GTA2_NET_TEST_BOARD") ? atof(getenv("GTA2_NET_TEST_BOARD")) * 1000 : 9000;
     static double start = 0;
     static int step = 0;
     if (test)
@@ -498,7 +535,7 @@ extern "C" void Gta2Net_HudDraw(int dw, int dh)
                 HudWaypoint(2, true, x + 3, y - 2); // near: in view, at the ground's height
             step = 2;
         }
-        gScoreboard = t > 9000 && t < 14000;
+        gScoreboard = t > boardAt && t < boardAt + 5000;
     }
     if (gMatchOver)
     {
