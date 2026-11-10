@@ -84,6 +84,56 @@ container log: `docker logs gta2-app | grep invite`.
 - If gangs and reputation (D21 stage 3) need storage, they go in SQLite under
   `/opt/gta2/data`, never a database server on the droplet.
 
+## Hosting: a container behind your own nginx
+
+`scripts/deploy_lxc.sh` puts the server on a plain Linux host or container (an LXC on
+Proxmox, say) as a systemd service, with no Docker. HTTPS is left to an nginx that runs
+elsewhere.
+
+**Everything lives in `/opt/gta2/`:** `server/` (the Node server and `ws`), `web/` (the
+built game), `game/` (only the game's `data/` folder: no saves, executables or movies),
+and `db/` (saved crews, the only folder the service writes, as user `gta2`). The settings
+are in `/etc/gta2.env` (chmod 600). `gta2.service` runs Node from `/opt/node` with
+`ProtectSystem=strict` and a 512 MB limit.
+
+```bash
+# first time: an official Node linux-x64 .tar.xz, checked against its SHASUMS256.txt
+SSH_KEY=~/.ssh/key GTA2_PASSWORD='choose-one' PUBLIC_URL=https://gta2.example.com \
+  scripts/deploy_lxc.sh root@host --node node-v22.x-linux-x64.tar.xz \
+  --web build/port/release --game game
+# updates of the server code (add --web or --game when they change)
+SSH_KEY=~/.ssh/key scripts/deploy_lxc.sh root@host
+```
+
+The invite link is in `journalctl -u gta2`. The nginx in front:
+
+```nginx
+map $http_upgrade $connection_upgrade { default upgrade; '' close; }   # in http {}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name gta2.example.com;
+    # ssl_certificate, ssl_certificate_key: Let's Encrypt
+
+    location / {
+        proxy_pass http://<the container>:8790;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header Upgrade $http_upgrade;          # the /relay WebSocket
+        proxy_set_header Connection $connection_upgrade;
+        proxy_read_timeout 1h;                           # a lobby can stay quiet a long time
+        proxy_send_timeout 1h;
+        proxy_buffering off;                             # inputs at once, big files unbuffered
+        proxy_max_temp_file_size 0;
+    }
+}
+```
+
+Only nginx needs to reach port 8790: close it to everything else. Native players
+(`gta2-mp`) use `server = wss://gta2.example.com` in `conf/net.ini`; a Let's Encrypt
+certificate needs nothing more on the consoles.
+
 ## Running it on this computer
 
 ```bash
