@@ -93,7 +93,7 @@ function card(r) {
   for (const p of r.players) {
     const li = el('li');
     li.append(el('span', null, p.name || '(name not known yet)'));
-    if (p.crew) li.append(el('span', 'crew', '[' + p.crew + ']'));
+    if (p.crew && (r.settings || {}).mode === 'wars') li.append(el('span', 'crew', '[' + p.crew + ']')); // crews: Gang Wars only
     if (r.host && p.name === r.host) li.append(el('span', 'host', 'host'));
     list.append(li);
   }

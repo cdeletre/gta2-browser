@@ -794,7 +794,9 @@ void Draw(int dw, int dh)
                 std::string t = p["name"].Str();
                 if (p["ping"].IsNumber())
                     t += " " + std::to_string(p["ping"].Int()) + "ms";
-                if (!p["crew"].Str().empty())
+                // a crew is for Gang Wars only (the one joined last is kept, for when the host
+                // turns to Gang Wars, but not shown in the other modes)
+                if (!p["crew"].Str().empty() && gLobby->Settings()["mode"].Str() == "wars")
                     t += " [" + p["crew"].Str() + "]";
                 const bool me = p["id"].Str() == gLobby->MyId();
                 Gta2Native_OverlayTextExact(x0 + col * (kCols / 2) * cell, y + r * lineH, px, me ? kGreen : kWhite,
