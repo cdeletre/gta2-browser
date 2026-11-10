@@ -51,41 +51,6 @@ std::string Env(const char* name, const char* fallback)
     return v && *v ? v : fallback;
 }
 
-std::string Trim(const std::string& s)
-{
-    size_t a = s.find_first_not_of(" \t\r\n");
-    size_t b = s.find_last_not_of(" \t\r\n");
-    return a == std::string::npos ? "" : s.substr(a, b - a + 1);
-}
-
-std::vector<std::string> SplitList(const std::string& s)
-{
-    std::vector<std::string> out;
-    std::stringstream in(s);
-    std::string item;
-    while (std::getline(in, item, ','))
-    {
-        item = Trim(item);
-        if (!item.empty())
-            out.push_back(item);
-    }
-    return out;
-}
-
-std::string JoinList(const std::vector<std::string>& v)
-{
-    std::string out;
-    for (const std::string& s : v)
-        out += (out.empty() ? "" : ", ") + s;
-    return out;
-}
-
-const char* const kDefaultNames = "Ace, Rusty, Nina, Zed, Kasia, Moose, Lola, Duke";
-const char* const kDefaultRooms = "ROOM1, ROOM2, ROOM3, ROOM4, ROOM5, ROOM6";
-const char* const kDefaultCrews = "Reds, Blues, Greens";
-const char* const kDefaultChat[4] = {"Follow me!", "Wait for me!", "Help!", "Nice one!"};
-const char* const kChatKeys[4] = {"chat_up", "chat_down", "chat_left", "chat_right"};
-
 void Sleep10ms()
 {
     timespec ts = {0, 10 * 1000 * 1000};
@@ -107,137 +72,33 @@ std::string RosterText(const Json& players)
 }
 } // namespace
 
-std::vector<std::string> DefaultNames()
+ServerCheck ConnectServer(NetConfig& config, int index)
 {
-    return SplitList(kDefaultNames);
+    DisconnectServer(config);
+    ServerOptions o = OptionsOf(config, index);
+    fprintf(stderr, "gta2: net: connecting to %s (%s)\n", config.servers[static_cast<size_t>(index)].name.c_str(),
+            o.url.c_str());
+    ServerCheck r = WsTransport::Check(o);
+    if (!r.ok)
+    {
+        fprintf(stderr, "gta2: net: %s\n", r.error.c_str());
+        return r;
+    }
+    o.cookie = r.cookie;
+    config.server = o;
+    config.connected = index;
+    config.selected = index;
+    fprintf(stderr, "gta2: net: connected to %s\n", config.servers[static_cast<size_t>(index)].name.c_str());
+    return r;
 }
 
-std::vector<std::string> DefaultRooms()
+void DisconnectServer(NetConfig& config)
 {
-    return SplitList(kDefaultRooms);
-}
-
-NetConfig LoadNetConfig(const std::string& confDir)
-{
-    NetConfig c;
-    c.path = confDir + "/net.ini";
-    std::string server = "ws://127.0.0.1:8790", password, invite, caFile, fingerprint, names = kDefaultNames, name, rooms = kDefaultRooms,
-                room, crews = kDefaultCrews;
-    std::ifstream in(c.path);
-    const bool found = in.is_open(); // (the stream's state after reading to the end is no test)
-    if (found)
-    {
-        std::string line;
-        while (std::getline(in, line))
-        {
-            line = Trim(line);
-            if (line.empty() || line[0] == '#' || line[0] == ';' || line[0] == '[')
-                continue;
-            const size_t eq = line.find('=');
-            if (eq == std::string::npos)
-                continue;
-            const std::string key = Trim(line.substr(0, eq));
-            const std::string value = Trim(line.substr(eq + 1));
-            if (key == "server")
-                server = value;
-            else if (key == "password")
-                password = value;
-            else if (key == "invite")
-                invite = value;
-            else if (key == "ca_file")
-                caFile = value;
-            else if (key == "tls_fingerprint")
-                fingerprint = value;
-            else if (key == "names")
-                names = value;
-            else if (key == "name")
-                name = value;
-            else if (key == "rooms")
-                rooms = value;
-            else if (key == "room")
-                room = value;
-            else if (key == "crews")
-                crews = value;
-            else if (key == "crew")
-                c.crew = value.substr(0, 16);
-            else if (key == "show_chat")
-                c.showChat = value != "0" && value != "off" && value != "false";
-            else if (key == "show_waypoints")
-                c.showWaypoints = value != "0" && value != "off" && value != "false";
-            for (int i = 0; i < 4; ++i)
-            {
-                if (key == kChatKeys[i] && !value.empty())
-                    c.chat[i] = value.substr(0, 60);
-            }
-        }
-    }
-    for (int i = 0; i < 4; ++i)
-    {
-        if (c.chat[i].empty())
-            c.chat[i] = kDefaultChat[i];
-    }
-    c.fileUrl = server;
-    c.filePassword = password;
-    c.fileInvite = invite;
-    c.fileCaFile = caFile;
-    c.fileFingerprint = fingerprint;
-    c.server.url = Env("GTA2_NET_SERVER", server.c_str());
-    c.server.password = Env("GTA2_NET_PASSWORD", password.c_str());
-    c.server.invite = Env("GTA2_NET_INVITE", invite.c_str());
-    // wss://: a ca_file that is not absolute is in conf/, by net.ini
-    c.server.tls.caFile = Env("GTA2_NET_CA_FILE", caFile.c_str());
-    if (!c.server.tls.caFile.empty() && c.server.tls.caFile[0] != '/')
-        c.server.tls.caFile = confDir + "/" + c.server.tls.caFile;
-    c.server.tls.fingerprint = Env("GTA2_NET_TLS_FINGERPRINT", fingerprint.c_str());
-    c.names = SplitList(names);
-    c.rooms = SplitList(rooms);
-    c.crews = SplitList(crews);
-    if (c.names.empty())
-        c.names = SplitList(kDefaultNames);
-    if (c.rooms.empty())
-        c.rooms = SplitList(kDefaultRooms);
-    c.name = Env("GTA2_NET_NAME", name.empty() ? c.names[0].c_str() : name.c_str());
-    c.room = Env("GTA2_NET_ROOM", room.empty() ? c.rooms[0].c_str() : room.c_str());
-    if (!found)
-    {
-        SaveNetConfig(c);
-        fprintf(stderr, "gta2: net: wrote the default settings to %s\n", c.path.c_str());
-    }
-    return c;
-}
-
-void SaveNetConfig(const NetConfig& c)
-{
-    std::ofstream out(c.path);
-    if (!out)
-        return;
-    out << "# GTA2 multiplayer (gta2-mp). The game server, and the names and rooms the lobby\n"
-           "# offers (comma-separated; the browser's lobby can join the same rooms by name).\n"
-           "[net]\n"
-        << "server = " << c.fileUrl << "\n"
-        << "# the server's password, or the code of an invite link (?invite=...)\n"
-        << "password = " << c.filePassword << "\n"
-        << "invite = " << c.fileInvite << "\n"
-        << "# wss:// (TLS): the server's certificate is checked against the console's authorities;\n"
-           "# for a server with a certificate of its own, either its authority (a PEM file, in conf/\n"
-           "# unless absolute) or the certificate's sha256 fingerprint (the log shows it on connecting)\n"
-        << "ca_file = " << c.fileCaFile << "\n"
-        << "tls_fingerprint = " << c.fileFingerprint << "\n"
-        << "names = " << JoinList(c.names) << "\n"
-        << "name = " << c.name << "\n"
-        << "rooms = " << JoinList(c.rooms) << "\n"
-        << "room = " << c.room << "\n"
-        << "crews = " << JoinList(c.crews) << "\n"
-        << "# the crew joined last, joined again on entering a room (as the browser does)\n"
-        << "crew = " << c.crew << "\n"
-        << "# in a match: Select + up, down, left, right sends one of these\n"
-        << "chat_up = " << c.chat[0] << "\n"
-        << "chat_down = " << c.chat[1] << "\n"
-        << "chat_left = " << c.chat[2] << "\n"
-        << "chat_right = " << c.chat[3] << "\n"
-        << "# show the other players' chat messages and waypoints (also in Options)\n"
-        << "show_chat = " << (c.showChat ? 1 : 0) << "\n"
-        << "show_waypoints = " << (c.showWaypoints ? 1 : 0) << "\n";
+    LeaveRoom();
+    if (config.connected >= 0)
+        fprintf(stderr, "gta2: net: disconnected from %s\n", config.servers[static_cast<size_t>(config.connected)].name.c_str());
+    config.connected = -1;
+    config.server.cookie.clear();
 }
 
 bool JoinRoom(const NetConfig& config, const std::string& name, const std::string& room, bool host, std::string* error)
@@ -497,6 +358,9 @@ extern "C" void Gta2Net_AfterMatch(char** argv)
 #if !defined(GTA2_NATIVE_HEADLESS)
     LeaveRoom();
     fprintf(stderr, "gta2: net: match over, back to the lobby\n");
+    // the lobby connects again to the server of this match (lobby_screen.cpp)
+    if (gConfig && gConfig->connected >= 0)
+        setenv("GTA2_NET_RECONNECT", gConfig->servers[static_cast<size_t>(gConfig->connected)].name.c_str(), 1);
     fflush(stderr);
     execv("/proc/self/exe", argv);
     fprintf(stderr, "gta2: net: could not restart for the lobby\n");

@@ -2,8 +2,9 @@
 // lobby (web/shell.js wireCoopLobby) in the Options screen's style (overlay font, the same
 // inputs: up/down choose a line, left/right change it, A acts, B goes back).
 //
-//   1. this player's name and the room (picked from conf/net.ini's lists: no on-screen
-//      keyboard yet), then Create room (host) or Join room;
+//   1. the game server (conf/net.ini's [server] sections: A connects, or disconnects; a
+//      password the server wants and the file has not is asked in a window), this player's
+//      name and the room, then Create room (host) or Join room;
 //   2. in the room: the players with their round trip; the host sets the mode, the
 //      district and the limits; in Gang Wars everyone picks a crew and the crew a gang;
 //      the host starts the match;
@@ -59,6 +60,8 @@ struct Item
     uint32_t colour = 0;                // 0: the screen's; else the line's own (a crew's gang)
     bool info = false;                  // a line to read, not to choose
     std::string help;                   // the help line while it is chosen ("" for the default)
+    bool off = false;                   // shown grey: not possible yet (A says why)
+    bool exact = false;                 // the label as typed (a server's name), not in capitals
 };
 
 struct Screen
@@ -81,6 +84,8 @@ struct Screen
     int newCrew = 0;          // New crew: the name offered (an index; past the names: type one)
     bool crewSent = false;    // the crew joined last went to the host
     int scroll = 0;           // the first line shown
+    int askPassword = -1;     // the server whose password the window asks for (next frame)
+    int passwordFor = -1;     // the server the window is asking for
 };
 Screen gS;
 
@@ -187,6 +192,59 @@ void Enter(bool host)
     gS.line = 0;
     gS.message = host ? "Room created: the others join " + gS.config->room + "." : "";
     gS.messageError = false;
+}
+
+void Connect(int index, bool typed);
+
+// The window for a server's password (the on-screen keyboard over the lobby).
+void AskPassword(int index)
+{
+    gS.passwordFor = index;
+    const std::string title = "Password for " + gS.config->servers[static_cast<size_t>(index)].name;
+    Gta2Native_OskStart(title.c_str(), "", 64, [](bool ok, const char* text) {
+        const int i = gS.passwordFor;
+        gS.passwordFor = -1;
+        if (!ok || !text[0] || i < 0)
+        {
+            Notice("Not connected.", false);
+            return;
+        }
+        ServerEntry& e = gS.config->servers[static_cast<size_t>(i)];
+        const std::string before = e.password;
+        const std::string invite = e.invite;
+        e.password = text;
+        e.invite.clear();
+        Connect(i, true);
+        if (gS.config->connected != i)
+        {
+            e.password = before; // kept only once the server takes it
+            e.invite = invite;
+        }
+    });
+}
+
+// A on a server: connects to it (after letting the previous one go), or disconnects from it.
+void Connect(int index, bool typed)
+{
+    NetConfig& c = *gS.config;
+    const std::string name = c.servers[static_cast<size_t>(index)].name;
+    if (c.connected == index && !typed)
+    {
+        DisconnectServer(c);
+        Notice("Disconnected from " + name + ".", false);
+        return;
+    }
+    Notice("Connecting to " + name + "...", false);
+    const ServerCheck r = ConnectServer(c, index);
+    if (r.ok)
+    {
+        Notice("Connected to " + name + ": pick a room.", false);
+        SaveNetConfig(c); // the server connected last (and a password typed for it)
+        return;
+    }
+    Notice(r.error.empty() ? "Could not connect to " + name + "." : r.error, true);
+    if (r.needsPassword)
+        gS.askPassword = index; // the window opens on the next frame
 }
 
 // A value typed on the on-screen keyboard joins the front of its list (left/right then turn
@@ -343,6 +401,19 @@ void BuildItems()
     NetConfig& c = *gS.config;
     if (gS.phase == kSetup)
     {
+        // the servers of conf/net.ini: A connects (or disconnects)
+        for (int i = 0; i < static_cast<int>(c.servers.size()); ++i)
+        {
+            Item line;
+            line.label = c.servers[static_cast<size_t>(i)].name;
+            const bool on = c.connected == i;
+            line.value = [on] { return std::string(on ? "Connected" : ""); };
+            line.act = [i] { Connect(i, false); };
+            line.colour = on ? 0xff70e070u : 0;
+            line.help = on ? "A: disconnect" : "A: connect";
+            line.exact = true;
+            it.push_back(line);
+        }
         // left/right: the lists of conf/net.ini, then "DEFAULT"; A: the on-screen keyboard (any
         // name; a room created by a browser has a code of its own, upper case as the browser
         // makes it), or on "DEFAULT" the lists a new net.ini has; X: the entry leaves the list
@@ -395,8 +466,20 @@ void BuildItems()
                           });
                       },
                       [&c] { Forget(c.rooms, c.room, gS.roomDefault); }});
-        it.push_back({"Create room", nullptr, nullptr, [] { Enter(true); }});
-        it.push_back({"Join room", nullptr, nullptr, [] { Enter(false); }});
+        const bool connected = c.connected >= 0;
+        for (const bool host : {true, false})
+        {
+            Item line;
+            line.label = host ? "Create room" : "Join room";
+            line.act = [host, connected] {
+                if (connected)
+                    Enter(host);
+                else
+                    Notice("Connect to a server first (A on its line).", true);
+            };
+            line.off = !connected;
+            it.push_back(line);
+        }
         it.push_back({"Quit", nullptr, nullptr, [] { gS.quit = true; }});
         return;
     }
@@ -521,7 +604,11 @@ void Draw(int dw, int dh)
     {
         Gta2Native_OverlayText(x0, y, px, kWhite, "GTA2 multiplayer");
         y += lineH;
-        snprintf(buf, sizeof(buf), "Server: %s", gS.config->server.url.c_str());
+        const NetConfig& c = *gS.config;
+        if (c.connected >= 0)
+            snprintf(buf, sizeof(buf), "Server: %s", c.server.url.c_str());
+        else
+            snprintf(buf, sizeof(buf), "%s", "Not connected: pick a server");
         Gta2Native_OverlayText(x0, y, px, kGrey, buf);
         y += 2 * lineH;
     }
@@ -584,11 +671,12 @@ void Draw(int dw, int dh)
                 Gta2Native_OverlayRect(x0 - cell, y - 3 * px, width + 2 * cell, lineH, kBar);
             const uint32_t colour = item.info ? kGrey
                 : sel                         ? kYellow
+                : item.off                    ? kGrey
                 : item.colour                 ? item.colour
                 : item.change || item.act     ? kWhite
                                               : kGrey;
             // crew lines carry players' names: as typed
-            (item.colour || item.info ? Gta2Native_OverlayTextExact : Gta2Native_OverlayText)(
+            (item.colour || item.info || item.exact ? Gta2Native_OverlayTextExact : Gta2Native_OverlayText)(
                 x0, y, px, colour, item.label.substr(0, item.value ? 30 : kCols).c_str());
             const std::string value = item.value ? item.value() : "";
             if (!value.empty())
@@ -645,6 +733,8 @@ void Draw(int dw, int dh)
         gS.line < static_cast<int>(gS.items.size()) ? gS.items[static_cast<size_t>(gS.line)].help : std::string();
     if (!lineHelp.empty() && gS.phase == kRoom)
         Gta2Native_OverlayText(x0, bottom + lineH, px, kGrey, (lineHelp + "  B: leave").substr(0, kCols).c_str());
+    else if (!lineHelp.empty())
+        Gta2Native_OverlayText(x0, bottom + lineH, px, kGrey, lineHelp.substr(0, kCols).c_str());
     else
     Gta2Native_OverlayText(x0, bottom + lineH, px, kGrey,
                            gS.phase == kRoom ? "A: choose  Left/right: change  B: leave"
@@ -703,6 +793,12 @@ void ScriptedKeys()
 // One frame of the screen: events, the transport, the host's pings, drawing.
 bool Frame()
 {
+    if (gS.askPassword >= 0 && !Gta2Native_OskOpen())
+    {
+        const int i = gS.askPassword;
+        gS.askPassword = -1;
+        AskPassword(i);
+    }
     ScriptedKeys();
     if (!Gta2Native_PumpEvents())
     {
@@ -745,7 +841,18 @@ int RunLobbyScreen(NetConfig& config)
 {
     gS.config = &config;
     gS.active = true;
-    fprintf(stderr, "gta2: lobby: server %s\n", config.server.url.c_str());
+    gS.line = config.selected; // on the server connected last
+    // back from a match: connected again to its server (net_main.cpp's Gta2Net_AfterMatch)
+    if (const char* again = getenv("GTA2_NET_RECONNECT"))
+    {
+        const std::string name = again;
+        unsetenv("GTA2_NET_RECONNECT");
+        for (int i = 0; i < static_cast<int>(config.servers.size()); ++i)
+        {
+            if (config.servers[static_cast<size_t>(i)].name == name)
+                Connect(i, false);
+        }
+    }
     while (Frame())
     {
         if (!gS.match.IsNull())

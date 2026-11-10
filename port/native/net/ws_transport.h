@@ -24,7 +24,17 @@ struct ServerOptions
     std::string password; // the server's password, if it has one
     std::string invite;   // or the code of an invite link
     TlsOptions tls;       // wss://: the authorities, or the certificate's fingerprint
+    std::string cookie;   // a session from Check() (then no login again)
     double timeoutMs = 8000;
+};
+
+// What Check() found out about a server.
+struct ServerCheck
+{
+    bool ok = false;            // the relay lets us in (with *cookie, if it needed one)
+    bool needsPassword = false; // it needs a password (none given, or a wrong one)
+    std::string cookie;         // the session to join rooms with ("" if the server has no password)
+    std::string error;          // why not, for the player
 };
 
 class WsTransport : public Transport
@@ -32,6 +42,9 @@ class WsTransport : public Transport
   public:
     // Logs in if needed and opens the WebSocket; nullptr (and why in *error) on failure.
     static std::unique_ptr<WsTransport> Connect(const ServerOptions& options, std::string* error);
+    // Logs in (password or invite, if given) and asks the relay to let us in, without
+    // joining a room: the lobby's "connected to a server".
+    static ServerCheck Check(const ServerOptions& options);
     ~WsTransport() override;
 
     void Join() override;

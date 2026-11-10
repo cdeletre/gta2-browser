@@ -245,16 +245,12 @@ std::string WebSocketKey()
     }
     return out;
 }
-} // namespace
-
-std::unique_ptr<WsTransport> WsTransport::Connect(const ServerOptions& o, std::string* error)
+// The relay's WebSocket with the session cookie: the connection (status 101), or null with the
+// status (403: no session, or a wrong one) and why.
+std::unique_ptr<Conn> OpenRelay(const Url& url, const ServerOptions& o, const std::string& cookie, int* status,
+                                std::string* rest, std::string* error)
 {
-    Url url;
-    if (!ParseUrl(o.url, &url, error))
-        return nullptr;
-    std::string cookie;
-    if ((!o.password.empty() || !o.invite.empty()) && !Login(url, o, &cookie, error))
-        return nullptr;
+    *status = 0;
     std::unique_ptr<Conn> conn = Conn::Open(url.host, url.port, url.tls, o.tls, o.timeoutMs, error);
     if (!conn)
         return nullptr;
@@ -262,20 +258,69 @@ std::unique_ptr<WsTransport> WsTransport::Connect(const ServerOptions& o, std::s
         "\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: " + WebSocketKey() +
         "\r\nSec-WebSocket-Version: 13\r\n" + (cookie.empty() ? "" : "Cookie: gta2_session=" + cookie + "\r\n") + "\r\n";
     std::string head;
-    std::string rest;
-    if (!SendAll(*conn, request, o.timeoutMs) || !ReadHead(*conn, o.timeoutMs, &head, &rest))
+    if (!SendAll(*conn, request, o.timeoutMs) || !ReadHead(*conn, o.timeoutMs, &head, rest))
     {
         *error = "the server did not answer the WebSocket request";
         return nullptr;
     }
-    if (StatusOf(head) != 101)
+    *status = StatusOf(head);
+    if (*status != 101)
     {
-        const int status = StatusOf(head);
-        *error = status == 403 ? "the server refused the relay (403: a password is needed?)"
-                               : "the server answered " + std::to_string(status) + " instead of a WebSocket";
+        *error = *status == 403 ? "the server refused the relay (403: a password is needed?)"
+                                : "the server answered " + std::to_string(*status) + " instead of a WebSocket";
         return nullptr;
     }
+    return conn;
+}
+} // namespace
+
+std::unique_ptr<WsTransport> WsTransport::Connect(const ServerOptions& o, std::string* error)
+{
+    Url url;
+    if (!ParseUrl(o.url, &url, error))
+        return nullptr;
+    std::string cookie = o.cookie;
+    if (cookie.empty() && (!o.password.empty() || !o.invite.empty()) && !Login(url, o, &cookie, error))
+        return nullptr;
+    int status = 0;
+    std::string rest;
+    std::unique_ptr<Conn> conn = OpenRelay(url, o, cookie, &status, &rest, error);
+    if (!conn)
+        return nullptr;
     return std::unique_ptr<WsTransport>(new WsTransport(std::move(conn), o.room.substr(0, 32), rest));
+}
+
+ServerCheck WsTransport::Check(const ServerOptions& o)
+{
+    ServerCheck r;
+    Url url;
+    if (!ParseUrl(o.url, &url, &r.error))
+        return r;
+    if (!o.password.empty() || !o.invite.empty())
+    {
+        if (!Login(url, o, &r.cookie, &r.error))
+        {
+            // a wrong password (or invite): ask for it; else the server could not be reached
+            r.needsPassword = r.error == "wrong server password" || r.error == "invalid invite code";
+            return r;
+        }
+    }
+    int status = 0;
+    std::string rest;
+    std::unique_ptr<Conn> conn = OpenRelay(url, o, r.cookie, &status, &rest, &r.error);
+    if (!conn)
+    {
+        if (status == 403)
+        {
+            r.needsPassword = true;
+            r.error = "This server needs a password.";
+        }
+        r.cookie.clear();
+        return r;
+    }
+    // in: the relay drops a connection that never joined a room when it closes
+    r.ok = true;
+    return r;
 }
 
 WsTransport::WsTransport(std::unique_ptr<Conn> conn, std::string room, std::string leftover)

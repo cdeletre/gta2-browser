@@ -67,12 +67,15 @@ relay $((BASE + 2)) --cert other-name.pem --key other-name.key
 relay $((BASE + 3)) --cert expired.pem --key expired.key
 relay $((BASE + 4)) --cert future.pem --key future.key
 relay $((BASE + 5)) --cert self.pem --key self.key
+# a relay with no password
+python3 "$ROOT/scripts/native/test_relay.py" --port $((BASE + 7)) > "relay-$((BASE + 7)).log" 2>&1 &
+PIDS+=($!)
 # a server that takes the connection and never answers (handshake timeout)
 python3 -c "import socket,time; s=socket.socket(); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1); s.bind(('127.0.0.1', $((BASE + 6)))); s.listen(8); time.sleep(600)" &
 PIDS+=($!)
 for _ in $(seq 50); do
   ready=1
-  for i in 0 1 2 3 4 5 6; do (echo > /dev/tcp/127.0.0.1/$((BASE + i))) 2>/dev/null || ready=0; done
+  for i in 0 1 2 3 4 5 6 7; do (echo > /dev/tcp/127.0.0.1/$((BASE + i))) 2>/dev/null || ready=0; done
   [[ $ready -eq 1 ]] && break
   sleep 0.1
 done

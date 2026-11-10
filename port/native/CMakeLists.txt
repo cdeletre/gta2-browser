@@ -188,6 +188,7 @@ if(GTA2_MULTIPLAYER)
     "${NATIVE}/net/json.cpp"
     "${NATIVE}/net/lobby.cpp"
     "${NATIVE}/net/memory_transport.cpp"
+    "${NATIVE}/net/net_config.cpp"
     "${NATIVE}/net/tls_conn.cpp"
     "${NATIVE}/net/ws_transport.cpp")
   target_compile_options(gta2_net PRIVATE ${GTA2_COMMON_FLAGS} ${GTA2_OPT} ${GTA2_SAN})

@@ -5,10 +5,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <time.h>
 
 #include <fstream>
 #include <functional>
+#include <sstream>
 #include <memory>
 #include <string>
 #include <vector>
@@ -16,6 +18,7 @@
 #include "json.h"
 #include "lobby.h"
 #include "memory_transport.h"
+#include "net_session.h"
 #include "ws_transport.h"
 
 using namespace gta2net;
@@ -414,6 +417,102 @@ void TestVersion()
     CHECK(guest.Players().size() == 0);
 }
 
+// ---- conf/net.ini: several [server] sections, the older format, the environment ----
+
+std::string WriteFile(const std::string& dir, const std::string& text)
+{
+    std::ofstream(dir + "/net.ini") << text;
+    return dir;
+}
+
+std::string ReadFile(const std::string& path)
+{
+    std::ifstream in(path);
+    std::stringstream all;
+    all << in.rdbuf();
+    return all.str();
+}
+
+void TestNetConfig()
+{
+    char tmpl[] = "/tmp/gta2-net-test-XXXXXX";
+    const std::string dir = mkdtemp(tmpl);
+    unsetenv("GTA2_NET_SERVER");
+    unsetenv("GTA2_NET_PASSWORD");
+
+    // the new format: order kept, a section without url left out, names made one each
+    WriteFile(dir, "[net]\nserver = Home\nname = Zed\n"
+                   "[server]\nname = Main\nurl = wss://gta2.example.com\npassword = pw\n"
+                   "[server]\nname = Home\nurl = ws://10.0.0.2:8790\ninvite = abc\nca_file = home.pem\n"
+                   "[server]\nname = Broken\n"
+                   "[server]\nurl = wss://other.example.org:8443/relay\ntls_fingerprint = sha256:00\n"
+                   "[server]\nname = Main\nurl = wss://second.example.com\n");
+    NetConfig c = LoadNetConfig(dir);
+    CHECK_EQ(c.servers.size(), size_t(4));
+    if (c.servers.size() == 4)
+    {
+        CHECK_EQ(c.servers[0].name, std::string("Main"));
+        CHECK_EQ(c.servers[0].password, std::string("pw"));
+        CHECK_EQ(c.servers[1].name, std::string("Home"));
+        CHECK_EQ(c.servers[2].name, std::string("other.example.org")); // no name: the url's host
+        CHECK_EQ(c.servers[3].name, std::string("Main 2"));
+        CHECK_EQ(c.selected, 1);
+        CHECK_EQ(c.server.url, std::string("ws://10.0.0.2:8790"));
+        CHECK_EQ(c.server.invite, std::string("abc"));
+        CHECK_EQ(c.server.tls.caFile, dir + "/home.pem"); // relative: in conf/
+        CHECK_EQ(OptionsOf(c, 2).tls.fingerprint, std::string("sha256:00"));
+    }
+    CHECK_EQ(c.name, std::string("Zed"));
+
+    // written back and read again: the same servers, the one picked
+    c.servers[0].password = "typed";
+    c.selected = 0;
+    SaveNetConfig(c);
+    NetConfig again = LoadNetConfig(dir);
+    CHECK_EQ(again.servers.size(), size_t(4));
+    CHECK_EQ(again.selected, 0);
+    CHECK_EQ(again.servers[0].password, std::string("typed"));
+    CHECK_EQ(again.servers[3].name, std::string("Main 2"));
+
+    // the older format: its server = <url> and login in [net], as one server
+    WriteFile(dir, "[net]\nserver = wss://gta2.example.com\npassword = old\ninvite = \nca_file = \nname = Kasia\n");
+    NetConfig old = LoadNetConfig(dir);
+    CHECK_EQ(old.servers.size(), size_t(1));
+    CHECK_EQ(old.servers[0].name, std::string("gta2.example.com"));
+    CHECK_EQ(old.server.password, std::string("old"));
+    SaveNetConfig(old);
+    const std::string written = ReadFile(dir + "/net.ini");
+    CHECK(written.find("[server]\nname = gta2.example.com\nurl = wss://gta2.example.com\npassword = old\n") != std::string::npos);
+    CHECK(written.find("server = gta2.example.com\n") != std::string::npos);
+
+    // the environment: a server of its own, chosen, never written; a password for a file's
+    // server is for this run only
+    setenv("GTA2_NET_SERVER", "ws://127.0.0.1:9", 1);
+    setenv("GTA2_NET_PASSWORD", "envpw", 1);
+    NetConfig env = LoadNetConfig(dir);
+    CHECK_EQ(env.servers.size(), size_t(2));
+    CHECK(env.servers[0].fromEnv);
+    CHECK_EQ(env.server.url, std::string("ws://127.0.0.1:9"));
+    CHECK_EQ(env.server.password, std::string("envpw"));
+    SaveNetConfig(env);
+    CHECK(ReadFile(dir + "/net.ini").find("127.0.0.1:9") == std::string::npos);
+    unsetenv("GTA2_NET_SERVER");
+    NetConfig over = LoadNetConfig(dir);
+    CHECK_EQ(over.server.password, std::string("envpw"));
+    SaveNetConfig(over);
+    CHECK(ReadFile(dir + "/net.ini").find("envpw") == std::string::npos);
+    unsetenv("GTA2_NET_PASSWORD");
+
+    // no file: written with one server, this computer's
+    unlink((dir + "/net.ini").c_str());
+    NetConfig fresh = LoadNetConfig(dir);
+    CHECK_EQ(fresh.servers.size(), size_t(1));
+    CHECK_EQ(fresh.server.url, std::string("ws://127.0.0.1:8790"));
+    CHECK(ReadFile(dir + "/net.ini").find("[server]\nname = This computer\n") != std::string::npos);
+    unlink((dir + "/net.ini").c_str());
+    rmdir(dir.c_str());
+}
+
 // ---- ws:// and wss:// against scripts/native/test_relay.py (scripts/native/test_tls.sh) ----
 
 std::string gTlsDir;
@@ -522,6 +621,41 @@ void TestWebSocket()
     std::string selfPrint;
     std::ifstream(gTlsDir + "/self.sha256") >> selfPrint;
 
+    // the lobby's "connect": login and the relay, without a room
+    ServerOptions plain = Relay("ws", 0);
+    plain.password.clear();
+    ServerCheck k = WsTransport::Check(plain);
+    CHECK(!k.ok && k.needsPassword);
+    fprintf(stderr, "  check, no password: %s\n", k.error.c_str());
+    plain.password = "wrong";
+    k = WsTransport::Check(plain);
+    CHECK(!k.ok && k.needsPassword);
+    plain.password = "pw";
+    k = WsTransport::Check(plain);
+    CHECK(k.ok && !k.cookie.empty());
+    {
+        // a room joined with that session, no login again
+        ServerOptions withCookie = Relay("ws", 0);
+        withCookie.password.clear();
+        withCookie.cookie = k.cookie;
+        std::string error;
+        auto t = WsTransport::Connect(withCookie, &error);
+        CHECK(t && t->Connected());
+    }
+    plain.password.clear();
+    plain.invite = "test-invite";
+    CHECK(WsTransport::Check(plain).ok);
+    ServerOptions open = Relay("ws", 7);
+    open.password.clear();
+    k = WsTransport::Check(open);
+    CHECK(k.ok && k.cookie.empty());
+    ServerOptions secure = Relay("wss", 1);
+    secure.tls.caFile = ca;
+    CHECK(WsTransport::Check(secure).ok);
+    ServerOptions nobody = Relay("ws", 9);
+    k = WsTransport::Check(nobody);
+    CHECK(!k.ok && !k.needsPassword && k.error.find("cannot connect") != std::string::npos);
+    fprintf(stderr, "  check, nobody there: %s\n", k.error.c_str());
     Exchange(Relay("ws", 0), "ws:// with the password");
     ServerOptions o = Relay("wss", 1);
     o.tls.caFile = ca;
@@ -593,6 +727,7 @@ int main()
     TestLeaveBeforeStart();
     TestBrowserRoster();
     TestVersion();
+    TestNetConfig();
     TestWebSocket();
     printf("gta2-net-test: %d checks, %d failed\n", gChecks, gFailures);
     return gFailures ? 1 : 0;

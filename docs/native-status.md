@@ -1086,6 +1086,25 @@ Vu :
 
 Pas encore vérifié : session longue (une heure ou plus) en `wss://` sur le serveur public.
 
+**Plusieurs serveurs dans le lobby (10 novembre)** : `conf/net.ini` a une section `[server]`
+par serveur (`name`, `url`, et en option `password`, `invite`, `ca_file`, `tls_fingerprint`),
+dans l'ordre du lobby ; `[net] server` nomme celui connecté en dernier. Sans `name`, l'hôte de
+l'`url` ; deux noms pareils : « Main 2 ». L'ancien format (`server = <url>` et le login dans
+`[net]`) se lit comme un serveur et s'écrit au nouveau format. `GTA2_NET_SERVER` (tests) ajoute
+un serveur à part, jamais écrit ; sans lui, `GTA2_NET_PASSWORD`… valent pour la partie seulement.
+Lecture et écriture dans `net/net_config.cpp` (testées par `gta2-net-test`).
+Dans le lobby : les serveurs en tête ; A s'y connecte (le précédent est quitté d'abord) ou s'en
+déconnecte ; « connecté » = login fait et relais d'accord (`WsTransport::Check`, sans salle),
+la session sert ensuite à chaque salle sans nouveau login. Un serveur qui veut un mot de passe
+absent ou faux ouvre une fenêtre (clavier à l'écran) ; accepté, le mot de passe est écrit dans sa
+section ; refusé, la fenêtre revient. Create room et Join room restent gris tant qu'on n'est pas
+connecté. Après un match, le lobby (nouveau processus) se reconnecte au serveur du match.
+Vu dans le conteneur : `gta2-net-test` 242 vérifications (format, ancien format, noms, environnement
+jamais écrit ; `Check` sans mot de passe, faux, bon puis salle avec la session, invitation,
+serveur ouvert, `wss://`, serveur absent), aussi sous ASan + UBSan ; captures : liste, connexion,
+fenêtre du mot de passe, « pw » tapé, connecté, écrit dans `net.ini`, salle créée ; lobby
+automatique à deux joueurs inchangé.
+
 Reste : A5 (consoles), A7 (scores, chat, points de passage), puis D1-D4 (transport TCP local,
 découverte UDP, consoles, paquet).
 
