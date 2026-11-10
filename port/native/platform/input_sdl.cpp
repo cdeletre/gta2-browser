@@ -256,18 +256,19 @@ left_stick = dpad
 stick_deadzone = 0.35
 
 [city]
+# after the PlayStation version's layout (cross = a, square = b, triangle = y, circle = x)
 up = forward
 down = backward
 left = left
 right = right
-r2 = forward
-l2 = backward
-a = attack
+a = forward
+b = backward
 y = enter_exit
-x = jump
-b = special1
-l1 = prev_weapon
-r1 = next_weapon
+x = special1
+r1 = jump
+r2 = attack
+l1 = next_weapon
+l2 = prev_weapon
 l3 = special2
 r3 = status
 start = pause

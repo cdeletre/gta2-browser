@@ -553,9 +553,12 @@ Ce que le jeu écrit sur stdout/stderr (le `log.txt` du lanceur) :
   bouton. `[menu]` : `up down left right confirm back`. Les deux acceptent `none` et
   `key:<nom SDL>`. Une ligne invalide est signalée dans le journal avec son numéro, puis
   ignorée ; une ligne absente garde la valeur par défaut.
-  - Valeurs par défaut : en ville, croix/stick = déplacement, R2/L2 = accélérer/freiner,
-    A = tirer, Y = voiture, X = saut/frein à main, B = spécial 1, L1/R1 = armes,
-    L3 = spécial 2, R3 = statut, Start = pause ; dans les menus, A = valider, B et
+  - Valeurs par défaut (10 novembre, d'après la version PlayStation : ✕ = A, □ = B,
+    △ = Y, ○ = X) : en ville, croix/stick = déplacement (haut/bas : avancer/reculer),
+    A/B = accélérer/freiner (avancer/reculer à pied), R2 = tirer, Y = voiture,
+    R1 = saut/frein à main, X = spécial 1, L1/L2 = arme suivante/précédente,
+    L3 = spécial 2, R3 = statut, Start = pause, Select = radio. Avant : R2/L2 =
+    accélérer/freiner, A = tirer, X = saut, B = spécial 1, L1/R1 = armes ; dans les menus, A = valider, B et
     Start = retour. Les étiquettes a, b, x, y suivent `face_buttons` : SDL ne connaît que
     les positions, et les portables sont en général étiquetés à la Nintendo (A à droite,
     B en bas ; c'est le cas de la MANGMI Air X). `GTA2_FACE_BUTTONS` remplace le fichier.

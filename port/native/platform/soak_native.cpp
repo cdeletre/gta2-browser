@@ -35,21 +35,25 @@ struct Key
     int scancode; // DirectInput
     int vk;
     int sdlScancode; // the same key for GTA2_SOAK_INPUT=keyboard (SDL_Scancode)
-    int padButton;   // the controller button for it in the city (SDL_GameControllerButton)
+    int padButton;   // the controller button for it in the city (SDL_GameControllerButton),
+                     // or kTriggerL2 / kTriggerR2
 };
+constexpr int kTriggerL2 = 100; // the triggers are axes in SDL
+constexpr int kTriggerR2 = 101;
 // The original's defaults (gDefaultControls_61A9E4): arrows, LCtrl, Return, Space, Z, X;
-// controller buttons as input_sdl.cpp maps them. SDL values: SDL_scancode.h and
+// controller buttons as input_sdl.cpp maps them (the PlayStation-like layout: R2 attacks,
+// R1 jumps, L1 / L2 next / previous weapon, Y gets in). SDL values: SDL_scancode.h and
 // SDL_gamecontroller.h (UP 82, DOWN 81, LEFT 80, RIGHT 79, LCTRL 224, RETURN 40, SPACE 44,
 // Z 29, X 27; A 0, X 2, Y 3, LEFTSHOULDER 9, RIGHTSHOULDER 10, DPAD_UP 11..DPAD_RIGHT 14).
 const Key kForward{0xC8, 0x26, 82, 11};
 const Key kBack{0xD0, 0x28, 81, 12};
 const Key kLeft{0xCB, 0x25, 80, 13};
 const Key kRight{0xCD, 0x27, 79, 14};
-const Key kAttack{0x1D, 0x11, 224, 0};
+const Key kAttack{0x1D, 0x11, 224, kTriggerR2};
 const Key kEnter{0x1C, 0x0D, 40, 3};
-const Key kJump{0x39, 0x20, 44, 2};
-const Key kPrevWeapon{0x2C, 0x5A, 29, 9};
-const Key kNextWeapon{0x2D, 0x58, 27, 10};
+const Key kJump{0x39, 0x20, 44, 10};
+const Key kPrevWeapon{0x2C, 0x5A, 29, kTriggerL2};
+const Key kNextWeapon{0x2D, 0x58, 27, 9};
 // Menus: A confirms, B goes back, the d-pad moves (input_sdl.cpp's menu layout).
 const Key kMenuOk{0x1C, 0x0D, 40, 0};
 const Key kMenuBack{0x01, 0x1B, 41, 1};
@@ -83,6 +87,14 @@ void Send(const Key& k, bool down)
         // padButton holds the label (A 0, B 1, X 2, Y 3); input_sdl.cpp knows which button
         // carries it (GTA2_FACE_BUTTONS).
         SDL_Event e{};
+        if (k.padButton == kTriggerL2 || k.padButton == kTriggerR2)
+        {
+            e.type = SDL_CONTROLLERAXISMOTION;
+            e.caxis.axis = k.padButton == kTriggerL2 ? SDL_CONTROLLER_AXIS_TRIGGERLEFT : SDL_CONTROLLER_AXIS_TRIGGERRIGHT;
+            e.caxis.value = down ? 32767 : 0;
+            SDL_PushEvent(&e);
+            return;
+        }
         e.type = down ? SDL_CONTROLLERBUTTONDOWN : SDL_CONTROLLERBUTTONUP;
         e.cbutton.state = down ? SDL_PRESSED : SDL_RELEASED;
         e.cbutton.button = static_cast<Uint8>(Gta2Native_PadButtonForLabel(k.padButton));
