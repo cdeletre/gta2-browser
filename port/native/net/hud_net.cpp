@@ -35,6 +35,7 @@
 
 extern "C" void Gta2Native_OverlayRect(float x, float y, float w, float h, uint32_t rgba);
 extern "C" void Gta2Native_OverlayText(float x, float y, float px, uint32_t rgba, const char* text);
+extern "C" void Gta2Native_OverlayTextExact(float x, float y, float px, uint32_t rgba, const char* text); // names, chat
 extern "C" bool Gta2Native_PumpEvents(); // platform/window_sdl.cpp
 extern "C" void gta2_js_present(const void* cmdData, int cmdCount, const void* vertData, int vertCount, int refW);
 extern "C" const int32_t* gta2_port_coop_players(); // port/platform/coop_web.cpp
@@ -229,7 +230,7 @@ void DrawScoreboard(int dw, int dh, bool final)
     {
         if (r.strong)
             Gta2Native_OverlayRect(x0 - cell, y - 3 * px, width + 2 * cell, lineH, 0xff303030);
-        Gta2Native_OverlayText(x0, y, px, r.colour, r.name.substr(0, 20).c_str());
+        Gta2Native_OverlayTextExact(x0, y, px, r.colour, r.name.substr(0, 20).c_str());
         right(28, kWhite, std::to_string(r.kills));
         if (r.deaths >= 0)
             right(35, kWhite, std::to_string(r.deaths));
@@ -360,7 +361,7 @@ void DrawWaypoints(int dw, int dh)
             tx = static_cast<float>(sx) - size - tw;
         const float ty = static_cast<float>(sy) - 4 * px;
         Gta2Native_OverlayRect(tx - px, ty - 2 * px, tw + 2 * px, 11 * px, 0x90000000);
-        Gta2Native_OverlayText(tx, ty, px, colour, label.c_str());
+        Gta2Native_OverlayTextExact(tx, ty, px, colour, label.c_str());
     }
 }
 
@@ -387,14 +388,14 @@ void DrawChat(int dw, int dh)
         const int first = std::max(10, kCols - static_cast<int>(name.size()));
         Gta2Native_OverlayRect(x0 - 2 * px, y - 2 * px, (std::min<int>(kCols, static_cast<int>(name.size() + text.size())) + 1) * 6 * px,
                                lineH, 0x90000000);
-        Gta2Native_OverlayText(x0, y, px, l.slot >= 0 ? kColours[l.slot % 6] : kGrey, name.c_str());
-        Gta2Native_OverlayText(x0 + name.size() * 6 * px, y, px, kWhite, text.substr(0, first).c_str());
+        Gta2Native_OverlayTextExact(x0, y, px, l.slot >= 0 ? kColours[l.slot % 6] : kGrey, name.c_str());
+        Gta2Native_OverlayTextExact(x0 + name.size() * 6 * px, y, px, kWhite, text.substr(0, first).c_str());
         y += lineH;
         if (static_cast<int>(text.size()) > first)
         {
             const std::string rest = text.substr(first, kCols);
             Gta2Native_OverlayRect(x0 - 2 * px, y - 2 * px, (rest.size() + 1) * 6 * px, lineH, 0x90000000);
-            Gta2Native_OverlayText(x0, y, px, kWhite, rest.c_str());
+            Gta2Native_OverlayTextExact(x0, y, px, kWhite, rest.c_str());
             y += lineH;
         }
     }

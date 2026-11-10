@@ -15,6 +15,9 @@
 // lights up in two colours); shifted, the top row is ! @ # $ % ? & * ( ) _ +.
 // D-pad: move; A: press the key; B: delete; X: space; Y: shift; Start: done (Return);
 // Select: cancel (Escape). A keyboard still types directly.
+// For the game's own name and password the game takes one character a key from its keyboard
+// table (data/keyboard/*_kb.cfg: capitals and digits, Shift ignored): the keyboard then shows
+// capitals and digits only, and Shift does nothing.
 #if !defined(GTA2_NATIVE_HEADLESS)
 #include <math.h>
 #include <stdint.h>
@@ -151,6 +154,13 @@ void Type(char c, int dik, int vk, bool shift)
 
 void TypeKey(const Key& k)
 {
+    if (gMode == kGameKeys)
+    {
+        // as the game's keyboard table has it: a letter's capital, a top-row key's own sign
+        const char c = k.lo >= 'a' && k.lo <= 'z' ? k.hi : k.lo;
+        Type(c, k.dik, k.vk, false);
+        return;
+    }
     const bool up = gShift != 0;
     Type(up ? k.hi : k.lo, up ? k.hiDik : k.dik, k.vk, up);
     if (gShift == 1)
@@ -199,7 +209,10 @@ void PressSelected()
         case kChar: TypeKey(k); break;
         case kBack: Delete(); break;
         case kOk: Done(); break;
-        case kShift: gShift = (gShift + 1) % 3; break;
+        case kShift:
+            if (gMode != kGameKeys)
+                gShift = (gShift + 1) % 3;
+            break;
     }
 }
 
@@ -320,7 +333,10 @@ void Gta2Native_OskInput(int action)
         case 4: PressSelected(); break;
         case 5: Delete(); break;
         case 6: Type(' ', kDikSpace, kVkSpace, false); break;
-        case 7: gShift = (gShift + 1) % 3; break;
+        case 7:
+            if (gMode != kGameKeys)
+                gShift = (gShift + 1) % 3;
+            break;
         case 8: Done(); break;
         case 9: Cancel(); break;
         default: break;
@@ -347,6 +363,11 @@ void Gta2Native_OskChar(int ch)
             for (const Key& k : row)
                 if (k.special == kChar && (k.lo == ch || k.hi == ch))
                 {
+                    if (gMode == kGameKeys)
+                    {
+                        TypeKey(k); // the game's capital or digit, whatever the keyboard's case
+                        return;
+                    }
                     const bool up = k.hi == ch && k.lo != ch;
                     Type(static_cast<char>(ch), up ? k.hiDik : k.dik, k.vk, up);
                     return;
@@ -399,17 +420,20 @@ void Gta2Native_OskDraw(int dw, int dh)
             char label[8] = {0};
             switch (k.special)
             {
-                case kChar: label[0] = gShift ? k.hi : k.lo; break;
+                case kChar:
+                    label[0] = gMode == kGameKeys ? (k.lo >= 'a' && k.lo <= 'z' ? k.hi : k.lo) : gShift ? k.hi : k.lo;
+                    break;
                 case kBack: strcpy(label, "Back"); break;
                 case kOk: strcpy(label, "OK"); break;
-                case kShift: strcpy(label, gShift == 2 ? "SHIFT" : "Shift"); break;
+                case kShift: strcpy(label, gMode == kGameKeys ? "" : gShift == 2 ? "SHIFT" : "Shift"); break;
             }
             const float tw = static_cast<float>(strlen(label)) * cell;
             Gta2Native_OverlayTextExact(kx + (kw - tw) / 2, y, px, kWhite, label);
         }
     }
     y += 0.5f * lineH;
-    Gta2Native_OverlayText(x0, y, px, kGrey, "A: press  B: delete  X: space  Y: shift");
+    Gta2Native_OverlayText(x0, y, px, kGrey,
+                           gMode == kGameKeys ? "A: press  B: delete  X: space" : "A: press  B: delete  X: space  Y: shift");
     Gta2Native_OverlayText(x0, y + lineH, px, kYellow, "Start: done  Select: cancel");
 }
 

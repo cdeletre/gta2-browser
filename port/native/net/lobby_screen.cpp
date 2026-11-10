@@ -32,6 +32,7 @@
 extern "C" bool Gta2Native_PumpEvents();                  // platform/window_sdl.cpp
 extern "C" void Gta2Native_OverlayRect(float x, float y, float w, float h, uint32_t rgba);
 extern "C" void Gta2Native_OverlayText(float x, float y, float px, uint32_t rgba, const char* text);
+extern "C" void Gta2Native_OverlayTextExact(float x, float y, float px, uint32_t rgba, const char* text); // names as typed
 extern "C" void gta2_js_present(const void* cmdData, int cmdCount, const void* vertData, int vertCount, int refW);
 extern "C" bool Gta2Native_OskOpen();
 extern "C" void Gta2Native_OskInput(int action);
@@ -379,7 +380,7 @@ void Draw(int dw, int dh)
                 if (!p["crew"].Str().empty())
                     t += " [" + p["crew"].Str() + "]";
                 const bool me = p["id"].Str() == gLobby->MyId();
-                Gta2Native_OverlayText(x0 + col * (kCols / 2) * cell, y + r * lineH, px, me ? kGreen : kWhite,
+                Gta2Native_OverlayTextExact(x0 + col * (kCols / 2) * cell, y + r * lineH, px, me ? kGreen : kWhite,
                                        t.substr(0, kCols / 2 - 1).c_str());
             }
         }
@@ -408,7 +409,9 @@ void Draw(int dw, int dh)
             if (!value.empty())
             {
                 snprintf(buf, sizeof(buf), sel && item.change ? "< %s >" : "%s", value.c_str());
-                Gta2Native_OverlayText(x0 + width - static_cast<float>(strlen(buf)) * cell, y, px, colour, buf);
+                // a name as typed (lower case too); the other values in the screen's capitals
+                (item.label == "Name" ? Gta2Native_OverlayTextExact : Gta2Native_OverlayText)(
+                    x0 + width - static_cast<float>(strlen(buf)) * cell, y, px, colour, buf);
             }
         }
     }
