@@ -10,7 +10,8 @@
 //   3. the match starts once every player is loaded (EnterMatch), and the game runs.
 // A browser joins the same room by typing its name in its lobby (rooms are upper case
 // there: the default names are).
-// GTA2_LOBBY_KEYS=up,down,left,right,ok,back,wait,...: presses for tests, one a second.
+// GTA2_LOBBY_KEYS=up,down,left,right,ok,back,wait,x,y,start,select,...: presses for tests,
+// one a second (to the on-screen keyboard while it is up).
 // Multiplayer build with a window only (gta2-mp).
 #if !defined(GTA2_NATIVE_HEADLESS)
 #include <stdint.h>
@@ -18,6 +19,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+
+#include <ctype.h>
 
 #include <algorithm>
 #include <functional>
@@ -30,6 +33,9 @@ extern "C" bool Gta2Native_PumpEvents();                  // platform/window_sdl
 extern "C" void Gta2Native_OverlayRect(float x, float y, float w, float h, uint32_t rgba);
 extern "C" void Gta2Native_OverlayText(float x, float y, float px, uint32_t rgba, const char* text);
 extern "C" void gta2_js_present(const void* cmdData, int cmdCount, const void* vertData, int vertCount, int refW);
+extern "C" bool Gta2Native_OskOpen();
+extern "C" void Gta2Native_OskInput(int action);
+extern "C" void Gta2Native_OskStart(const char* title, const char* initial, int maxLen, void (*done)(bool ok, const char* text));
 
 namespace gta2net
 {
@@ -164,20 +170,43 @@ void BuildItems()
     NetConfig& c = *gS.config;
     if (gS.phase == kSetup)
     {
+        // left/right: the lists of conf/net.ini; A: the on-screen keyboard (any name; a room
+        // created by a browser has a code of its own, upper case as the browser makes it)
         it.push_back({"Name", [&c] { return c.name; },
                       [&c](int d) {
                           auto pos = std::find(c.names.begin(), c.names.end(), c.name);
                           const int i = pos == c.names.end() ? 0 : static_cast<int>(pos - c.names.begin());
                           c.name = c.names[Wrap(i + d, static_cast<int>(c.names.size()))];
                       },
-                      nullptr});
+                      [&c] {
+                          Gta2Native_OskStart("Your name", c.name.c_str(), 16, [](bool ok, const char* text) {
+                              if (ok && text[0])
+                              {
+                                  gS.config->name = text;
+                                  SaveNetConfig(*gS.config);
+                              }
+                          });
+                      }});
         it.push_back({"Room", [&c] { return c.room; },
                       [&c](int d) {
                           auto pos = std::find(c.rooms.begin(), c.rooms.end(), c.room);
                           const int i = pos == c.rooms.end() ? 0 : static_cast<int>(pos - c.rooms.begin());
                           c.room = c.rooms[Wrap(i + d, static_cast<int>(c.rooms.size()))];
                       },
-                      nullptr});
+                      [&c] {
+                          Gta2Native_OskStart("Room (as the host shows it)", c.room.c_str(), 32, [](bool ok, const char* text) {
+                              std::string room = text;
+                              for (char& ch : room)
+                                  ch = static_cast<char>(toupper(static_cast<unsigned char>(ch)));
+                              while (!room.empty() && room.back() == ' ')
+                                  room.pop_back();
+                              if (ok && !room.empty())
+                              {
+                                  gS.config->room = room;
+                                  SaveNetConfig(*gS.config);
+                              }
+                          });
+                      }});
         it.push_back({"Create room", nullptr, nullptr, [] { Enter(true); }});
         it.push_back({"Join room", nullptr, nullptr, [] { Enter(false); }});
         it.push_back({"Quit", nullptr, nullptr, [] { gS.quit = true; }});
@@ -397,7 +426,7 @@ void Draw(int dw, int dh)
     if (!gS.message.empty())
         Gta2Native_OverlayText(x0, bottom, px, gS.messageError ? kRed : kGrey, gS.message.substr(0, kCols).c_str());
     Gta2Native_OverlayText(x0, bottom + lineH, px, kGrey,
-                           gS.phase == kRoom ? "A: choose  Left/right: change  B: leave" : "A: choose  Left/right: change");
+                           gS.phase == kRoom ? "A: choose  Left/right: change  B: leave" : "A: choose/type  Left/right: change");
 }
 
 void Sleep5ms()
@@ -418,7 +447,8 @@ void ScriptedKeys()
         loaded = true;
         if (const char* list = getenv("GTA2_LOBBY_KEYS"))
         {
-            static const char* const kNames[] = {"up", "down", "left", "right", "ok", "back", "wait"};
+            // ok/back: A/B; x, y, start, select: the on-screen keyboard's other buttons
+            static const char* const kNames[] = {"up", "down", "left", "right", "ok", "back", "wait", "x", "y", "start", "select"};
             std::string all = list;
             size_t pos = 0;
             while (pos <= all.size())
@@ -426,7 +456,7 @@ void ScriptedKeys()
                 size_t end = all.find(',', pos);
                 end = end == std::string::npos ? all.size() : end;
                 const std::string name = all.substr(pos, end - pos);
-                for (int k = 0; k < 7; ++k)
+                for (int k = 0; k < 11; ++k)
                     if (name == kNames[k])
                         keys.push_back(k);
                 pos = end + 1;
@@ -437,7 +467,10 @@ void ScriptedKeys()
     if (next < keys.size() && NowMs() >= at)
     {
         at = NowMs() + 1000;
-        if (keys[next] < 6)
+        static const int kOskAction[11] = {0, 1, 2, 3, 4, 5, -1, 6, 7, 8, 9};
+        if (Gta2Native_OskOpen() && kOskAction[keys[next]] >= 0)
+            Gta2Native_OskInput(kOskAction[keys[next]]);
+        else if (keys[next] < 6)
             Input(keys[next]);
         ++next;
     }

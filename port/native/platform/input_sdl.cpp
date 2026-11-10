@@ -50,6 +50,10 @@ extern "C" unsigned int Gta2Native_RegistryDword(const char* path, const char* n
 extern "C" bool Gta2Native_OptionsOpen();             // options_native.cpp
 extern "C" void Gta2Native_OptionsInput(int action);  // options_native.cpp
 extern "C" void gta2_js_open_options();              // options_native.cpp
+extern "C" bool Gta2Native_OskOpen();                // osk_native.cpp: the on-screen keyboard
+extern "C" void Gta2Native_OskFrame();
+extern "C" void Gta2Native_OskInput(int action);
+extern "C" void Gta2Native_OskChar(int ch);
 // gta2-mp (net/net_main.cpp, net/hud_net.cpp): Select's gestures in a match. Weak: the solo
 // binary has none, and Select keeps its plain binding there.
 extern "C" bool Gta2Net_InMatch() __attribute__((weak));
@@ -743,6 +747,27 @@ void Gta2Native_InputEvent(const SDL_Event& e)
                 gTabHeld = e.type == SDL_KEYDOWN; // the scoreboard, as in the browser
                 break;
             }
+            if (Gta2Native_OskOpen())
+            {
+                // the on-screen keyboard is up: a keyboard types into it (and through it)
+                if (e.type == SDL_KEYDOWN)
+                {
+                    const SDL_Scancode sc = e.key.keysym.scancode;
+                    const int arrow = sc == SDL_SCANCODE_UP ? 0 : sc == SDL_SCANCODE_DOWN ? 1 : sc == SDL_SCANCODE_LEFT ? 2
+                                    : sc == SDL_SCANCODE_RIGHT ? 3 : -1;
+                    if (arrow >= 0)
+                        Gta2Native_OskInput(arrow);
+                    else if (sc == SDL_SCANCODE_RETURN || sc == SDL_SCANCODE_KP_ENTER)
+                        Gta2Native_OskChar(13);
+                    else if (sc == SDL_SCANCODE_BACKSPACE)
+                        Gta2Native_OskChar(8);
+                    else if (sc == SDL_SCANCODE_ESCAPE)
+                        Gta2Native_OskChar(27);
+                    else if (const int ch = TypedChar(e.key.keysym))
+                        Gta2Native_OskChar(ch);
+                }
+                break;
+            }
             if (const Key* k = KeyFor(e.key.keysym.scancode))
             {
                 const bool down = e.type == SDL_KEYDOWN;
@@ -819,6 +844,48 @@ void Gta2Native_InputEvent(const SDL_Event& e)
 // Once per loop iteration, after the events: turns the controller's state into keys.
 void Gta2Native_InputFrame()
 {
+    // The on-screen keyboard: it opens by itself when the front end asks for a name, and has
+    // every new press while it is up (the game gets none, as with the Options screen).
+    Gta2Native_OskFrame();
+    static bool oskShown = false;
+    if (Gta2Native_OskOpen())
+    {
+        if (!oskShown)
+        {
+            Apply({});
+            for (int b = 0; b < kInputCount; ++b)
+            {
+                gOptionsHeld[b] = gPressed[b]; // the press that opened it
+            }
+            oskShown = true;
+        }
+        static const struct
+        {
+            int input, action;
+        } kOsk[] = {{kPadUp, 0},   {kStickUp, 0},   {kPadDown, 1}, {kStickDown, 1}, {kPadLeft, 2}, {kStickLeft, 2},
+                    {kPadRight, 3}, {kStickRight, 3}, {kA, 4},      {kB, 5},          {kXBtn, 6},    {kY, 7},
+                    {kStart, 8},    {kSelect, 9}};
+        for (const auto& m : kOsk)
+        {
+            if (gPressed[m.input] && !gOptionsHeld[m.input])
+            {
+                Gta2Native_OskInput(m.action);
+            }
+        }
+        for (int b = 0; b < kInputCount; ++b)
+        {
+            gOptionsHeld[b] = gPressed[b];
+        }
+        return;
+    }
+    if (oskShown)
+    {
+        oskShown = false;
+        for (int b = 0; b < kInputCount; ++b)
+        {
+            gBlocked[b] = gPressed[b]; // the Start or A that closed it
+        }
+    }
     // The Options screen: new presses of the d-pad (or stick), A, B and Start go to it, and
     // the game gets none; buttons still down when it closes stay blocked until released.
     if (Gta2Native_OptionsOpen())

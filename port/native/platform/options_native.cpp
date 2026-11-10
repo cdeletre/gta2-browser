@@ -48,6 +48,7 @@ extern "C" void Gta2Native_SetFaceButtons(int mode); // input_sdl.cpp, also writ
 extern "C" bool Gta2Net_LobbyActive() __attribute__((weak));
 extern "C" void Gta2Net_LobbyInput(int action) __attribute__((weak));
 extern "C" void Gta2Net_LobbyDraw(int dw, int dh) __attribute__((weak));
+extern "C" void Gta2Native_OskDraw(int dw, int dh); // osk_native.cpp: over everything
 // gta2-mp in a match (net/hud_net.cpp): chat lines and the scoreboard, under this screen; and
 // two settings, shown here only in gta2-mp.
 extern "C" void Gta2Net_HudDraw(int dw, int dh) __attribute__((weak));
@@ -277,6 +278,7 @@ void Gta2Native_OptionsDraw(int dw, int dh)
     if (Gta2Net_LobbyActive && Gta2Net_LobbyActive())
     {
         Gta2Net_LobbyDraw(dw, dh);
+        Gta2Native_OskDraw(dw, dh);
         return;
     }
     if (Gta2Net_HudDraw)
@@ -285,6 +287,7 @@ void Gta2Native_OptionsDraw(int dw, int dh)
     }
     if (!gOpen)
     {
+        Gta2Native_OskDraw(dw, dh); // the front end's name entry
         return;
     }
     constexpr int kCols = 44; // characters across the widest line (the help line)
