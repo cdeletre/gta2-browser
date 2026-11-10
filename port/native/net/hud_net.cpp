@@ -6,6 +6,11 @@
 //   - chat lines, the last four for 9 s, the sender's name in the player's colour
 //     (Options: Chat messages on/off);
 //   - the quick messages: Select + up, down, left, right (conf/net.ini chat_up...);
+//   - waypoints: the other players' (from the browser's map or a console) and this player's
+//     own (Select + L1 sets it where the player stands, Select + R1 clears it; reached, it
+//     goes, as in the browser): a marker on the spot when it is in view, else on the screen's
+//     edge in its direction with the distance in blocks (Options: Waypoints on/off hides the
+//     other players');
 //   - the final standings when the match ends, before the lobby.
 // Multiplayer build with a window only (gta2-mp).
 #if !defined(GTA2_NATIVE_HEADLESS)
@@ -14,6 +19,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+
+#include <math.h>
 
 #include <algorithm>
 #include <deque>
@@ -29,6 +36,8 @@ extern "C" bool Gta2Native_PumpEvents(); // platform/window_sdl.cpp
 extern "C" void gta2_js_present(const void* cmdData, int cmdCount, const void* vertData, int vertCount, int refW);
 extern "C" const int32_t* gta2_port_coop_players(); // port/platform/coop_web.cpp
 extern "C" bool Gta2Native_PadAPressed();           // input_sdl.cpp
+extern "C" const int32_t* gta2_dev_state();          // port/platform/dev_hooks.cpp: player
+extern "C" const int32_t* gta2_dev_camera();         // ... the view camera
 
 namespace gta2net
 {
@@ -48,6 +57,14 @@ struct ChatLine
     double at;
 };
 std::deque<ChatLine> gChat;
+struct Waypoint
+{
+    bool set = false;
+    double x = 0, y = 0; // blocks
+};
+Waypoint gWaypoints[6];
+bool gOwnArmed = false; // this player's waypoint goes once reached after being farther away
+constexpr double kReached = 2;  // blocks, as WAYPOINT_REACHED in web/map.js
 bool gScoreboard = false;
 bool gMatchOver = false;
 
@@ -185,7 +202,7 @@ void DrawScoreboard(int dw, int dh, bool final)
     std::string title;
     const std::vector<Row> rows = Standings(&title);
     constexpr int kCols = 44;
-    const int lines = static_cast<int>(rows.size()) + (final ? 5 : 8);
+    const int lines = static_cast<int>(rows.size()) + (final ? 5 : 9);
     const float px = PixelSize(dw, dh, kCols, std::max(lines, 14));
     const float cell = 6 * px;
     const float lineH = 12 * px;
@@ -227,6 +244,8 @@ void DrawScoreboard(int dw, int dh, bool final)
     if (c)
     {
         const char* arrows[4] = {"Up", "Down", "Left", "Right"};
+        Gta2Native_OverlayText(x0, y, px, kGrey, "Select + L1 / R1: set / clear your waypoint");
+        y += lineH;
         Gta2Native_OverlayText(x0, y, px, kGrey, "Select + d-pad sends:");
         y += lineH;
         for (int i = 0; i < 4; ++i)
@@ -236,6 +255,79 @@ void DrawScoreboard(int dw, int dh, bool final)
             Gta2Native_OverlayText(x0 + (i % 2) * (kCols / 2) * cell, y + (i / 2) * lineH, px, kWhite,
                                    std::string(buf).substr(0, kCols / 2 - 1).c_str());
         }
+    }
+}
+
+// The player's position in blocks; false without a player on the map.
+bool PlayerAt(double* x, double* y)
+{
+    const int32_t* s = gta2_dev_state();
+    if (!s[0])
+        return false;
+    *x = s[2] / 16384.0;
+    *y = s[3] / 16384.0;
+    return true;
+}
+
+void DrawWaypoints(int dw, int dh)
+{
+    double px0, py0;
+    if (!PlayerAt(&px0, &py0))
+        return;
+    const int me = CoopMySlot();
+    // this player's own: gone once reached (after having been farther away)
+    if (me >= 0 && me < 6 && gWaypoints[me].set)
+    {
+        const double d = hypot(gWaypoints[me].x - px0, gWaypoints[me].y - py0);
+        if (d > kReached + 1)
+            gOwnArmed = true;
+        else if (d <= kReached && gOwnArmed)
+        {
+            gWaypoints[me].set = false;
+            if (gLobby)
+                gLobby->ShareWaypoint(false, 0, 0);
+        }
+    }
+    // the view: the camera's boundaries (blocks) across the screen
+    const int32_t* c = gta2_dev_camera();
+    const double left = c[4] / 16384.0, right = c[5] / 16384.0, top = c[6] / 16384.0, bottom = c[7] / 16384.0;
+    if (right <= left || bottom <= top)
+        return;
+    const float px = PixelSize(dw, dh, 52, 22);
+    const float size = 7 * px;
+    const float margin = 14 * px;
+    for (int slot = 0; slot < 6; ++slot)
+    {
+        const Waypoint& w = gWaypoints[slot];
+        if (!w.set || (slot != me && gConfig && !gConfig->showWaypoints))
+            continue;
+        // the camera's position is the screen's centre; its boundaries give the scale
+        double sx = dw / 2.0 + (w.x - c[0] / 16384.0) / (right - left) * dw;
+        double sy = dh / 2.0 + (w.y - c[1] / 16384.0) / (bottom - top) * dh;
+        const bool inView = sx >= margin && sx <= dw - margin && sy >= margin && sy <= dh - margin;
+        std::string label = slot == me ? "Your waypoint" : NameOf(slot);
+        if (!inView)
+        {
+            // on the edge, in the waypoint's direction from the screen's centre
+            const double cx = dw / 2.0, cy = dh / 2.0;
+            const double dx = sx - cx, dy = sy - cy;
+            const double k = std::min((cx - margin) / std::max(1e-6, fabs(dx)), (cy - margin) / std::max(1e-6, fabs(dy)));
+            sx = cx + dx * k;
+            sy = cy + dy * k;
+            label += " " + std::to_string(static_cast<int>(lround(hypot(w.x - px0, w.y - py0))));
+        }
+        const uint32_t colour = kColours[slot % 6];
+        Gta2Native_OverlayRect(static_cast<float>(sx) - size / 2 - px, static_cast<float>(sy) - size / 2 - px, size + 2 * px,
+                               size + 2 * px, 0xff000000);
+        Gta2Native_OverlayRect(static_cast<float>(sx) - size / 2, static_cast<float>(sy) - size / 2, size, size, colour);
+        // the label beside it, kept on the screen
+        const float tw = static_cast<float>(label.size()) * 6 * px;
+        float tx = static_cast<float>(sx) + size;
+        if (tx + tw > dw - 2 * px)
+            tx = static_cast<float>(sx) - size - tw;
+        const float ty = static_cast<float>(sy) - 4 * px;
+        Gta2Native_OverlayRect(tx - px, ty - 2 * px, tw + 2 * px, 11 * px, 0x90000000);
+        Gta2Native_OverlayText(tx, ty, px, colour, label.c_str());
     }
 }
 
@@ -276,6 +368,13 @@ void DrawChat(int dw, int dh)
 }
 } // namespace
 
+// coop_native.cpp: a player's waypoint changed.
+void HudWaypoint(int slot, bool set, double x, double y)
+{
+    if (slot >= 0 && slot < 6)
+        gWaypoints[slot] = {set, x, y};
+}
+
 // coop_native.cpp: a chat message from a player (this one's own included).
 void HudChat(int slot, const std::string& text)
 {
@@ -291,6 +390,7 @@ void HudChat(int slot, const std::string& text)
 using namespace gta2net;
 
 extern "C" void Gta2Net_QuickChat(int dir);
+extern "C" void Gta2Net_Waypoint(bool set);
 
 // input_sdl.cpp: Select (or Tab) held long enough in a match.
 extern "C" void Gta2Net_SelectHeld(bool held)
@@ -312,6 +412,28 @@ extern "C" void Gta2Net_QuickChat(int dir)
         gChat.pop_front();
 }
 
+// input_sdl.cpp: Select + L1 (set: this player's waypoint where they stand) or R1 (clear).
+extern "C" void Gta2Net_Waypoint(bool set)
+{
+    const int me = CoopMySlot();
+    double x, y;
+    if (!gLobby || me < 0 || me >= 6)
+        return;
+    if (set && PlayerAt(&x, &y))
+    {
+        gWaypoints[me] = {true, x, y};
+        gOwnArmed = false;
+        gLobby->ShareWaypoint(true, x, y);
+        fprintf(stderr, "gta2: co-op: waypoint set at (%.1f, %.1f)\n", x, y);
+    }
+    else if (!set && gWaypoints[me].set)
+    {
+        gWaypoints[me].set = false;
+        gLobby->ShareWaypoint(false, 0, 0);
+        fprintf(stderr, "gta2: co-op: waypoint cleared\n");
+    }
+}
+
 // platform/options_native.cpp, after the game's frame.
 extern "C" void Gta2Net_HudDraw(int dw, int dh)
 {
@@ -329,7 +451,14 @@ extern "C" void Gta2Net_HudDraw(int dw, int dh)
         if (step == 0 && t > 5000)
             Gta2Net_QuickChat(0), step = 1;
         if (step == 1 && t > 7000)
-            Gta2Net_QuickChat(3), step = 2;
+        {
+            Gta2Net_QuickChat(3);
+            Gta2Net_Waypoint(true); // where we stand: in view
+            double x, y;
+            if (PlayerAt(&x, &y))
+                HudWaypoint(1, true, x + 30, y - 12); // the other player's, far: on the edge
+            step = 2;
+        }
         gScoreboard = t > 9000 && t < 14000;
     }
     if (gMatchOver)
@@ -337,6 +466,7 @@ extern "C" void Gta2Net_HudDraw(int dw, int dh)
         DrawScoreboard(dw, dh, true);
         return;
     }
+    DrawWaypoints(dw, dh);
     DrawChat(dw, dh);
     if (gScoreboard)
         DrawScoreboard(dw, dh, false);

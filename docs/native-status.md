@@ -949,7 +949,12 @@ bas à gauche, 9 s, le nom dans la couleur du joueur. Options (gta2-mp seulement
 messages » et « Waypoints » On/Off (`show_chat`, `show_waypoints` dans `net.ini`). Fin de
 match : le classement final jusqu'à A ou 10 s, puis le lobby. Vu dans le conteneur
 (`GTA2_NET_TEST_HUD=1`, captures) : tableau, légende, messages envoyés et reçus par l'autre
-joueur. Reste : le geste à la manette sur console, les points de passage.
+joueur. Points de passage : Select + L1 pose le sien là où l'on est, Select + R1 l'efface ;
+atteint (à 2 blocs, après s'en être éloigné), il s'efface comme dans le navigateur ; ceux des
+autres (carte du navigateur ou console) et le sien s'affichent comme un repère dans la couleur
+du joueur, sur place s'il est dans la vue, sinon sur le bord de l'écran dans sa direction avec
+la distance en blocs (vu dans le conteneur : un repère dans la vue, un autre sur le bord).
+Reste : le geste et les points de passage à la manette, sur console.
 
 Reste : A5 (consoles), A6 (`wss://` si le serveur public est en HTTPS), A7 (scores, chat,
 points de passage), puis D1-D4 (transport TCP local, découverte UDP, consoles, paquet).

@@ -55,6 +55,7 @@ extern "C" void gta2_js_open_options();              // options_native.cpp
 extern "C" bool Gta2Net_InMatch() __attribute__((weak));
 extern "C" void Gta2Net_SelectHeld(bool held) __attribute__((weak));
 extern "C" void Gta2Net_QuickChat(int dir) __attribute__((weak));
+extern "C" void Gta2Net_Waypoint(bool set) __attribute__((weak));
 
 namespace
 {
@@ -920,6 +921,16 @@ void Gta2Native_InputFrame()
                         selectCombo = true;
                         gBlocked[input] = true; // one message a press, and not to the game
                     }
+                }
+            }
+            // L1: this player's waypoint where they stand; R1: cleared
+            for (int shoulder : {kL1, kR1})
+            {
+                if (gPressed[shoulder] && !gBlocked[shoulder] && Gta2Net_Waypoint)
+                {
+                    Gta2Net_Waypoint(shoulder == kL1);
+                    selectCombo = true;
+                    gBlocked[shoulder] = true;
                 }
             }
         }

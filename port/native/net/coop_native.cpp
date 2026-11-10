@@ -200,6 +200,7 @@ void SetupCoop(Lobby* lobby, const Json& match)
         gta2_dev_sync_dump(atoi(getenv("GTA2_NET_SYNC_DUMP")));
     }
     gMatchStart = NowMs();
+    lobby->onWaypoint = [](int slot, bool set, double x, double y) { CoopWaypointLine(slot, set, x, y); };
     lobby->GameReady();
     fprintf(stderr, "gta2: co-op: %d players, this is slot %d, mode %s, district %s, %s, input delay %d ticks\n", count,
             gMySlot, mode.c_str(), d->key, script, match["delay"].Int(1));
@@ -329,6 +330,13 @@ void CoopChatLine(int slot, const std::string& text)
 {
     if (HudChat)
         HudChat(slot, text);
+}
+
+void HudWaypoint(int slot, bool set, double x, double y) __attribute__((weak));
+void CoopWaypointLine(int slot, bool set, double x, double y)
+{
+    if (HudWaypoint)
+        HudWaypoint(slot, set, x, y);
 }
 
 // The latest checksum this player shared and whether a drift was seen (status line, tests).

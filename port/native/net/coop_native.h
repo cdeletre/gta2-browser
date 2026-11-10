@@ -17,5 +17,7 @@ const Json& CoopMatch();
 int CoopMySlot();
 // A chat line for the screen (hud_net.cpp), from a player or this one.
 void CoopChatLine(int slot, const std::string& text);
+// A player's waypoint (blocks; set false: cleared), for the screen (hud_net.cpp).
+void CoopWaypointLine(int slot, bool set, double x, double y);
 
 } // namespace gta2net
