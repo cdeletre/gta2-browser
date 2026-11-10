@@ -1300,13 +1300,28 @@ export class Gta2Map {
         }
       }
     }
-    // co-op: the others' waypoints (inside only) and the others, in their colours (on the rim when far)
+    // co-op: the others' waypoints and the others, in their colours (on the rim when far: a
+    // waypoint as a diamond, a player as a dot)
     const others = this.otherPlayers();
     for (const o of others) {
       const owp = this.coop.waypoints.get(o.slot);
       if (!owp) continue;
       const at = place(owp.x, owp.y);
       if (at.inside) this.drawPin(ctx, at.x, at.y, 0.6, 0, o.colour);
+      else {
+        const rr = Math.max(6, border * 1.2);
+        ctx.beginPath();
+        ctx.moveTo(at.x, at.y - rr);
+        ctx.lineTo(at.x + rr, at.y);
+        ctx.lineTo(at.x, at.y + rr);
+        ctx.lineTo(at.x - rr, at.y);
+        ctx.closePath();
+        ctx.fillStyle = o.colour;
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#050505';
+        ctx.stroke();
+      }
     }
     for (const o of others) {
       if (!o.onMap) continue;

@@ -954,6 +954,11 @@ atteint (à 2 blocs, après s'en être éloigné), il s'efface comme dans le nav
 autres (carte du navigateur ou console) et le sien s'affichent comme un repère dans la couleur
 du joueur, sur place s'il est dans la vue, sinon sur le bord de l'écran dans sa direction avec
 la distance en blocs (vu dans le conteneur : un repère dans la vue, un autre sur le bord).
+Placés avec la projection du jeu (`ProjectWorldToScreen_4B90E0`, caméra telle que dessinée),
+à la hauteur du sol (`FindGroundZForCoord_4E5B60`, ou celle du joueur pour son propre point) :
+ils ne glissent plus avec la perspective (vu sur console : ils glissaient sur les toits).
+Navigateur (`web/map.js`) : les points des autres, loin, sont maintenant sur le bord du radar
+(losange) ; avant, ils n'y apparaissaient que dans son rayon.
 Reste : le geste et les points de passage à la manette, sur console.
 
 Reste : A5 (consoles), A6 (`wss://` si le serveur public est en HTTPS), A7 (scores, chat,

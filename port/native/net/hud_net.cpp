@@ -27,6 +27,9 @@
 #include <string>
 #include <vector>
 
+#include "Camera.hpp"
+#include "map_0x370.hpp"
+
 #include "coop_native.h"
 #include "net_session.h"
 
@@ -37,7 +40,7 @@ extern "C" void gta2_js_present(const void* cmdData, int cmdCount, const void* v
 extern "C" const int32_t* gta2_port_coop_players(); // port/platform/coop_web.cpp
 extern "C" bool Gta2Native_PadAPressed();           // input_sdl.cpp
 extern "C" const int32_t* gta2_dev_state();          // port/platform/dev_hooks.cpp: player
-extern "C" const int32_t* gta2_dev_camera();         // ... the view camera
+extern "C" s32 gGta2PortDrawnCam[2]; // port_interpolation.cpp: the camera's x, y as last drawn
 
 namespace gta2net
 {
@@ -60,7 +63,7 @@ std::deque<ChatLine> gChat;
 struct Waypoint
 {
     bool set = false;
-    double x = 0, y = 0; // blocks
+    double x = 0, y = 0, z = 0; // blocks; z: the ground's height there, for the perspective
 };
 Waypoint gWaypoints[6];
 bool gOwnArmed = false; // this player's waypoint goes once reached after being farther away
@@ -259,14 +262,26 @@ void DrawScoreboard(int dw, int dh, bool final)
 }
 
 // The player's position in blocks; false without a player on the map.
-bool PlayerAt(double* x, double* y)
+bool PlayerAt(double* x, double* y, double* z = nullptr)
 {
     const int32_t* s = gta2_dev_state();
     if (!s[0])
         return false;
     *x = s[2] / 16384.0;
     *y = s[3] / 16384.0;
+    if (z)
+        *z = s[4] / 16384.0;
     return true;
+}
+
+// The ground's height at a point (blocks), for a waypoint that came without one.
+double GroundAt(double x, double y)
+{
+    if (!gMap_0x370_6F6268)
+        return 2;
+    return gMap_0x370_6F6268
+        ->FindGroundZForCoord_4E5B60(Fix16(static_cast<s32>(x * 16384), 0), Fix16(static_cast<s32>(y * 16384), 0))
+        .ToFloat();
 }
 
 void DrawWaypoints(int dw, int dh)
@@ -288,11 +303,16 @@ void DrawWaypoints(int dw, int dh)
                 gLobby->ShareWaypoint(false, 0, 0);
         }
     }
-    // the view: the camera's boundaries (blocks) across the screen
-    const int32_t* c = gta2_dev_camera();
-    const double left = c[4] / 16384.0, right = c[5] / 16384.0, top = c[6] / 16384.0, bottom = c[7] / 16384.0;
-    if (right <= left || bottom <= top)
+    // the view camera as drawn (interpolated position, Modern camera's height)
+    Camera_0xBC* cam = gViewCamera_676978;
+    if (!cam || cam->field_68_screen_px_width <= 0 || cam->field_6C_screen_px_height <= 0)
         return;
+    const double camX = gGta2PortDrawnCam[0] ? gGta2PortDrawnCam[0] / 16384.0 : cam->field_98_cam_pos2.field_0_x.ToFloat();
+    const double camY = gGta2PortDrawnCam[1] ? gGta2PortDrawnCam[1] / 16384.0 : cam->field_98_cam_pos2.field_4_y.ToFloat();
+    const double camZ = Gta2Port_PresentedCameraZ(cam).ToFloat();
+    const double f60 = cam->field_60.x.ToFloat();
+    const double toDw = static_cast<double>(dw) / cam->field_68_screen_px_width;
+    const double toDh = static_cast<double>(dh) / cam->field_6C_screen_px_height;
     const float px = PixelSize(dw, dh, 52, 22);
     const float size = 7 * px;
     const float margin = 14 * px;
@@ -301,9 +321,22 @@ void DrawWaypoints(int dw, int dh)
         const Waypoint& w = gWaypoints[slot];
         if (!w.set || (slot != me && gConfig && !gConfig->showWaypoints))
             continue;
-        // the camera's position is the screen's centre; its boundaries give the scale
-        double sx = dw / 2.0 + (w.x - c[0] / 16384.0) / (right - left) * dw;
-        double sy = dh / 2.0 + (w.y - c[1] / 16384.0) / (bottom - top) * dh;
+        // the game's own projection, at the ground's height there (Camera_0xBC
+        // ProjectWorldToScreen_4B90E0: scale 1 / ((8 - z) + camera height))
+        const double k = 1.0 / ((8.0 - w.z) + camZ);
+        double sx = ((w.x - camX) * f60 * k + cam->field_70_screen_px_center_x) * toDw;
+        double sy = ((w.y - camY) * f60 * k + cam->field_74_screen_px_center_y) * toDh;
+        static const bool trace = getenv("GTA2_NET_TEST_HUD") != nullptr;
+        static double lastTrace = 0;
+        if (trace && Now() - lastTrace > 2000 && slot == 2)
+        {
+            lastTrace = Now();
+            fprintf(stderr,
+                    "gta2: hud: waypoint %d at (%.2f, %.2f, %.2f), camera (%.2f, %.2f, %.2f), f60 %.1f, screen %dx%d "
+                    "centre (%d, %d), drawable %dx%d -> (%.0f, %.0f); player at (%.2f, %.2f)\n",
+                    slot, w.x, w.y, w.z, camX, camY, camZ, f60, cam->field_68_screen_px_width, cam->field_6C_screen_px_height,
+                    cam->field_70_screen_px_center_x, cam->field_74_screen_px_center_y, dw, dh, sx, sy, px0, py0);
+        }
         const bool inView = sx >= margin && sx <= dw - margin && sy >= margin && sy <= dh - margin;
         std::string label = slot == me ? "Your waypoint" : NameOf(slot);
         if (!inView)
@@ -372,7 +405,7 @@ void DrawChat(int dw, int dh)
 void HudWaypoint(int slot, bool set, double x, double y)
 {
     if (slot >= 0 && slot < 6)
-        gWaypoints[slot] = {set, x, y};
+        gWaypoints[slot] = {set, x, y, set ? GroundAt(x, y) : 0};
 }
 
 // coop_native.cpp: a chat message from a player (this one's own included).
@@ -419,9 +452,10 @@ extern "C" void Gta2Net_Waypoint(bool set)
     double x, y;
     if (!gLobby || me < 0 || me >= 6)
         return;
-    if (set && PlayerAt(&x, &y))
+    double z = 0;
+    if (set && PlayerAt(&x, &y, &z))
     {
-        gWaypoints[me] = {true, x, y};
+        gWaypoints[me] = {true, x, y, z};
         gOwnArmed = false;
         gLobby->ShareWaypoint(true, x, y);
         fprintf(stderr, "gta2: co-op: waypoint set at (%.1f, %.1f)\n", x, y);
@@ -457,6 +491,8 @@ extern "C" void Gta2Net_HudDraw(int dw, int dh)
             double x, y;
             if (PlayerAt(&x, &y))
                 HudWaypoint(1, true, x + 30, y - 12); // the other player's, far: on the edge
+            if (PlayerAt(&x, &y))
+                HudWaypoint(2, true, x + 3, y - 2); // near: in view, at the ground's height
             step = 2;
         }
         gScoreboard = t > 9000 && t < 14000;
