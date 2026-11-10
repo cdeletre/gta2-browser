@@ -1146,6 +1146,13 @@ du jeu, comme - et =), pour Join by address ; un joueur parti reste au tableau d
 et sur l'écran de fin, en gris, « (left) », avec ses derniers chiffres (notés à chaque image du
 match ; avant, sa place libérée le faisait disparaître), dans gta2-lan comme gta2-online. Vu dans
 le conteneur (capture) : « Nina (left) 2 0 $0 » après son départ.
+**Deux fichiers de réglages (10 novembre)** : `conf/online.ini` (gta2-online : `[net]` avec le
+serveur choisi, les sections `[server]`) et `conf/lan.ini` (gta2-lan : `[net]` sans serveur,
+`[lan] pin`) remplacent le `net.ini` partagé. Les deux ont les listes (noms, salles, équipes),
+le chat et les options. La première fois, chaque binaire reprend sa part de `net.ini` (gta2-lan
+ignore ses serveurs, gta2-online son PIN) ; une fois les deux fichiers écrits, `net.ini` devient
+`net.ini.old`. Messages TLS et commentaires : `online.ini`. Vu : `gta2-net-test` 271 vérifications
+(dont la migration en deux temps), aussi sous ASan + UBSan.
 Pas encore fait : les départs brutaux (perte du Wi-Fi en pleine partie : un joueur peut avoir
 reçu la dernière entrée du partant et pas un autre), consoles, lanceur et paquet.
 

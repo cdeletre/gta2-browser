@@ -5,7 +5,7 @@
 //     free roam by points, Gang Wars by crew; with the four quick messages as a legend;
 //   - chat lines, the last four for 9 s, the sender's name in the player's colour
 //     (Options: Chat messages on/off);
-//   - the quick messages: Select + up, down, left, right (conf/net.ini chat_up...);
+//   - the quick messages: Select + up, down, left, right (conf/online.ini or lan.ini: chat_up...);
 //   - waypoints: the other players' (from the browser's map or a console) and this player's
 //     own (Select + L1 sets it where the player stands, Select + R1 clears it; reached, it
 //     goes, as in the browser): a marker on the spot when it is in view, else on the screen's

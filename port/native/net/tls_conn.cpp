@@ -147,7 +147,7 @@ bool LoadAuthorities(Shared& s, const std::string& caFile, std::string* error)
         return true;
     }
     *error = caFile.empty() ? "TLS: no certificate authorities on this console (" + tried +
-                                  "): set ca_file or tls_fingerprint in conf/net.ini"
+                                  "): set ca_file or tls_fingerprint in conf/online.ini"
                             : "TLS: cannot read ca_file " + caFile;
     return false;
 }
@@ -310,7 +310,7 @@ struct Conn::Impl
     std::string VerifyError(const std::string& host, uint32_t flags) const
     {
         if (!pinned.empty())
-            return "The server's certificate does not match tls_fingerprint (net.ini).";
+            return "The server's certificate does not match tls_fingerprint (online.ini).";
         if (flags & (MBEDTLS_X509_BADCERT_EXPIRED | MBEDTLS_X509_BADCERT_FUTURE))
         {
             char now[32];
@@ -324,7 +324,7 @@ struct Conn::Impl
             return "The server's certificate is for another name than " + host + ".";
         if (flags & MBEDTLS_X509_BADCERT_NOT_TRUSTED)
             return "The server's certificate is not from a known authority: set ca_file or tls_fingerprint "
-                   "in net.ini.";
+                   "in online.ini.";
         char info[256];
         mbedtls_x509_crt_verify_info(info, sizeof(info), "", flags);
         std::string text = info;
@@ -348,7 +348,7 @@ struct Conn::Impl
             pinned = NormalFingerprint(o.fingerprint);
             if (pinned.empty())
             {
-                *out = "tls_fingerprint in net.ini is not sha256: and 64 hex digits.";
+                *out = "tls_fingerprint in online.ini is not sha256: and 64 hex digits.";
                 return false;
             }
         }

@@ -1,10 +1,12 @@
-// See net_session.h: conf/net.ini, read and written back.
+// See net_session.h: conf/online.ini (gta2-online) or conf/lan.ini (gta2-lan), read and
+// written back; both start from the conf/net.ini they shared before.
 //
 //   [net]
-//   server = Main            the server connected last, by its name
+//   server = Main            online: the server connected last, by its name
 //   names = ..., name = ...    the lobby's lists and what was picked last
 //   ...
-//   [server]                   one section per server, in the lobby's order
+//   [lan]                      lan: pin = 0000 (the room PIN typed last)
+//   [server]                   online: one section per server, in the lobby's order
 //   name = Main
 //   url = wss://gta2.example.com
 //   password =                 optional: the lobby asks for it
@@ -17,6 +19,7 @@
 // Multiplayer build only (gta2-online).
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #include <fstream>
 #include <sstream>
@@ -117,15 +120,30 @@ ServerOptions OptionsOf(const NetConfig& c, int index)
     return o;
 }
 
-NetConfig LoadNetConfig(const std::string& confDir)
+void LoadServers(NetConfig& c, ServerEntry& legacy, std::string& chosen);
+
+NetConfig LoadNetConfig(const std::string& confDir, NetKind kind)
 {
     NetConfig c;
+    c.kind = kind;
+    const bool lan = kind == NetKind::kLan;
     c.confDir = confDir;
-    c.path = confDir + "/net.ini";
+    c.path = confDir + (lan ? "/lan.ini" : "/online.ini");
     std::string names = kDefaultNames, name, rooms = kDefaultRooms, room, crews = kDefaultCrews, chosen;
     ServerEntry legacy; // an older file's one server, in [net]
     std::ifstream in(c.path);
-    const bool found = in.is_open(); // (the stream's state after reading to the end is no test)
+    bool found = in.is_open(); // (the stream's state after reading to the end is no test)
+    std::string from = c.path;
+    bool migrated = false;
+    if (!found)
+    {
+        // the first time: the file both binaries shared before
+        from = confDir + "/net.ini";
+        in.clear();
+        in.open(from);
+        found = migrated = in.is_open();
+    }
+    const std::string shown = from.substr(from.rfind('/') + 1);
     enum
     {
         kNet,
@@ -160,7 +178,7 @@ NetConfig LoadNetConfig(const std::string& confDir)
             else
             {
                 section = kOther;
-                fprintf(stderr, "gta2: net: net.ini line %d: unknown section [%s], skipped\n", number, head.c_str());
+                fprintf(stderr, "gta2: net: %s line %d: unknown section [%s], skipped\n", shown.c_str(), number, head.c_str());
             }
             continue;
         }
@@ -172,12 +190,17 @@ NetConfig LoadNetConfig(const std::string& confDir)
         if (section == kLan)
         {
             const bool digits = value.size() == 4 && value.find_first_not_of("0123456789") == std::string::npos;
+            if (!lan)
+                continue; // (net.ini's, for gta2-lan)
             if (key == "pin" && digits)
                 c.lanPin = value;
             else
-                fprintf(stderr, "gta2: net: net.ini line %d: [lan] %s skipped (pin = 4 digits)\n", number, key.c_str());
+                fprintf(stderr, "gta2: net: %s line %d: [lan] %s skipped (pin = 4 digits)\n", shown.c_str(), number,
+                        key.c_str());
             continue;
         }
+        if (section == kServer && lan)
+            continue; // (net.ini's, for gta2-online)
         if (section == kServer)
         {
             ServerEntry& s = c.servers.back();
@@ -194,10 +217,14 @@ NetConfig LoadNetConfig(const std::string& confDir)
             else if (key == "tls_fingerprint")
                 s.fingerprint = value;
             else
-                fprintf(stderr, "gta2: net: net.ini line %d: unknown server setting \"%s\", skipped\n", number,
-                        key.c_str());
+                fprintf(stderr, "gta2: net: %s line %d: unknown server setting \"%s\", skipped\n", shown.c_str(),
+                        number, key.c_str());
             continue;
         }
+        const bool serverKey = key == "server" || key == "password" || key == "invite" || key == "ca_file" ||
+                               key == "tls_fingerprint";
+        if (serverKey && lan)
+            continue; // (online settings in net.ini)
         if (key == "server")
         {
             if (value.find("://") != std::string::npos)
@@ -235,6 +262,39 @@ NetConfig LoadNetConfig(const std::string& confDir)
                 c.chat[i] = value.substr(0, 60);
         }
     }
+    if (!lan)
+        LoadServers(c, legacy, chosen);
+    for (int i = 0; i < 4; ++i)
+    {
+        if (c.chat[i].empty())
+            c.chat[i] = kDefaultChat[i];
+    }
+    c.names = SplitList(names);
+    c.rooms = SplitList(rooms);
+    c.crews = SplitList(crews);
+    if (c.names.empty())
+        c.names = SplitList(kDefaultNames);
+    if (c.rooms.empty())
+        c.rooms = SplitList(kDefaultRooms);
+    c.name = Env("GTA2_NET_NAME").empty() ? (name.empty() ? c.names[0] : name) : Env("GTA2_NET_NAME");
+    c.room = Env("GTA2_NET_ROOM").empty() ? (room.empty() ? c.rooms[0] : room) : Env("GTA2_NET_ROOM");
+    if (!found || migrated)
+    {
+        SaveNetConfig(c);
+        fprintf(stderr, "gta2: net: wrote %s settings to %s\n", migrated ? "net.ini's" : "the default", c.path.c_str());
+    }
+    // net.ini once both binaries have their own file
+    const std::string old = confDir + "/net.ini";
+    if (access(old.c_str(), F_OK) == 0 && access((confDir + "/online.ini").c_str(), F_OK) == 0 &&
+        access((confDir + "/lan.ini").c_str(), F_OK) == 0 && rename(old.c_str(), (old + ".old").c_str()) == 0)
+        fprintf(stderr, "gta2: net: %s is now online.ini and lan.ini: renamed net.ini.old\n", old.c_str());
+    return c;
+}
+
+// gta2-online: the [server] sections (and an older file's one server), the chosen one, the
+// environment's (tests).
+void LoadServers(NetConfig& c, ServerEntry& legacy, std::string& chosen)
+{
     // servers: those with an address; the older format's first; one at least
     std::vector<ServerEntry> kept;
     if (!legacy.url.empty())
@@ -247,7 +307,7 @@ NetConfig LoadNetConfig(const std::string& confDir)
     {
         if (s.url.empty())
         {
-            fprintf(stderr, "gta2: net: net.ini: a [server] without url (%s), skipped\n",
+            fprintf(stderr, "gta2: net: online.ini: a [server] without url (%s), skipped\n",
                     s.name.empty() ? "no name" : s.name.c_str());
             continue;
         }
@@ -309,26 +369,6 @@ NetConfig LoadNetConfig(const std::string& confDir)
         if (!Env("GTA2_NET_TLS_FINGERPRINT").empty())
             c.server.tls.fingerprint = Env("GTA2_NET_TLS_FINGERPRINT");
     }
-    for (int i = 0; i < 4; ++i)
-    {
-        if (c.chat[i].empty())
-            c.chat[i] = kDefaultChat[i];
-    }
-    c.names = SplitList(names);
-    c.rooms = SplitList(rooms);
-    c.crews = SplitList(crews);
-    if (c.names.empty())
-        c.names = SplitList(kDefaultNames);
-    if (c.rooms.empty())
-        c.rooms = SplitList(kDefaultRooms);
-    c.name = Env("GTA2_NET_NAME").empty() ? (name.empty() ? c.names[0] : name) : Env("GTA2_NET_NAME");
-    c.room = Env("GTA2_NET_ROOM").empty() ? (room.empty() ? c.rooms[0] : room) : Env("GTA2_NET_ROOM");
-    if (!found)
-    {
-        SaveNetConfig(c);
-        fprintf(stderr, "gta2: net: wrote the default settings to %s\n", c.path.c_str());
-    }
-    return c;
 }
 
 void SaveNetConfig(const NetConfig& c)
@@ -336,17 +376,23 @@ void SaveNetConfig(const NetConfig& c)
     std::ofstream out(c.path);
     if (!out)
         return;
+    const bool lan = c.kind == NetKind::kLan;
     // the server chosen last, as the file knows it (a GTA2_NET_SERVER of tests is not one)
     std::string chosen;
-    const ServerEntry& sel = c.servers[static_cast<size_t>(c.selected)];
-    if (!sel.fromEnv)
-        chosen = sel.name;
-    out << "# GTA2 multiplayer (gta2-online): the names and rooms the lobby offers (comma-separated;\n"
-           "# the browser's lobby can join the same rooms by name), then the game servers.\n"
-           "[net]\n"
-        << "# the server connected last (its name, from the [server] sections below)\n"
-        << "server = " << chosen << "\n"
-        << "names = " << JoinList(c.names) << "\n"
+    if (!lan && c.selected >= 0 && c.selected < static_cast<int>(c.servers.size()) &&
+        !c.servers[static_cast<size_t>(c.selected)].fromEnv)
+        chosen = c.servers[static_cast<size_t>(c.selected)].name;
+    if (lan)
+        out << "# GTA2 on the local network (gta2-lan): the names and rooms the lobby offers\n"
+               "# (comma-separated), then the room PIN. No server: the consoles play together directly.\n";
+    else
+        out << "# GTA2 online (gta2-online): the names and rooms the lobby offers (comma-separated;\n"
+               "# the browser's lobby can join the same rooms by name), then the game servers.\n";
+    out << "[net]\n";
+    if (!lan)
+        out << "# the server connected last (its name, from the [server] sections below)\n"
+            << "server = " << chosen << "\n";
+    out << "names = " << JoinList(c.names) << "\n"
         << "name = " << c.name << "\n"
         << "rooms = " << JoinList(c.rooms) << "\n"
         << "room = " << c.room << "\n"
@@ -360,28 +406,31 @@ void SaveNetConfig(const NetConfig& c)
         << "chat_right = " << c.chat[3] << "\n"
         << "# show the other players' chat messages and waypoints (also in Options)\n"
         << "show_chat = " << (c.showChat ? 1 : 0) << "\n"
-        << "show_waypoints = " << (c.showWaypoints ? 1 : 0) << "\n"
-        << "\n"
-           "# gta2-lan (the local network, no server): the room PIN typed last (4 digits)\n"
-           "[lan]\n"
-        << "pin = " << c.lanPin << "\n"
-        << "\n"
+        << "show_waypoints = " << (c.showWaypoints ? 1 : 0) << "\n";
+    if (lan)
+    {
+        out << "\n# the room PIN typed last (4 digits): a host's room asks it of every player\n"
+               "[lan]\n"
+            << "pin = " << c.lanPin << "\n";
+        return;
+    }
+    out << "\n"
            "# One [server] section per game server, in the lobby's order. url: ws:// or wss://\n"
            "# (TLS). password: optional, the lobby asks for it (and keeps it here); or the code of\n"
            "# an invite link (?invite=...). wss:// checks the certificate against the console's\n"
            "# authorities; for a certificate of the server's own: ca_file (its authority, a PEM\n"
            "# file in conf/ unless absolute) or tls_fingerprint (sha256:..., the log shows it).\n";
-    for (const ServerEntry& s : c.servers)
+    for (const ServerEntry& e : c.servers)
     {
-        if (s.fromEnv)
+        if (e.fromEnv)
             continue;
         out << "\n[server]\n"
-            << "name = " << s.name << "\n"
-            << "url = " << s.url << "\n"
-            << "password = " << s.password << "\n"
-            << "invite = " << s.invite << "\n"
-            << "ca_file = " << s.caFile << "\n"
-            << "tls_fingerprint = " << s.fingerprint << "\n";
+            << "name = " << e.name << "\n"
+            << "url = " << e.url << "\n"
+            << "password = " << e.password << "\n"
+            << "invite = " << e.invite << "\n"
+            << "ca_file = " << e.caFile << "\n"
+            << "tls_fingerprint = " << e.fingerprint << "\n";
     }
 }
 

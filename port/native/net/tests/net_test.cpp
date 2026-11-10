@@ -551,11 +551,11 @@ void TestLan()
     unsetenv("GTA2_LAN_LOOPBACK");
 }
 
-// ---- conf/net.ini: several [server] sections, the older format, the environment ----
+// ---- conf/online.ini and conf/lan.ini: [server] sections, the older net.ini, the environment ----
 
-std::string WriteFile(const std::string& dir, const std::string& text)
+std::string WriteFile(const std::string& dir, const std::string& text, const char* file = "online.ini")
 {
-    std::ofstream(dir + "/net.ini") << text;
+    std::ofstream(dir + "/" + file) << text;
     return dir;
 }
 
@@ -571,6 +571,7 @@ void TestNetConfig()
 {
     char tmpl[] = "/tmp/gta2-net-test-XXXXXX";
     const std::string dir = mkdtemp(tmpl);
+    const std::string online = dir + "/online.ini";
     unsetenv("GTA2_NET_SERVER");
     unsetenv("GTA2_NET_PASSWORD");
 
@@ -581,7 +582,7 @@ void TestNetConfig()
                    "[server]\nname = Broken\n"
                    "[server]\nurl = wss://other.example.org:8443/relay\ntls_fingerprint = sha256:00\n"
                    "[server]\nname = Main\nurl = wss://second.example.com\n");
-    NetConfig c = LoadNetConfig(dir);
+    NetConfig c = LoadNetConfig(dir, NetKind::kOnline);
     CHECK_EQ(c.servers.size(), size_t(4));
     if (c.servers.size() == 4)
     {
@@ -598,24 +599,25 @@ void TestNetConfig()
     }
     CHECK_EQ(c.name, std::string("Zed"));
 
-    // written back and read again: the same servers, the one picked
+    // written back and read again: the same servers, the one picked; no [lan] in online.ini
     c.servers[0].password = "typed";
     c.selected = 0;
     SaveNetConfig(c);
-    NetConfig again = LoadNetConfig(dir);
+    CHECK(ReadFile(online).find("[lan]") == std::string::npos);
+    NetConfig again = LoadNetConfig(dir, NetKind::kOnline);
     CHECK_EQ(again.servers.size(), size_t(4));
     CHECK_EQ(again.selected, 0);
     CHECK_EQ(again.servers[0].password, std::string("typed"));
     CHECK_EQ(again.servers[3].name, std::string("Main 2"));
 
-    // the older format: its server = <url> and login in [net], as one server
+    // the older one-server format: its server = <url> and login in [net], as one server
     WriteFile(dir, "[net]\nserver = wss://gta2.example.com\npassword = old\ninvite = \nca_file = \nname = Kasia\n");
-    NetConfig old = LoadNetConfig(dir);
+    NetConfig old = LoadNetConfig(dir, NetKind::kOnline);
     CHECK_EQ(old.servers.size(), size_t(1));
     CHECK_EQ(old.servers[0].name, std::string("gta2.example.com"));
     CHECK_EQ(old.server.password, std::string("old"));
     SaveNetConfig(old);
-    const std::string written = ReadFile(dir + "/net.ini");
+    const std::string written = ReadFile(online);
     CHECK(written.find("[server]\nname = gta2.example.com\nurl = wss://gta2.example.com\npassword = old\n") != std::string::npos);
     CHECK(written.find("server = gta2.example.com\n") != std::string::npos);
 
@@ -623,27 +625,51 @@ void TestNetConfig()
     // server is for this run only
     setenv("GTA2_NET_SERVER", "ws://127.0.0.1:9", 1);
     setenv("GTA2_NET_PASSWORD", "envpw", 1);
-    NetConfig env = LoadNetConfig(dir);
+    NetConfig env = LoadNetConfig(dir, NetKind::kOnline);
     CHECK_EQ(env.servers.size(), size_t(2));
     CHECK(env.servers[0].fromEnv);
     CHECK_EQ(env.server.url, std::string("ws://127.0.0.1:9"));
     CHECK_EQ(env.server.password, std::string("envpw"));
     SaveNetConfig(env);
-    CHECK(ReadFile(dir + "/net.ini").find("127.0.0.1:9") == std::string::npos);
+    CHECK(ReadFile(online).find("127.0.0.1:9") == std::string::npos);
     unsetenv("GTA2_NET_SERVER");
-    NetConfig over = LoadNetConfig(dir);
+    NetConfig over = LoadNetConfig(dir, NetKind::kOnline);
     CHECK_EQ(over.server.password, std::string("envpw"));
     SaveNetConfig(over);
-    CHECK(ReadFile(dir + "/net.ini").find("envpw") == std::string::npos);
+    CHECK(ReadFile(online).find("envpw") == std::string::npos);
     unsetenv("GTA2_NET_PASSWORD");
 
     // no file: written with one server, this computer's
-    unlink((dir + "/net.ini").c_str());
-    NetConfig fresh = LoadNetConfig(dir);
+    unlink(online.c_str());
+    NetConfig fresh = LoadNetConfig(dir, NetKind::kOnline);
     CHECK_EQ(fresh.servers.size(), size_t(1));
     CHECK_EQ(fresh.server.url, std::string("ws://127.0.0.1:8790"));
-    CHECK(ReadFile(dir + "/net.ini").find("[server]\nname = This computer\n") != std::string::npos);
-    unlink((dir + "/net.ini").c_str());
+    CHECK(ReadFile(online).find("[server]\nname = This computer\n") != std::string::npos);
+    unlink(online.c_str());
+
+    // the net.ini both binaries shared: each takes its part, then it is renamed net.ini.old
+    WriteFile(dir,
+              "[net]\nserver = Main\nname = Kdog\nrooms = A1, B2\ncrew = Wolf Pack\n"
+              "[lan]\npin = 4321\n"
+              "[server]\nname = Main\nurl = wss://gta2.example.com\npassword = pw\n",
+              "net.ini");
+    NetConfig mOnline = LoadNetConfig(dir, NetKind::kOnline);
+    CHECK_EQ(mOnline.servers.size(), size_t(1));
+    CHECK_EQ(mOnline.server.password, std::string("pw"));
+    CHECK_EQ(mOnline.name, std::string("Kdog"));
+    CHECK(ReadFile(online).find("[lan]") == std::string::npos);
+    CHECK(access((dir + "/net.ini").c_str(), F_OK) == 0); // gta2-lan has not taken its part yet
+    NetConfig mLan = LoadNetConfig(dir, NetKind::kLan);
+    CHECK_EQ(mLan.lanPin, std::string("4321"));
+    CHECK_EQ(mLan.name, std::string("Kdog"));
+    CHECK_EQ(mLan.rooms.size(), size_t(2));
+    const std::string lanText = ReadFile(dir + "/lan.ini");
+    CHECK(lanText.find("pin = 4321") != std::string::npos);
+    CHECK(lanText.find("[server]") == std::string::npos && lanText.find("server =") == std::string::npos &&
+          lanText.find("password") == std::string::npos);
+    CHECK(access((dir + "/net.ini").c_str(), F_OK) != 0 && access((dir + "/net.ini.old").c_str(), F_OK) == 0);
+    for (const char* f : {"/online.ini", "/lan.ini", "/net.ini.old"})
+        unlink((dir + f).c_str());
     rmdir(dir.c_str());
 }
 

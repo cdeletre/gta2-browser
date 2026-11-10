@@ -12,7 +12,7 @@
 //                                    the host's settings (points: Gang Wars' target)
 //   GTA2_NET_CREW=name, GTA2_NET_SIDE=gang code   this player's Gang Wars crew and gang
 //   GTA2_NET_WAIT=s                  how long to wait in the lobby (default 300)
-// Both read conf/net.ini, which these override:
+// gta2-online reads conf/online.ini, gta2-lan conf/lan.ini, which these override:
 //   GTA2_NET_SERVER=ws://host:port   the game server (wss://host[:port] in TLS)
 //   GTA2_NET_CA_FILE=pem, GTA2_NET_TLS_FINGERPRINT=sha256:...   wss://: as ca_file, tls_fingerprint
 //   GTA2_NET_PASSWORD=..., GTA2_NET_INVITE=<code>   its password, or an invite code
@@ -380,7 +380,11 @@ using namespace gta2net;
 extern "C" int Gta2Net_PreGame(char* cmd, int size, const char* confDir)
 {
     static NetConfig config;
-    config = LoadNetConfig(confDir);
+#if defined(GTA2_NET_LAN)
+    config = LoadNetConfig(confDir, NetKind::kLan);
+#else
+    config = LoadNetConfig(confDir, NetKind::kOnline);
+#endif
     gConfig = &config;
     int r;
 #if defined(GTA2_NATIVE_HEADLESS)

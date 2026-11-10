@@ -2,7 +2,7 @@
 // lobby (web/shell.js wireCoopLobby) in the Options screen's style (overlay font, the same
 // inputs: up/down choose a line, left/right change it, A acts, B goes back).
 //
-//   1. the game server (conf/net.ini's [server] sections: A connects, or disconnects; a
+//   1. the game server (conf/online.ini's [server] sections: A connects, or disconnects; a
 //      password the server wants and the file has not is asked in a window), this player's
 //      name and the room, then Create room (host) or Join room;
 //   2. in the room: the players with their round trip; the host sets the mode, the
@@ -292,7 +292,7 @@ void Connect(int index, bool typed)
 #endif
 
 // A value typed on the on-screen keyboard joins the front of its list (left/right then turn
-// from it, and it is offered next time; conf/net.ini keeps the list).
+// from it, and it is offered next time; conf/online.ini keeps the list).
 void RememberIn(std::vector<std::string>& list, const std::string& value)
 {
     if (std::find(list.begin(), list.end(), value) == list.end())
@@ -343,7 +343,7 @@ void JoinCrew(const std::string& name)
 // Gang Wars: the crews as the browser shows them (web/shell.js render): one line each, in its
 // gang's colour, with its members; A joins it (or leaves it, for this player's own); left/right
 // change its gang, for its members, or for any crew by the host; a gang another crew has is
-// skipped. Then New crew (a name from conf/net.ini's crews not in use, or one typed) and who has
+// skipped. Then New crew (a name from conf/online.ini's crews not in use, or one typed) and who has
 // no crew yet. A crew with no one left is gone (crews come from the players).
 void CrewLines(std::vector<Item>& it, bool host)
 {
@@ -394,7 +394,7 @@ void CrewLines(std::vector<Item>& it, bool host)
         line.help = std::string(member ? "A: leave" : "A: join") + (member || host ? "  Left/right: gang" : "");
         it.push_back(line);
     }
-    // New crew: the names of conf/net.ini not in use, then "Type a name..."
+    // New crew: the names of conf/online.ini not in use, then "Type a name..."
     std::vector<std::string> offered;
     for (const std::string& n : gS.config->crews)
     {
@@ -489,7 +489,7 @@ void BuildItems()
     if (gS.phase == kSetup)
     {
 #if !defined(GTA2_NET_LAN)
-        // the servers of conf/net.ini: A connects (or disconnects)
+        // the servers of conf/online.ini: A connects (or disconnects)
         for (int i = 0; i < static_cast<int>(c.servers.size()); ++i)
         {
             Item line;
@@ -503,9 +503,9 @@ void BuildItems()
             it.push_back(line);
         }
 #endif
-        // left/right: the lists of conf/net.ini, then "DEFAULT"; A: the on-screen keyboard (any
+        // left/right: the lists of conf/online.ini, then "DEFAULT"; A: the on-screen keyboard (any
         // name; a room created by a browser has a code of its own, upper case as the browser
-        // makes it), or on "DEFAULT" the lists a new net.ini has; X: the entry leaves the list
+        // makes it), or on "DEFAULT" the lists a new settings file has; X: the entry leaves the list
         it.push_back({"Name", [&c] { return gS.nameDefault ? std::string("DEFAULT") : c.name; },
                       [&c](int d) { Cycle(c.names, c.name, gS.nameDefault, d); },
                       [&c] {

@@ -1,4 +1,5 @@
-// gta2-online's session before the game: the settings (conf/net.ini, overridden by the
+// gta2-online's and gta2-lan's session before the game: the settings (conf/online.ini or
+// conf/lan.ini, overridden by the
 // environment), the connection to the game server and the lobby, shared by the lobby
 // screen (lobby_screen.cpp) and the automatic lobby for tests (net_main.cpp).
 // Multiplayer build only (gta2-online).
@@ -16,7 +17,7 @@
 namespace gta2net
 {
 
-// One game server of conf/net.ini (a [server] section).
+// One game server of conf/online.ini (a [server] section).
 struct ServerEntry
 {
     std::string name;        // as the lobby shows it (the url's host when the file has none)
@@ -28,8 +29,17 @@ struct ServerEntry
     bool fromEnv = false;    // GTA2_NET_SERVER (tests): not written to the file
 };
 
+// Which binary's settings: gta2-online's conf/online.ini (the game servers) or gta2-lan's
+// conf/lan.ini (the room PIN; no server).
+enum class NetKind
+{
+    kOnline,
+    kLan
+};
+
 struct NetConfig
 {
+    NetKind kind = NetKind::kOnline;
     std::vector<ServerEntry> servers; // in the file's order
     int selected = 0;                 // the one connected last ([net] server = its name)
     int connected = -1;               // the lobby is connected to this one (-1: none)
@@ -44,15 +54,17 @@ struct NetConfig
     bool showChat = true;             // other players' chat messages on screen (Options)
     bool showWaypoints = true;        // other players' waypoints on screen (Options)
     std::string lanPin = "0000";      // gta2-lan: the PIN typed last ([lan] pin)
-    std::string path;                 // conf/net.ini
+    std::string path;                 // conf/online.ini or conf/lan.ini
     std::string confDir;              // conf/ (a relative ca_file is there)
 };
 
-// Reads conf/net.ini (written with the defaults when missing). Several [server] sections;
-// an older file's server = <url> in [net] reads as one. GTA2_NET_SERVER (with GTA2_NET_PASSWORD,
-// _INVITE, _CA_FILE, _TLS_FINGERPRINT) adds a server of its own, chosen, never written;
-// without it, those override the chosen server's (tests).
-NetConfig LoadNetConfig(const std::string& confDir);
+// Reads conf/online.ini or conf/lan.ini (written with the defaults when missing; the first
+// time, from the conf/net.ini both binaries shared before, renamed net.ini.old once both have
+// their own). Online: several [server] sections; an older file's server = <url> in [net] reads
+// as one; GTA2_NET_SERVER (with GTA2_NET_PASSWORD, _INVITE, _CA_FILE, _TLS_FINGERPRINT) adds a
+// server of its own, chosen, never written; without it, those override the chosen server's
+// (tests). LAN: [lan] pin, no server.
+NetConfig LoadNetConfig(const std::string& confDir, NetKind kind);
 // The lists a new net.ini starts with (the lobby's "DEFAULT" entry brings them back).
 std::vector<std::string> DefaultNames();
 std::vector<std::string> DefaultRooms();
