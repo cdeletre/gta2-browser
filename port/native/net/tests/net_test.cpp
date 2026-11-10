@@ -353,7 +353,7 @@ void TestBrowserRoster()
     const std::string roster = std::string(R"({"lobby":"roster","players":[{"id":")") + browser->Id() +
         R"(","name":"Web","crew":"","colour":7},{"id":")" + t->Id() +
         R"(","name":"Native","crew":""}],"settings":{"mode":"ffa","district":"downtown","friendlyFire":false,)"
-        R"("minutes":5,"killLimit":10,"pointsTarget":0,"sides":{},"lang":"fr","future":{"a":1}},"v":3})";
+        R"("minutes":5,"killLimit":10,"pointsTarget":0,"sides":{},"lang":"fr","future":{"a":1}},"v":4})";
     browser->Send(t->Id(), Message::Of(J(roster.c_str())));
     t->Poll();
     CHECK_EQ(lobby.Players()[0]["colour"].Int(), 7);

@@ -253,6 +253,10 @@ s32 NetPlay::SendToPlayer_521630(Network_8*, s32, char_type)
 }
 
 extern u8 gNetPlayerDropped_6F8470[6]; // winmain.cpp: players the game gave up on
+#if defined(GTA2_PORT_NATIVE)
+extern u32 gNetworkFrameCounter_6F5868;                    // winmain.cpp (diagnostics)
+extern "C" int Gta2Native_TickCount(int* peds, int* cars); // status_native.cpp: ticks run
+#endif
 
 // Whether player `from`'s next inputs may go to the game now. The game reads messages until
 // it has every other player's inputs for the tick (winmain.cpp PortNetReceivePoll), and an
@@ -319,6 +323,18 @@ char_type NetPlay::ReceiveGameMessage_521890(Network_8* pOut, s32* pPlayerIdx, u
             ++gExpectedSeq[m.from];
             ++gInputsDelivered[m.from];
         }
+        else if (!m.payload.empty() && m.payload[0] == kKeepAlive)
+        {
+            // A player leaving (the game's exit timer, after "quit? ARE YOU SURE?") sends a
+            // keep-alive a tick instead of inputs. The game takes the first as that player's
+            // departure (gNetInUsePlayerBits: the player is dropped at the next tick), at the same
+            // tick on every machine, since it comes right after their last inputs. Counted as
+            // inputs are, and that player is gone from then on here too: no other player's inputs
+            // wait for them until the connection's give-up arrives (a short hold, and the
+            // redundant give-up was read a tick or two apart on different machines).
+            ++gInputsDelivered[m.from];
+            gGone[m.from] = true;
+        }
         else if (m.payload.size() >= 5 && m.payload[0] == kGiveUp)
         {
             s32 who;
@@ -328,11 +344,24 @@ char_type NetPlay::ReceiveGameMessage_521890(Network_8* pOut, s32* pPlayerIdx, u
                 gGone[who] = true;
             }
 #if defined(GTA2_PORT_NATIVE)
-            extern s32 gNetworkFrameCounter_6F5868;
-            fprintf(stderr, "gta2: net: player %d gone, delivered at network frame %d after %d of their inputs\n", who,
-                    gNetworkFrameCounter_6F5868, who >= 0 && who < MAX_PLAYERS ? gInputsDelivered[who] : -1);
+            int peds = 0, cars = 0;
+            fprintf(stderr,
+                    "gta2: net: player %d gone, delivered at network frame %u (after %d ticks) after %d of their "
+                    "inputs\n",
+                    who, gNetworkFrameCounter_6F5868, Gta2Native_TickCount(&peds, &cars),
+                    who >= 0 && who < MAX_PLAYERS ? gInputsDelivered[who] : -1);
 #endif
         }
+#if defined(GTA2_PORT_NATIVE)
+        static const bool traceStd = getenv("GTA2_NET_TRACE") != nullptr;
+        if (traceStd && m.subtype != kInputs)
+        {
+            int peds = 0, cars = 0;
+            fprintf(stderr, "gta2: net trace: tick %d: standard message %u from player %d (%d delivered)\n",
+                    Gta2Native_TickCount(&peds, &cars), m.payload.empty() ? 0u : m.payload[0], m.from,
+                    gInputsDelivered[m.from]);
+        }
+#endif
         const size_t len = m.payload.size() < sizeof(gDelivered) ? m.payload.size() : sizeof(gDelivered);
         memcpy(gDelivered, m.payload.data(), len);
         pOut->field_0_data = gDelivered;

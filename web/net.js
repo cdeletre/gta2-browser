@@ -75,7 +75,7 @@ export const MAX_PLAYERS = 6;
 // the native build (port/native/net/lobby.h, kCoopVersion). Sent in hello and in the roster:
 // a host turns away a player of another version, a player leaves a host of another version
 // (builds from before the check send none: version 1).
-export const COOP_VERSION = 3;
+export const COOP_VERSION = 4;
 
 // Each district's three street gangs (the multiplayer maps have them all): internal name, name,
 // colour. In Gang Wars every crew sides with one; its members treat the crew as their own.

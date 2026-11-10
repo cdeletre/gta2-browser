@@ -29,6 +29,8 @@
 //   GTA2_TEST=boom         network game, one machine only: the next player is seated in a car
 //                          beside this one, which then explodes with them in it (as a rocket
 //                          or a fire does: Car_BC::TriggerExplosion_43D7B0)
+//   GTA2_TEST=quit         this player leaves as a person does: Escape (the quit prompt),
+//                          then Return twice (ARE YOU SURE?), after the delay
 //   GTA2_TEST_DAMAGE_PVP=1  network game: this player hits the next player instead, through
 //                          the player-on-player path (killer id set, friendly fire rules;
 //                          gta2_dev_test_friendly_fire). One machine only: it drifts apart.
@@ -77,7 +79,8 @@ enum Test
     kWatch,
     kDamage,
     kPvp,
-    kBoom
+    kBoom,
+    kQuit
 };
 Test gTest = kNone;
 int gPhone = 0;
@@ -287,6 +290,7 @@ extern "C" void Gta2Native_ScenarioInit()
         : !strcmp(test, "damage")    ? kDamage
         : !strcmp(test, "pvp")       ? kPvp
         : !strcmp(test, "boom")      ? kBoom
+        : !strcmp(test, "quit")      ? kQuit
                                      : kNone;
     if (const char* delay = getenv("GTA2_TEST_DELAY"))
     {
@@ -471,6 +475,27 @@ extern "C" void Gta2Native_ScenarioStep(double now)
             AnswerPhone();
             gStep = 1;
         }
+    }
+    else if (gTest == kQuit)
+    {
+        // Escape, then Return, then Return: one press a second, each held 150 ms
+        static const int kSteps[3][2] = {{0x01, 0x1B}, {0x1C, 0x0D}, {0x1C, 0x0D}};
+        if (gStep == 0 && inGame > gDelay)
+        {
+            gStep = 1;
+            gStepAt = now - 1000;
+        }
+        if (gStep >= 1 && gStep <= 6 && now - gStepAt >= (gStep % 2 ? 1000 : 150))
+        {
+            const int* k = kSteps[(gStep - 1) / 2];
+            const bool down = gStep % 2 == 1;
+            gta2_port_key(k[0], k[1], down ? 1 : 0, 0);
+            if (down)
+                fprintf(stderr, "gta2: test: quit step %d (%s)\n", (gStep + 1) / 2, k[0] == 0x01 ? "Escape" : "Return");
+            gStepAt = now;
+            ++gStep;
+        }
+        return;
     }
     else if (gTest == kBoom)
     {

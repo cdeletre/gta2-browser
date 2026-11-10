@@ -25,7 +25,7 @@ constexpr int kMaxPlayers = 6;
 // The co-op version, as COOP_VERSION in web/net.js: every player of a match must simulate the
 // same game, so a change that can change a match bumps it in both. Sent in hello and in the
 // roster; builds from before the check send none (version 1).
-constexpr int kCoopVersion = 3;
+constexpr int kCoopVersion = 4;
 constexpr double kTickMs = 1000.0 / 30;
 
 // The input delay (ticks) the host picks for the slowest player's round trip (inputDelayFor).

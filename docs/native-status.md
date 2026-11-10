@@ -1002,6 +1002,17 @@ dans une salle, comme le navigateur. La liste défile quand elle dépasse l'écr
 ligne choisie. Vu dans le conteneur (captures) : équipe d'un invité rejointe, créée depuis New
 crew, gang imposé par l'hôte à l'équipe d'un invité, gang pris sauté ; tests unitaires (109).
 
+**Départ par « quitter ? » (9 novembre)** : sur consoles, l'hôte parti par la question du jeu
+était retiré à une image d'écart sur deux machines. Reproduit (`GTA2_TEST=quit` : Échap puis
+Entrée deux fois ; trois natifs, réseau irrégulier ; `GTA2_NET_TRACE=1` trace les messages
+standard livrés) : un joueur qui quitte envoie un keep-alive par tick au lieu d'entrées
+(minuteur de sortie) ; le jeu prend le premier comme son départ (retiré au tick suivant), au
+même tick partout. L'écart venait du give-up de la connexion, redondant, lu un ou deux ticks
+après sur une machine. Correctif (`net_web.cpp`, les deux builds, `COOP_VERSION` 4) : un
+keep-alive compte comme les entrées, et son joueur est parti dès le premier (plus d'attente des
+autres joueurs jusqu'au give-up). Après : trois essais, départ au même tick sur les deux
+restants, contrôles identiques, 30,3 ticks/s.
+
 Reste : A5 (consoles), A6 (`wss://` si le serveur public est en HTTPS), A7 (scores, chat,
 points de passage), puis D1-D4 (transport TCP local, découverte UDP, consoles, paquet).
 
