@@ -1,9 +1,13 @@
 // Tests of the multiplayer code without the engine: the JSON, the lobby's rules and a whole
 // lobby (host and two players) over in-memory transports. Run: build/native/<preset>/gta2-net-test
+// With GTA2_NET_TEST_TLS=<certificates>:<first port> (scripts/native/test_tls.sh sets it and
+// starts the relays), also the WebSocket transport in ws:// and wss:// with each certificate case.
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
+#include <fstream>
 #include <functional>
 #include <memory>
 #include <string>
@@ -12,6 +16,7 @@
 #include "json.h"
 #include "lobby.h"
 #include "memory_transport.h"
+#include "ws_transport.h"
 
 using namespace gta2net;
 
@@ -408,6 +413,176 @@ void TestVersion()
     CHECK_EQ(why, std::string("version:1"));
     CHECK(guest.Players().size() == 0);
 }
+
+// ---- ws:// and wss:// against scripts/native/test_relay.py (scripts/native/test_tls.sh) ----
+
+std::string gTlsDir;
+int gTlsBase = 0;
+
+ServerOptions Relay(const std::string& scheme, int port, const std::string& host = "localhost")
+{
+    ServerOptions o;
+    o.url = scheme + "://" + host + ":" + std::to_string(gTlsBase + port);
+    o.room = "tls-test-" + std::to_string(port);
+    o.password = "pw";
+    o.timeoutMs = 3000;
+    return o;
+}
+
+// Polls both until done() or 3 s
+bool PumpUntil(Transport* a, Transport* b, const std::function<bool()>& done)
+{
+    const double end = NowMs() + 3000;
+    while (!done() && NowMs() < end)
+    {
+        a->Poll();
+        if (b)
+            b->Poll();
+        struct timespec ts = {0, 2000000};
+        nanosleep(&ts, nullptr);
+    }
+    return done();
+}
+
+// Two players through the relay: join, a text message, a binary one of every byte value, a large
+// one (several TLS records), a ping, and the other leaving.
+void Exchange(const ServerOptions& o, const char* what)
+{
+    std::string error;
+    auto a = WsTransport::Connect(o, &error);
+    auto b = a ? WsTransport::Connect(o, &error) : nullptr;
+    CHECK(a && b);
+    if (!a || !b)
+    {
+        fprintf(stderr, "  %s: %s\n", what, error.c_str());
+        return;
+    }
+    std::vector<std::string> joinedA, leftA;
+    std::vector<Message> gotA, gotB;
+    a->onPeerJoined = [&](const std::string& id) { joinedA.push_back(id); };
+    a->onPeerLeft = [&](const std::string& id) { leftA.push_back(id); };
+    a->onMessage = [&](const std::string&, const Message& m) { gotA.push_back(m); };
+    b->onMessage = [&](const std::string&, const Message& m) { gotB.push_back(m); };
+    a->Join(); // (either order: "peers" names the other one as "joined" does)
+    b->Join();
+    CHECK(PumpUntil(a.get(), b.get(), [&] { return joinedA.size() == 1; }));
+    Bytes every(256);
+    for (int i = 0; i < 256; ++i)
+        every[i] = static_cast<uint8_t>(i);
+    std::string big(50000, 'x');
+    for (size_t i = 0; i < big.size(); ++i)
+        big[i] = static_cast<char>('a' + i % 26);
+    Json large = Json::Object();
+    large.Set("big", big);
+    a->Send("", Message::Of(J(R"({"hello":"wss"})")));
+    a->Send(b->Id(), Message::Of(every));
+    a->Send("", Message::Of(large));
+    CHECK(PumpUntil(a.get(), b.get(), [&] { return gotB.size() == 3; }));
+    if (gotB.size() == 3)
+    {
+        CHECK_EQ(gotB[0].json["hello"].Str(), std::string("wss"));
+        CHECK(gotB[1].binary && gotB[1].bytes == every);
+        CHECK(gotB[2].json["big"].Str() == big);
+    }
+    b->Send(a->Id(), Message::Of(J(R"({"back":1})")));
+    CHECK(PumpUntil(a.get(), b.get(), [&] { return gotA.size() == 1; }));
+    double rtt = -1;
+    a->Ping(b->Id(), [&](double ms) { rtt = ms; }, [] {});
+    CHECK(PumpUntil(a.get(), b.get(), [&] { return rtt >= 0; }));
+    b->Leave();
+    CHECK(PumpUntil(a.get(), nullptr, [&] { return leftA.size() == 1; }));
+    CHECK(a->Connected());
+    a->Leave();
+    CHECK(!a->Connected());
+    fprintf(stderr, "  %s: ok (ping %.1f ms)\n", what, rtt);
+}
+
+// A connection that must fail, with *part in the reason.
+void Refused(const ServerOptions& o, const char* part, const char* what)
+{
+    std::string error;
+    auto t = WsTransport::Connect(o, &error);
+    CHECK(!t);
+    const bool said = error.find(part) != std::string::npos;
+    CHECK(said);
+    fprintf(stderr, "  %s: %s%s\n", what, said ? "" : "UNEXPECTED: ", error.c_str());
+}
+
+void TestWebSocket()
+{
+    const char* env = getenv("GTA2_NET_TEST_TLS");
+    if (!env || !strchr(env, ':'))
+    {
+        printf("gta2-net-test: ws:// and wss:// not tried (scripts/native/test_tls.sh runs them)\n");
+        return;
+    }
+    gTlsDir = std::string(env, strchr(env, ':'));
+    gTlsBase = atoi(strchr(env, ':') + 1);
+    const std::string ca = gTlsDir + "/ca.pem";
+    std::string selfPrint;
+    std::ifstream(gTlsDir + "/self.sha256") >> selfPrint;
+
+    Exchange(Relay("ws", 0), "ws:// with the password");
+    ServerOptions o = Relay("wss", 1);
+    o.tls.caFile = ca;
+    Exchange(o, "wss:// signed by ca_file");
+    o.password.clear();
+    o.invite = "test-invite";
+    Exchange(o, "wss:// with an invite code");
+    o = Relay("https", 1, "127.0.0.1");
+    o.tls.caFile = ca;
+    Exchange(o, "https:// to 127.0.0.1 (an IP in the certificate)");
+    o = Relay("wss", 5);
+    o.tls.fingerprint = "SHA256:" + selfPrint;
+    Exchange(o, "wss:// self-signed, tls_fingerprint");
+    for (size_t i = 2; i < selfPrint.size(); i += 3)
+        selfPrint.insert(i, ":"); // as openssl prints it, with colons
+    o.tls.fingerprint = "sha256:" + selfPrint;
+    Exchange(o, "wss:// tls_fingerprint with colons");
+
+    o = Relay("wss", 1);
+    o.password = "wrong";
+    o.tls.caFile = ca;
+    Refused(o, "wrong server password", "wrong password over TLS");
+    o = Relay("wss", 1);
+    o.tls.caFile = gTlsDir + "/other-ca.pem";
+    Refused(o, "not from a known authority", "another authority");
+    o.tls.caFile = gTlsDir + "/none.pem";
+    Refused(o, "cannot read ca_file", "a ca_file that is not there");
+    o = Relay("wss", 1);
+    Refused(o, "not from a known authority", "the console's authorities (a test CA is not one)");
+    o = Relay("wss", 2);
+    o.tls.caFile = ca;
+    Refused(o, "for another name", "a certificate for another name");
+    o = Relay("wss", 3);
+    o.tls.caFile = ca;
+    Refused(o, "out of date", "an expired certificate");
+    o = Relay("wss", 4);
+    o.tls.caFile = ca;
+    Refused(o, "not valid yet", "a certificate not valid yet");
+    o = Relay("wss", 5);
+    o.tls.caFile = ca;
+    Refused(o, "not from a known authority", "self-signed without tls_fingerprint");
+    o.tls.fingerprint = "sha256:" + std::string(64, '0');
+    Refused(o, "does not match tls_fingerprint", "self-signed, another tls_fingerprint");
+    o.tls.fingerprint = "sha256:1234";
+    Refused(o, "is not sha256: and 64 hex", "a tls_fingerprint too short");
+    o = Relay("wss", 0);
+    o.tls.caFile = ca;
+    Refused(o, "TLS", "wss:// to a ws:// server");
+    o = Relay("ws", 1);
+    Refused(o, "did not answer", "ws:// to a wss:// server");
+    o = Relay("wss", 6);
+    o.tls.caFile = ca;
+    o.password.clear();
+    o.timeoutMs = 1000;
+    Refused(o, "timed out", "a server that never answers");
+    o = Relay("wss", 0);
+    o.tls.caFile = ca;
+    o.password.clear();
+    o.timeoutMs = 1000;
+    Refused(o, "is the server in TLS", "wss:// to a ws:// server without login");
+}
 } // namespace
 
 int main()
@@ -418,6 +593,7 @@ int main()
     TestLeaveBeforeStart();
     TestBrowserRoster();
     TestVersion();
+    TestWebSocket();
     printf("gta2-net-test: %d checks, %d failed\n", gChecks, gFailures);
     return gFailures ? 1 : 0;
 }

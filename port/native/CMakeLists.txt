@@ -188,9 +188,21 @@ if(GTA2_MULTIPLAYER)
     "${NATIVE}/net/json.cpp"
     "${NATIVE}/net/lobby.cpp"
     "${NATIVE}/net/memory_transport.cpp"
+    "${NATIVE}/net/tls_conn.cpp"
     "${NATIVE}/net/ws_transport.cpp")
   target_compile_options(gta2_net PRIVATE ${GTA2_COMMON_FLAGS} ${GTA2_OPT} ${GTA2_SAN})
   target_compile_definitions(gta2_net PRIVATE ${GTA2_DEFINES} GTA2_NATIVE_NET=1)
+  # wss://: mbedTLS, static (scripts/native/build_mbedtls.sh builds it into GTA2_MBEDTLS_PREFIX)
+  set(GTA2_MBEDTLS_PREFIX "" CACHE PATH "mbedTLS install prefix (scripts/native/build_mbedtls.sh)")
+  find_path(MBEDTLS_INCLUDE_DIR mbedtls/ssl.h HINTS "${GTA2_MBEDTLS_PREFIX}/include" NO_DEFAULT_PATH REQUIRED)
+  foreach(lib mbedtls mbedx509 mbedcrypto everest p256m)
+    find_library(MBEDTLS_${lib}_LIBRARY NAMES ${lib} HINTS "${GTA2_MBEDTLS_PREFIX}/lib" NO_DEFAULT_PATH REQUIRED)
+    list(APPEND GTA2_MBEDTLS_LIBRARIES ${MBEDTLS_${lib}_LIBRARY})
+  endforeach()
+  target_include_directories(gta2_net SYSTEM PRIVATE "${MBEDTLS_INCLUDE_DIR}")
+  # as mbedTLS was built (no explicit_bzero, GLIBC 2.25): tls_conn.cpp zeroizes
+  target_compile_definitions(gta2_net PRIVATE MBEDTLS_PLATFORM_ZEROIZE_ALT)
+  target_link_libraries(gta2_net PUBLIC ${GTA2_MBEDTLS_LIBRARIES})
 
   gta2_add_game(gta2-mp "${NATIVE}/net/coop_native.cpp" "${NATIVE}/net/net_main.cpp" "${NATIVE}/net/lobby_screen.cpp" "${NATIVE}/net/hud_net.cpp")
   target_compile_definitions(gta2-mp PRIVATE GTA2_NATIVE_NET=1)

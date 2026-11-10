@@ -1,6 +1,6 @@
 // See ws_transport.h. A WebSocket client (RFC 6455) small enough for the relay: text and
-// binary frames, fragments, ping/pong control frames, close. The socket is non-blocking
-// once open; Poll() reads what arrived and writes what is waiting.
+// binary frames, fragments, ping/pong control frames, close; over TCP or TLS (tls_conn.h).
+// The connection is non-blocking once open; Poll() reads what arrived and writes what is waiting.
 #include "ws_transport.h"
 
 #include <ctype.h>
@@ -27,25 +27,24 @@ namespace
 struct Url
 {
     std::string host;
-    std::string port = "80";
+    std::string port; // 80, 443 with TLS, unless given
     std::string path = "/relay";
+    bool tls = false;
 };
 
 bool ParseUrl(const std::string& text, Url* out, std::string* error)
 {
     std::string rest = text;
-    for (const char* scheme : {"ws://", "http://"})
+    for (const char* scheme : {"ws://", "http://", "wss://", "https://"})
     {
         if (rest.compare(0, strlen(scheme), scheme) == 0)
         {
             rest = rest.substr(strlen(scheme));
+            out->tls = strcmp(scheme, "wss://") == 0 || strcmp(scheme, "https://") == 0;
+            break;
         }
     }
-    if (rest.compare(0, 6, "wss://") == 0 || rest.compare(0, 8, "https://") == 0)
-    {
-        *error = "wss:// and https:// are not supported yet (no TLS): use ws://";
-        return false;
-    }
+    out->port = out->tls ? "443" : "80";
     const size_t slash = rest.find('/');
     std::string hostport = rest.substr(0, slash);
     if (slash != std::string::npos && slash + 1 < rest.size())
@@ -79,77 +78,20 @@ bool ParseUrl(const std::string& text, Url* out, std::string* error)
     return true;
 }
 
-int WaitFor(int fd, short events, double timeoutMs)
-{
-    pollfd p = {fd, events, 0};
-    return poll(&p, 1, static_cast<int>(timeoutMs));
-}
-
-// A TCP connection (blocking until connected or timed out), then non-blocking, no Nagle delay.
-int TcpConnect(const Url& url, double timeoutMs, std::string* error)
-{
-    addrinfo hints = {};
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_STREAM;
-    addrinfo* found = nullptr;
-    const int rc = getaddrinfo(url.host.c_str(), url.port.c_str(), &hints, &found);
-    if (rc != 0)
-    {
-        *error = "cannot find " + url.host + ": " + gai_strerror(rc);
-        return -1;
-    }
-    int fd = -1;
-    std::string last = "no address";
-    for (addrinfo* a = found; a && fd < 0; a = a->ai_next)
-    {
-        fd = socket(a->ai_family, a->ai_socktype | SOCK_CLOEXEC, a->ai_protocol);
-        if (fd < 0)
-        {
-            last = strerror(errno);
-            continue;
-        }
-        fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
-        if (connect(fd, a->ai_addr, a->ai_addrlen) != 0 && errno != EINPROGRESS)
-        {
-            last = strerror(errno);
-            close(fd);
-            fd = -1;
-            continue;
-        }
-        int soerr = 0;
-        socklen_t len = sizeof(soerr);
-        if (WaitFor(fd, POLLOUT, timeoutMs) <= 0 || getsockopt(fd, SOL_SOCKET, SO_ERROR, &soerr, &len) != 0 || soerr)
-        {
-            last = soerr ? strerror(soerr) : "timed out";
-            close(fd);
-            fd = -1;
-        }
-    }
-    freeaddrinfo(found);
-    if (fd < 0)
-    {
-        *error = "cannot connect to " + url.host + ":" + url.port + ": " + last;
-        return -1;
-    }
-    const int one = 1;
-    setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
-    return fd;
-}
-
-bool SendAll(int fd, const std::string& data, double timeoutMs)
+bool SendAll(Conn& conn, const std::string& data, double timeoutMs)
 {
     size_t done = 0;
     const double end = NowMs() + timeoutMs;
     while (done < data.size())
     {
-        const ssize_t n = send(fd, data.data() + done, data.size() - done, MSG_NOSIGNAL);
+        const long n = conn.Write(data.data() + done, data.size() - done);
         if (n > 0)
         {
             done += static_cast<size_t>(n);
         }
-        else if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR))
+        else if (n == Conn::kAgain)
         {
-            if (NowMs() > end || WaitFor(fd, POLLOUT, end - NowMs()) <= 0)
+            if (NowMs() > end || WaitFor(conn.Fd(), conn.Waits(), end - NowMs()) <= 0)
                 return false;
         }
         else
@@ -161,7 +103,7 @@ bool SendAll(int fd, const std::string& data, double timeoutMs)
 }
 
 // Reads an HTTP response's head (up to the blank line); the bytes after it go to *rest.
-bool ReadHead(int fd, double timeoutMs, std::string* head, std::string* rest)
+bool ReadHead(Conn& conn, double timeoutMs, std::string* head, std::string* rest)
 {
     std::string buf;
     const double end = NowMs() + timeoutMs;
@@ -177,14 +119,14 @@ bool ReadHead(int fd, double timeoutMs, std::string* head, std::string* rest)
         if (buf.size() > 16384)
             return false;
         char chunk[2048];
-        const ssize_t n = recv(fd, chunk, sizeof(chunk), 0);
+        const long n = conn.Read(chunk, sizeof(chunk));
         if (n > 0)
         {
             buf.append(chunk, static_cast<size_t>(n));
         }
-        else if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR))
+        else if (n == Conn::kAgain)
         {
-            if (NowMs() > end || WaitFor(fd, POLLIN, end - NowMs()) <= 0)
+            if (NowMs() > end || WaitFor(conn.Fd(), conn.Waits(), end - NowMs()) <= 0)
                 return false;
         }
         else
@@ -245,7 +187,7 @@ std::string HostHeader(const Url& url)
 {
     const bool v6 = url.host.find(':') != std::string::npos;
     std::string h = v6 ? "[" + url.host + "]" : url.host;
-    return url.port == "80" ? h : h + ":" + url.port;
+    return url.port == (url.tls ? "443" : "80") ? h : h + ":" + url.port;
 }
 
 // One HTTP exchange on its own connection, for the session cookie.
@@ -264,13 +206,13 @@ bool Login(const Url& url, const ServerOptions& o, std::string* cookie, std::str
             "\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: " + std::to_string(body.size()) +
             "\r\nConnection: close\r\n\r\n" + body;
     }
-    const int fd = TcpConnect(url, o.timeoutMs, error);
-    if (fd < 0)
+    std::unique_ptr<Conn> conn = Conn::Open(url.host, url.port, url.tls, o.tls, o.timeoutMs, error);
+    if (!conn)
         return false;
     std::string head;
     std::string rest;
-    const bool ok = SendAll(fd, request, o.timeoutMs) && ReadHead(fd, o.timeoutMs, &head, &rest);
-    close(fd);
+    const bool ok = SendAll(*conn, request, o.timeoutMs) && ReadHead(*conn, o.timeoutMs, &head, &rest);
+    conn.reset();
     if (!ok)
     {
         *error = "the server did not answer the login";
@@ -313,33 +255,31 @@ std::unique_ptr<WsTransport> WsTransport::Connect(const ServerOptions& o, std::s
     std::string cookie;
     if ((!o.password.empty() || !o.invite.empty()) && !Login(url, o, &cookie, error))
         return nullptr;
-    const int fd = TcpConnect(url, o.timeoutMs, error);
-    if (fd < 0)
+    std::unique_ptr<Conn> conn = Conn::Open(url.host, url.port, url.tls, o.tls, o.timeoutMs, error);
+    if (!conn)
         return nullptr;
     const std::string request = "GET " + url.path + " HTTP/1.1\r\nHost: " + HostHeader(url) +
         "\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: " + WebSocketKey() +
         "\r\nSec-WebSocket-Version: 13\r\n" + (cookie.empty() ? "" : "Cookie: gta2_session=" + cookie + "\r\n") + "\r\n";
     std::string head;
     std::string rest;
-    if (!SendAll(fd, request, o.timeoutMs) || !ReadHead(fd, o.timeoutMs, &head, &rest))
+    if (!SendAll(*conn, request, o.timeoutMs) || !ReadHead(*conn, o.timeoutMs, &head, &rest))
     {
-        close(fd);
         *error = "the server did not answer the WebSocket request";
         return nullptr;
     }
     if (StatusOf(head) != 101)
     {
-        close(fd);
         const int status = StatusOf(head);
         *error = status == 403 ? "the server refused the relay (403: a password is needed?)"
                                : "the server answered " + std::to_string(status) + " instead of a WebSocket";
         return nullptr;
     }
-    return std::unique_ptr<WsTransport>(new WsTransport(fd, o.room.substr(0, 32), rest));
+    return std::unique_ptr<WsTransport>(new WsTransport(std::move(conn), o.room.substr(0, 32), rest));
 }
 
-WsTransport::WsTransport(int fd, std::string room, std::string leftover)
-    : mFd(fd), mRoom(std::move(room)), mIn(std::move(leftover))
+WsTransport::WsTransport(std::unique_ptr<Conn> conn, std::string room, std::string leftover)
+    : mConn(std::move(conn)), mRoom(std::move(room)), mIn(std::move(leftover))
 {
     mId = RandomId();
 }
@@ -351,7 +291,7 @@ WsTransport::~WsTransport()
 
 void WsTransport::SendFrame(int opcode, const void* data, size_t len)
 {
-    if (mFd < 0)
+    if (!mConn)
         return;
     static std::mt19937 rng(std::random_device{}());
     std::string f;
@@ -385,31 +325,31 @@ void WsTransport::SendFrame(int opcode, const void* data, size_t len)
 
 void WsTransport::Flush()
 {
-    while (mFd >= 0 && !mOut.empty())
+    while (mConn && !mOut.empty())
     {
-        const ssize_t n = send(mFd, mOut.data(), mOut.size(), MSG_NOSIGNAL);
+        const long n = mConn->Write(mOut.data(), mOut.size());
         if (n > 0)
         {
             mOut.erase(0, static_cast<size_t>(n));
         }
-        else if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR))
+        else if (n == Conn::kAgain)
         {
-            return; // the rest on the next Poll
+            return; // the rest on the next Poll (mOut keeps the bytes, as Write asks)
         }
         else
         {
-            Close(strerror(errno));
+            const std::string why = mConn->Error();
+            Close(why.c_str());
         }
     }
 }
 
 void WsTransport::Close(const char* why)
 {
-    if (mFd < 0)
+    if (!mConn)
         return;
     fprintf(stderr, "gta2: net: connection to the server closed (%s)\n", why);
-    close(mFd);
-    mFd = -1;
+    mConn.reset();
     // as ws.onclose in the browser: everyone is gone for us
     auto peers = mPeers;
     mPeers.clear();
@@ -466,13 +406,12 @@ void WsTransport::Ping(const std::string& id, std::function<void(double)> ok, st
 
 void WsTransport::Leave()
 {
-    if (mFd < 0)
+    if (!mConn)
         return;
     const unsigned char code[2] = {0x03, 0xE8}; // 1000: normal closure
     SendFrame(8, code, 2);
     Flush();
-    close(mFd);
-    mFd = -1;
+    mConn.reset();
     mPeers.clear();
 }
 
@@ -552,10 +491,10 @@ void WsTransport::OnBinary(const Bytes& data)
 void WsTransport::Poll()
 {
     Flush();
-    while (mFd >= 0)
+    while (mConn)
     {
         char chunk[8192];
-        const ssize_t n = recv(mFd, chunk, sizeof(chunk), 0);
+        const long n = mConn->Read(chunk, sizeof(chunk));
         if (n > 0)
         {
             mIn.append(chunk, static_cast<size_t>(n));
@@ -565,9 +504,10 @@ void WsTransport::Poll()
         {
             Close("closed by the server");
         }
-        else if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR)
+        else if (n == Conn::kError)
         {
-            Close(strerror(errno));
+            const std::string why = mConn->Error();
+            Close(why.c_str());
         }
         break;
     }

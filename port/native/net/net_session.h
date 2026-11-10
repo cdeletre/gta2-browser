@@ -29,7 +29,7 @@ struct NetConfig
     bool showWaypoints = true;       // other players' waypoints on screen (Options)
     std::string path;                // conf/net.ini
     // the file's own server settings, written back as they were (GTA2_NET_* only override)
-    std::string fileUrl, filePassword, fileInvite;
+    std::string fileUrl, filePassword, fileInvite, fileCaFile, fileFingerprint;
 };
 
 // Reads conf/net.ini (written with the defaults when missing); GTA2_NET_* override it.

@@ -1013,8 +1013,50 @@ keep-alive compte comme les entrées, et son joueur est parti dès le premier (p
 autres joueurs jusqu'au give-up). Après : trois essais, départ au même tick sur les deux
 restants, contrôles identiques, 30,3 ticks/s.
 
-Reste : A5 (consoles), A6 (`wss://` si le serveur public est en HTTPS), A7 (scores, chat,
-points de passage), puis D1-D4 (transport TCP local, découverte UDP, consoles, paquet).
+**A6, `wss://` (TLS) (10 novembre)** : `gta2-mp` parle au serveur en `ws://` ou en `wss://`
+(`https://` accepté, port 443 par défaut), login compris. TLS : **mbedTLS 3.6.6** (LTS) lié en
+statique dans `gta2-mp` seulement, car l'OpenSSL des consoles diffère (3 sur ROCKNIX, 1.1 sur
+AmberELEC). `scripts/native/build_mbedtls.sh` télécharge l'archive une fois dans `downloads/`
+(jamais committée), vérifie le sha256 publié avec la version, la compile à part (ses sources
+n'entrent pas dans `compile_commands.json`) ; `build_native.sh` l'appelle. Code :
+`port/native/net/tls_conn.*` (connexion TCP ou TLS non bloquante, utilisée par le login et le
+WebSocket ; après `WANT_WRITE`, la même longueur est réécrite comme mbedTLS le demande).
+- Certificat toujours vérifié (autorité, nom, dates) : autorités de `ca_file` (`net.ini`, dans
+  `conf/` sauf chemin absolu ; `GTA2_NET_CA_FILE`), sinon `SSL_CERT_FILE`, sinon le premier
+  fichier présent parmi `/etc/ssl/certs/ca-certificates.crt`, `/etc/ssl/cert.pem`,
+  `/etc/pki/tls/certs/ca-bundle.crt` (vu : les trois sur Air X et RP Mini, les deux derniers sur
+  la R36S). Ou `tls_fingerprint = sha256:…` (`GTA2_NET_TLS_FINGERPRINT`, deux-points permis) :
+  ce certificat-là seulement, pour un serveur à certificat maison ; le log donne l'empreinte.
+- Messages courts dans le lobby (une notice tient maintenant sur trois lignes avant d'entrer
+  dans une salle) : autorité inconnue, autre nom, périmé ou pas encore valide (« ou l'horloge
+  de la console est fausse », avec sa date), empreinte différente, poignée de main expirée
+  (« le serveur est-il en TLS ? »). Le détail et l'empreinte vont dans le log.
+- `explicit_bzero` : compilé contre une glibc ≥ 2.25, mbedTLS l'appelle, et `gta2-mp`
+  demandait GLIBC 2.25. Avec `MBEDTLS_PLATFORM_ZEROIZE_ALT`, `tls_conn.cpp` fournit la
+  fonction : retour à GLIBC 2.17, comme `gta2`. `build_native.sh` vérifie maintenant que chaque
+  binaire de `dist/` ne demande pas plus que `gta2`.
+- Taille : `dist/gta2-mp.aarch64` 2,6 Mo ; `gta2` inchangé (1,5 Mo, aucun symbole mbedTLS).
+
+Vu dans le conteneur :
+- `scripts/native/test_tls.sh` : certificats de test (autorité, serveur pour `localhost` et
+  `127.0.0.1`, autre nom, périmé, pas encore valide, auto-signé, autre autorité) et
+  `scripts/native/test_relay.py` (le relais et le login de `server.mjs` en Python 3.8, en clair
+  ou en TLS, le Node du conteneur étant trop vieux) ; `gta2-net-test` : 203 vérifications, toutes
+  passent, aussi sous ASan + UBSan et en release. Deux joueurs en `ws://` puis `wss://`
+  (`ca_file`, invitation, `https://` vers une IP, empreinte avec et sans deux-points) : arrivée,
+  message texte, binaire des 256 octets, message de 50 Ko (plusieurs enregistrements TLS), ping,
+  départ. Refus : chaque cas ci-dessus avec son message, mauvais mot de passe, `wss://` vers un
+  serveur en clair, `ws://` vers un serveur TLS, serveur muet (délai).
+- Deux parties de 10 minutes en même temps, à deux joueurs sans tête, l'une en `wss://` (TLS 1.3,
+  AES-256-GCM), l'autre en `ws://` : contrôles identiques jusqu'au tick 16 290, 30,3 ticks/s,
+  aucune divergence (le CPU du build sans tête, qui tourne en boucle, ne compare rien).
+- Capture du lobby : l'erreur d'autorité inconnue sur trois lignes.
+
+Pas encore vérifié : consoles (coût du TLS sur la R36S), navigateur en `https://` dans la même
+salle, vrai certificat (serveur public derrière nginx, étape 7).
+
+Reste : A5 (consoles), A7 (scores, chat, points de passage), puis D1-D4 (transport TCP local,
+découverte UDP, consoles, paquet).
 
 ## Reste à faire
 

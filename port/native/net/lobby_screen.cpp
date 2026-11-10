@@ -624,7 +624,23 @@ void Draw(int dw, int dh)
             Gta2Native_OverlayText(x0, bottom, px, kGrey, ProblemText(problem).substr(0, kCols).c_str());
     }
     if (!gS.message.empty())
-        Gta2Native_OverlayText(x0, bottom, px, gS.messageError ? kRed : kGrey, gS.message.substr(0, kCols).c_str());
+    {
+        // in the room, one line (the hints are above it); before, up to three, ending on it
+        std::vector<std::string> lines;
+        std::string rest = gS.message;
+        const size_t most = gS.phase == kRoom ? 1 : 3;
+        while (!rest.empty() && lines.size() < most)
+        {
+            size_t cut = rest.size() <= static_cast<size_t>(kCols) ? rest.size() : rest.rfind(' ', kCols);
+            if (cut == std::string::npos || cut == 0)
+                cut = kCols;
+            lines.push_back(rest.substr(0, cut));
+            rest = cut < rest.size() ? rest.substr(cut + (rest[cut] == ' ' ? 1 : 0)) : "";
+        }
+        for (size_t i = 0; i < lines.size(); ++i)
+            Gta2Native_OverlayText(x0, bottom - static_cast<float>(lines.size() - 1 - i) * lineH, px,
+                                   gS.messageError ? kRed : kGrey, lines[i].c_str());
+    }
     const std::string& lineHelp =
         gS.line < static_cast<int>(gS.items.size()) ? gS.items[static_cast<size_t>(gS.line)].help : std::string();
     if (!lineHelp.empty() && gS.phase == kRoom)

@@ -13,7 +13,8 @@
 //   GTA2_NET_CREW=name, GTA2_NET_SIDE=gang code   this player's Gang Wars crew and gang
 //   GTA2_NET_WAIT=s                  how long to wait in the lobby (default 300)
 // Both read conf/net.ini, which these override:
-//   GTA2_NET_SERVER=ws://host:port   the game server
+//   GTA2_NET_SERVER=ws://host:port   the game server (wss://host[:port] in TLS)
+//   GTA2_NET_CA_FILE=pem, GTA2_NET_TLS_FINGERPRINT=sha256:...   wss://: as ca_file, tls_fingerprint
 //   GTA2_NET_PASSWORD=..., GTA2_NET_INVITE=<code>   its password, or an invite code
 //   GTA2_NET_ROOM=name, GTA2_NET_NAME=name
 // Multiplayer build only (gta2-mp).
@@ -120,7 +121,7 @@ NetConfig LoadNetConfig(const std::string& confDir)
 {
     NetConfig c;
     c.path = confDir + "/net.ini";
-    std::string server = "ws://127.0.0.1:8790", password, invite, names = kDefaultNames, name, rooms = kDefaultRooms,
+    std::string server = "ws://127.0.0.1:8790", password, invite, caFile, fingerprint, names = kDefaultNames, name, rooms = kDefaultRooms,
                 room, crews = kDefaultCrews;
     std::ifstream in(c.path);
     const bool found = in.is_open(); // (the stream's state after reading to the end is no test)
@@ -143,6 +144,10 @@ NetConfig LoadNetConfig(const std::string& confDir)
                 password = value;
             else if (key == "invite")
                 invite = value;
+            else if (key == "ca_file")
+                caFile = value;
+            else if (key == "tls_fingerprint")
+                fingerprint = value;
             else if (key == "names")
                 names = value;
             else if (key == "name")
@@ -174,9 +179,16 @@ NetConfig LoadNetConfig(const std::string& confDir)
     c.fileUrl = server;
     c.filePassword = password;
     c.fileInvite = invite;
+    c.fileCaFile = caFile;
+    c.fileFingerprint = fingerprint;
     c.server.url = Env("GTA2_NET_SERVER", server.c_str());
     c.server.password = Env("GTA2_NET_PASSWORD", password.c_str());
     c.server.invite = Env("GTA2_NET_INVITE", invite.c_str());
+    // wss://: a ca_file that is not absolute is in conf/, by net.ini
+    c.server.tls.caFile = Env("GTA2_NET_CA_FILE", caFile.c_str());
+    if (!c.server.tls.caFile.empty() && c.server.tls.caFile[0] != '/')
+        c.server.tls.caFile = confDir + "/" + c.server.tls.caFile;
+    c.server.tls.fingerprint = Env("GTA2_NET_TLS_FINGERPRINT", fingerprint.c_str());
     c.names = SplitList(names);
     c.rooms = SplitList(rooms);
     c.crews = SplitList(crews);
@@ -206,6 +218,11 @@ void SaveNetConfig(const NetConfig& c)
         << "# the server's password, or the code of an invite link (?invite=...)\n"
         << "password = " << c.filePassword << "\n"
         << "invite = " << c.fileInvite << "\n"
+        << "# wss:// (TLS): the server's certificate is checked against the console's authorities;\n"
+           "# for a server with a certificate of its own, either its authority (a PEM file, in conf/\n"
+           "# unless absolute) or the certificate's sha256 fingerprint (the log shows it on connecting)\n"
+        << "ca_file = " << c.fileCaFile << "\n"
+        << "tls_fingerprint = " << c.fileFingerprint << "\n"
         << "names = " << JoinList(c.names) << "\n"
         << "name = " << c.name << "\n"
         << "rooms = " << JoinList(c.rooms) << "\n"

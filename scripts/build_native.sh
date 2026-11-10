@@ -185,6 +185,10 @@ CASE_ALIASES="$ROOT/build/native/case-aliases"
 python3 scripts/native/case_aliases.py "$CASE_ALIASES" \
   port/native/compat port/core/compat "$WORK/Source" "$WORK" port
 
+# TLS of gta2-mp (wss://): mbedTLS, built once apart from the game (scripts/native/build_mbedtls.sh).
+MBEDTLS_PREFIX="$ROOT/build/native/third_party/mbedtls"
+scripts/native/build_mbedtls.sh "$MBEDTLS_PREFIX" Release
+
 log "Configuration ($BUILD_TYPE$([[ $SANITIZE -eq 1 ]] && echo ', ASan+UBSan'))"
 cmake -S port/native -B "$BUILD_DIR" -G Ninja \
   -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
@@ -195,7 +199,8 @@ cmake -S port/native -B "$BUILD_DIR" -G Ninja \
   -DGTA2_PORT_ROOT="$ROOT/port" \
   -DGTA2_CASE_ALIASES="$CASE_ALIASES" \
   -DGTA2_SANITIZE="$([[ $SANITIZE -eq 1 ]] && echo ON || echo OFF)" \
-  -DGTA2_HEADLESS="$([[ $HEADLESS -eq 1 ]] && echo ON || echo OFF)"
+  -DGTA2_HEADLESS="$([[ $HEADLESS -eq 1 ]] && echo ON || echo OFF)" \
+  -DGTA2_MBEDTLS_PREFIX="$MBEDTLS_PREFIX"
 
 ln -sf "$BUILD_DIR/compile_commands.json" compile_commands.json
 
@@ -257,7 +262,12 @@ if [[ "$PRESET" == "release" && $SANITIZE -eq 0 ]]; then
     objcopy --only-keep-debug "$BUILD_DIR/$target" "$DIST/$NAME.debug"
     objcopy --strip-all --add-gnu-debuglink="$DIST/$NAME.debug" "$BUILD_DIR/$target" "$DIST/$NAME"
     needed=$(objdump -p "$DIST/$NAME" | awk '/NEEDED/ {print $2}' | tr '\n' ' ')
-    echo "   dist/$NAME : $(du -h "$DIST/$NAME" | cut -f1), bibliothèques : $needed"
+    glibc=$(objdump -T "$DIST/$NAME" 2>/dev/null | grep -o 'GLIBC_[0-9.]*' | sort -Vu | tail -1 || true)
+    echo "   dist/$NAME : $(du -h "$DIST/$NAME" | cut -f1), ${glibc:-GLIBC ?}, bibliothèques : $needed"
+    # gta2-mp carries mbedTLS: it must not ask for a newer glibc than the game (explicit_bzero...)
+    if [[ -n "$glibc_max" && -n "$glibc" && "$(printf '%s\n%s\n' "$glibc" "$glibc_max" | sort -V | tail -1)" != "$glibc_max" ]]; then
+      die "dist/$NAME demande $glibc, plus que gta2 ($glibc_max)"
+    fi
     if objdump -p "$DIST/$NAME" | grep -qE 'RPATH|RUNPATH'; then
       die "dist/$NAME a un RPATH/RUNPATH : $(objdump -p "$DIST/$NAME" | grep -E 'RPATH|RUNPATH')"
     fi
