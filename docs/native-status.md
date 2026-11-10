@@ -1055,8 +1055,19 @@ Vu dans le conteneur :
   aucune divergence (le CPU du build sans tête, qui tourne en boucle, ne compare rien).
 - Capture du lobby : l'erreur d'autorité inconnue sur trois lignes.
 
-Pas encore vérifié : consoles (coût du TLS sur la R36S), navigateur en `https://` dans la même
-salle, vrai certificat (serveur public derrière nginx, étape 7).
+Vu sur consoles (10 novembre) : `scripts/native/tls_front.mjs` (Node seul, rien d'installé)
+termine TLS devant `server.mjs` sur le conteneur Proxmox (port 8791, autorité de test ;
+`ca_file` sur les consoles). D'abord deux joueurs sans tête depuis Docker (90 s, contrôles
+identiques). Puis Air X (hôte), RP Mini, R36S et un navigateur en `https://` (exception de
+sécurité acceptée pour l'autorité de test) : partie libre à 4, environ 200 s en jouant,
+TLS 1.3 (AES-256-GCM) sur les trois consoles, contrôles identiques jusqu'au tick 5 310,
+30,3 ticks/s, aucune divergence ; départ de l'hôte vu à la même image (5 963) sur les deux
+restants. CPU du jeu (3 relevés d'une minute) : Air X 39 %, RP Mini 16 %, R36S 37 %, du même
+ordre que la nuit en `ws://` à 3 joueurs immobiles (26-42 %, 16 %, 33-52 %) : pas de coût du
+TLS visible. Mémoire 86 Mo (Air X, RP Mini) et 165 Mo (R36S, GPU compris), comme en `ws://`.
+
+Pas encore vérifié : vrai certificat (serveur public derrière nginx, étape 7), session longue
+en `wss://`.
 
 Reste : A5 (consoles), A7 (scores, chat, points de passage), puis D1-D4 (transport TCP local,
 découverte UDP, consoles, paquet).
