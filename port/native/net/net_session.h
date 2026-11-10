@@ -1,7 +1,7 @@
-// gta2-mp's session before the game: the settings (conf/net.ini, overridden by the
+// gta2-online's session before the game: the settings (conf/net.ini, overridden by the
 // environment), the connection to the game server and the lobby, shared by the lobby
 // screen (lobby_screen.cpp) and the automatic lobby for tests (net_main.cpp).
-// Multiplayer build only (gta2-mp).
+// Multiplayer build only (gta2-online).
 #pragma once
 
 #include <functional>

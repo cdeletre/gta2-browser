@@ -43,14 +43,14 @@ extern "C" void Gta2Native_OverlayText(float x, float y, float px, uint32_t rgba
 extern "C" bool Gta2Native_IsPlaying();          // status_native.cpp
 extern "C" int Gta2Native_FaceButtons();          // input_sdl.cpp: 0 auto, 1 nintendo, 2 xbox
 extern "C" void Gta2Native_SetFaceButtons(int mode); // input_sdl.cpp, also writes controls.ini
-// gta2-mp's lobby screen (net/lobby_screen.cpp) takes this screen's inputs and drawing while
+// gta2-online's lobby screen (net/lobby_screen.cpp) takes this screen's inputs and drawing while
 // it is up, before the game starts. Weak: the solo binary has no lobby, and these stay null.
 extern "C" bool Gta2Net_LobbyActive() __attribute__((weak));
 extern "C" void Gta2Net_LobbyInput(int action) __attribute__((weak));
 extern "C" void Gta2Net_LobbyDraw(int dw, int dh) __attribute__((weak));
 extern "C" void Gta2Native_OskDraw(int dw, int dh); // osk_native.cpp: over everything
-// gta2-mp in a match (net/hud_net.cpp): chat lines and the scoreboard, under this screen; and
-// two settings, shown here only in gta2-mp.
+// gta2-online in a match (net/hud_net.cpp): chat lines and the scoreboard, under this screen; and
+// two settings, shown here only in gta2-online.
 extern "C" void Gta2Net_HudDraw(int dw, int dh) __attribute__((weak));
 extern "C" bool Gta2Net_ShowChat() __attribute__((weak));
 extern "C" void Gta2Net_SetShowChat(bool on) __attribute__((weak));
@@ -71,8 +71,8 @@ enum Line
     kExploding,
     kLighting,
     kFaceButtons,
-    kChat,      // gta2-mp only
-    kWaypoints, // gta2-mp only
+    kChat,      // gta2-online only
+    kWaypoints, // gta2-online only
     kBack,
     kLineCount
 };
@@ -80,7 +80,7 @@ const char* const kLabels[kLineCount] = {"Music and radio", "Sound effects", "Te
                                          "Lighting",        "Face buttons",  "Chat messages", "Waypoints",
                                          "Back"};
 
-// The lines this binary shows: the multiplayer ones in gta2-mp only.
+// The lines this binary shows: the multiplayer ones in gta2-online only.
 bool Shown(int line)
 {
     if (line == kChat || line == kWaypoints)

@@ -54,7 +54,7 @@ extern "C" bool Gta2Native_OskOpen();                // osk_native.cpp: the on-s
 extern "C" void Gta2Native_OskFrame();
 extern "C" void Gta2Native_OskInput(int action);
 extern "C" void Gta2Native_OskChar(int ch);
-// gta2-mp (net/net_main.cpp, net/hud_net.cpp): Select's gestures in a match. Weak: the solo
+// gta2-online (net/net_main.cpp, net/hud_net.cpp): Select's gestures in a match. Weak: the solo
 // binary has none, and Select keeps its plain binding there.
 extern "C" bool Gta2Net_InMatch() __attribute__((weak));
 extern "C" void Gta2Net_SelectHeld(bool held) __attribute__((weak));
@@ -906,7 +906,7 @@ void Gta2Native_InputFrame()
             int input, action;
         } kMap[] = {{kPadUp, 0},   {kStickUp, 0},   {kPadDown, 1},  {kStickDown, 1},  {kPadLeft, 2},
                     {kStickLeft, 2}, {kPadRight, 3}, {kStickRight, 3}, {kA, 4},       {kB, 5},
-                    {kStart, 5},     {kXBtn, 6}}; // 6: gta2-mp's lobby deletes a list entry
+                    {kStart, 5},     {kXBtn, 6}}; // 6: gta2-online's lobby deletes a list entry
         for (const auto& m : kMap)
         {
             if (gPressed[m.input] && !gOptionsHeld[m.input])
@@ -959,7 +959,7 @@ void Gta2Native_InputFrame()
             fprintf(stderr, "gta2: input: layout %s\n", playing ? "city" : "menu");
         }
     }
-    // In a match (gta2-mp), Select is three gestures: a tap (released within 0.3 s, no d-pad)
+    // In a match (gta2-online), Select is three gestures: a tap (released within 0.3 s, no d-pad)
     // does what Select is bound to (the radio), on its release; held, it shows the scoreboard;
     // with the d-pad, it sends one of four quick chat messages. While it is down the d-pad
     // does not reach the game.
@@ -1047,7 +1047,7 @@ void Gta2Native_InputFrame()
     Apply(keys);
 }
 
-// gta2-mp's end-of-match screen: A is down (as the game's controls see it, any layout).
+// gta2-online's end-of-match screen: A is down (as the game's controls see it, any layout).
 bool Gta2Native_PadAPressed()
 {
     return gPressed[kA];

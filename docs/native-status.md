@@ -809,13 +809,13 @@ reporter l'un d'eux, il suffit de retirer sa garde `#if defined(GTA2_PORT_NATIVE
 
 Plan : option A d'abord (client WebSocket vers `/relay` de `server/server.mjs`, compatible
 avec le build web), puis D (partie directe en réseau local, sans serveur). Le multijoueur
-est un **binaire à part, `gta2-mp`**, avec son propre lanceur : le binaire solo `gta2`
+est un **binaire à part, `gta2-online`**, avec son propre lanceur : le binaire solo `gta2`
 ne contient aucun code réseau (vérifié : aucun symbole `gta2net::`, `dist/gta2.aarch64`
 toujours 1,5 Mo). Comme dans le navigateur, le lobby a lieu avant le démarrage du jeu, qui
 entre ensuite en partie réseau par `-N`.
 
 **A0, le socle (fait, 9 novembre)**, dans `port/native/net/` (compilé seulement dans
-`gta2-mp` et `gta2-net-test`, option CMake `GTA2_MULTIPLAYER`, activée par défaut) :
+`gta2-online` et `gta2-net-test`, option CMake `GTA2_MULTIPLAYER`, activée par défaut) :
 - `json.*` : JSON (clés dans l'ordre, nombres comme `JSON.stringify`, `\u` et UTF-8) ;
 - `transport.h` : l'interface des transports de `web/net.js` (rejoindre, envoyer à un joueur
   ou à tous, ping, arrivées et départs), sans fil d'exécution : `Poll()` à chaque tour de
@@ -840,11 +840,11 @@ non bloquant ; `ws://` seulement), avec la connexion d'un serveur à mot de pass
 `net_main.cpp` déroule le lobby avant `WinMain` (puis `-N`) et lit le transport à chaque
 tour de boucle ; réglé pour l'instant par l'environnement (`GTA2_NET_SERVER`, `_PASSWORD`,
 `_ROOM`, `_NAME`, `_HOST`, `_PLAYERS`, `_MODE`, `_DISTRICT`, `_CREW`, `_SIDE`…, en-tête du
-fichier). La ligne d'état de `gta2-mp` ajoute le dernier contrôle et les messages.
+fichier). La ligne d'état de `gta2-online` ajoute le dernier contrôle et les messages.
 
 **A2, natif contre natif (observé, 9 novembre)** : le serveur dans son propre conteneur
 (`docker build -t gta2-server server/`, puis `docker run -d --name gta2-relay -p 8790:8790
--e GTA2_PASSWORD=test -e DATA_DIR=/tmp/db gta2-server`) ; deux `gta2-mp` sans écran dans
+-e GTA2_PASSWORD=test -e DATA_DIR=/tmp/db gta2-server`) ; deux `gta2-online` sans écran dans
 `gta2-pm`, par `ws://host.docker.internal:8790`, avec le soak des deux côtés
 (`GTA2_SOAK=1 GTA2_SOAK_AIDS=0`, graines différentes) :
 
@@ -867,7 +867,7 @@ fichier). La ligne d'état de `gta2-mp` ajoute le dernier contrôle et les messa
 
 **A3, natif contre navigateur (observé, 9 novembre)** : le serveur de jeu, le build web
 release (emsdk 6.0.12) et `game/` sur un conteneur Ubuntu 24.04 du propriétaire
-(10.20.0.158, `/opt/gta2-browser`) ; un `gta2-mp` natif sans écran comme hôte dans
+(10.20.0.158, `/opt/gta2-browser`) ; un `gta2-online` natif sans écran comme hôte dans
 `gta2-pm`, et Chromium sans fenêtre comme invité (`scripts/native/browser_peer.mjs`, image
 `mcr.microsoft.com/playwright:v1.49.1-noble` sur le Mac), qui rejoint la salle par le lien
 d'invitation et presse des touches au hasard.
@@ -902,7 +902,7 @@ Gang Wars l'équipe et le gang de chacun, « Start the match » ; puis l'attente
 `password` ou `invite`, `names`, `name`, `rooms`, `room`, `crews` ; les `GTA2_NET_*`
 priment sans être réécrits dans le fichier. Le mode automatique des tests reste pour les
 builds sans écran et quand `GTA2_NET_HOST` est défini. Après une partie terminée par le jeu,
-`gta2-mp` se relance (`execv`) et revient au lobby, comme la page du navigateur se recharge.
+`gta2-online` se relance (`execv`) et revient au lobby, comme la page du navigateur se recharge.
 `GTA2_LOBBY_KEYS` joue des appuis pour les tests.
 - **Observé dans le conteneur** (pilote SDL hors écran, captures) : hôte à l'écran (créer
   ROOM1, attendre, démarrer) contre client automatique ; client à l'écran (rejoindre ROOM2,
@@ -911,7 +911,7 @@ builds sans écran et quand `GTA2_NET_HOST` est défini. Après une partie termi
 - **Pas encore vérifié :** le retour au lobby après une partie, sur console et à la manette.
 
 **3 joueurs (9 novembre) :** deux consoles (TSP S hôte, RP Mini) et un navigateur ont divergé
-au tick 180, les deux consoles entre elles. Reproduit dans le conteneur avec trois `gta2-mp`
+au tick 180, les deux consoles entre elles. Reproduit dans le conteneur avec trois `gta2-online`
 et des touches au hasard : l'hôte divergeait dès le tick 2 (11 peds contre 13). Cause et
 correction (natif) : tableau « Correctifs à reporter dans le build web » ci-dessous. Après :
 3 joueurs pendant 2 min, 3 622 ticks, contrôles identiques, 600 premiers relevés identiques.
@@ -940,7 +940,7 @@ les coups restent bloqués par le tir ami. Reproduit et vérifié avec `GTA2_TES
 
 **A7, en partie (en cours, 9 novembre)** : `net/hud_net.cpp`, par-dessus le jeu (crochets
 faibles de `options_native.cpp`). En match, Select fait trois choses (`input_sdl.cpp`, seulement
-dans `gta2-mp` et en partie réseau ; le binaire solo garde Select tel quel) : un appui court
+dans `gta2-online` et en partie réseau ; le binaire solo garde Select tel quel) : un appui court
 (relâché en moins de 0,3 s, sans croix) donne son action liée (la radio) au relâchement ;
 maintenu, il affiche le tableau des scores (colonnes et ordre du navigateur : joueur, kills,
 morts, points ; Free-for-all par kills, Free roam par points, Gang Wars par équipe) avec en
@@ -948,7 +948,7 @@ légende les quatre messages ; avec la croix, il envoie un message rapide (`conf
 `chat_up/down/left/right`, par défaut « Follow me! », « Wait for me! », « Help! »,
 « Nice one! »), et la croix ne va pas au jeu tant que Select est tenu. Tab au clavier : le
 tableau. Les messages reçus (consoles et texte libre du navigateur) : les quatre derniers en
-bas à gauche, 9 s, le nom dans la couleur du joueur. Options (gta2-mp seulement) : « Chat
+bas à gauche, 9 s, le nom dans la couleur du joueur. Options (gta2-online seulement) : « Chat
 messages » et « Waypoints » On/Off (`show_chat`, `show_waypoints` dans `net.ini`). Fin de
 match : le classement final jusqu'à A ou 10 s, puis le lobby. Vu dans le conteneur
 (`GTA2_NET_TEST_HUD=1`, captures) : tableau, légende, messages envoyés et reçus par l'autre
@@ -975,7 +975,7 @@ majuscules). Dans le
 menu du jeu, il s'ouvre seul quand le jeu attend un nom de joueur ou un mot de passe (états 3
 et 5 du `Frontend`) et tape comme un clavier (touche enfoncée puis relâchée, une par une, ce
 que `HandlePlayerNameTyping_4B2F60` attend) ; le texte affiché est celui du jeu. Dans le lobby
-de `gta2-mp`, A sur « Name » ou « Room » l'ouvre (salle en majuscules, comme le navigateur) :
+de `gta2-online`, A sur « Name » ou « Room » l'ouvre (salle en majuscules, comme le navigateur) :
 une console peut rejoindre une salle créée par un navigateur, dont le code est aléatoire ;
 la valeur tapée rejoint la tête de sa liste dans `net.ini` (gauche/droite repartent d'elle) ;
 X (Suppr au clavier) retire de sa liste l'entrée affichée (il en reste toujours une) ; après la
@@ -1016,9 +1016,9 @@ keep-alive compte comme les entrées, et son joueur est parti dès le premier (p
 autres joueurs jusqu'au give-up). Après : trois essais, départ au même tick sur les deux
 restants, contrôles identiques, 30,3 ticks/s.
 
-**A6, `wss://` (TLS) (10 novembre)** : `gta2-mp` parle au serveur en `ws://` ou en `wss://`
+**A6, `wss://` (TLS) (10 novembre)** : `gta2-online` parle au serveur en `ws://` ou en `wss://`
 (`https://` accepté, port 443 par défaut), login compris. TLS : **mbedTLS 3.6.6** (LTS) lié en
-statique dans `gta2-mp` seulement, car l'OpenSSL des consoles diffère (3 sur ROCKNIX, 1.1 sur
+statique dans `gta2-online` seulement, car l'OpenSSL des consoles diffère (3 sur ROCKNIX, 1.1 sur
 AmberELEC). `scripts/native/build_mbedtls.sh` télécharge l'archive une fois dans `downloads/`
 (jamais committée), vérifie le sha256 publié avec la version, la compile à part (ses sources
 n'entrent pas dans `compile_commands.json`) ; `build_native.sh` l'appelle. Code :
@@ -1034,11 +1034,11 @@ WebSocket ; après `WANT_WRITE`, la même longueur est réécrite comme mbedTLS 
   dans une salle) : autorité inconnue, autre nom, périmé ou pas encore valide (« ou l'horloge
   de la console est fausse », avec sa date), empreinte différente, poignée de main expirée
   (« le serveur est-il en TLS ? »). Le détail et l'empreinte vont dans le log.
-- `explicit_bzero` : compilé contre une glibc ≥ 2.25, mbedTLS l'appelle, et `gta2-mp`
+- `explicit_bzero` : compilé contre une glibc ≥ 2.25, mbedTLS l'appelle, et `gta2-online`
   demandait GLIBC 2.25. Avec `MBEDTLS_PLATFORM_ZEROIZE_ALT`, `tls_conn.cpp` fournit la
   fonction : retour à GLIBC 2.17, comme `gta2`. `build_native.sh` vérifie maintenant que chaque
   binaire de `dist/` ne demande pas plus que `gta2`.
-- Taille : `dist/gta2-mp.aarch64` 2,6 Mo ; `gta2` inchangé (1,5 Mo, aucun symbole mbedTLS).
+- Taille : `dist/gta2-online.aarch64` 2,6 Mo ; `gta2` inchangé (1,5 Mo, aucun symbole mbedTLS).
 
 Vu dans le conteneur :
 - `scripts/native/test_tls.sh` : certificats de test (autorité, serveur pour `localhost` et
@@ -1069,7 +1069,7 @@ TLS visible. Mémoire 86 Mo (Air X, RP Mini) et 165 Mo (R36S, GPU compris), comm
 **Serveur public (10 novembre)** : `game-server-01` (LXC, `scripts/deploy_lxc.sh`, service
 systemd), derrière le nginx du propriétaire (certificat Let's Encrypt) : `wss://gta2.example.org`.
 Vu :
-- depuis Docker, deux `gta2-mp` sans tête, 10 min, seulement les autorités du système (pas de
+- depuis Docker, deux `gta2-online` sans tête, 10 min, seulement les autorités du système (pas de
   `ca_file`) : TLS 1.3, contrôles identiques jusqu'au tick 16 290, 30,3 ticks/s, 21 ms ;
 - propriétaire, Mac sur un VPN au Canada (100 à 150 ms dans le lobby) : Free-for-all avec Air X,
   RP Mini et le navigateur, « fonctionnait très bien » ;
@@ -1115,6 +1115,10 @@ sur 10.20.0.158) : trois natifs, score confirmé par 3 ; un natif en `GTA2_TEST=
 diverge) : désaccord signalé au tick 2550, version de la majorité (2 sur 3) affichée ; un natif
 et un navigateur (build web reconstruit) : mêmes rapports dès le tick 150, partie synchronisée ;
 fin de match dans « Recent matches ».
+
+**Noms (10 novembre)** : `gta2-mp` s'appelle maintenant **`gta2-online`** (serveurs `ws://` et
+`wss://`, lanceur « GTA 2 Online.sh », l'ancien « GTA 2 Multiplayer.sh ») ; `gta2-lan` le réseau
+local ; `gta2` le solo. Les mentions plus haut de `gta2-online` désignaient `gta2-mp` à l'époque.
 
 **gta2-lan : le réseau local sans serveur (10 novembre)** : un troisième binaire (`gta2-lan`, cible
 CMake avec `GTA2_NET_LAN`, 2,2 Mo, sans mbedTLS ni code serveur). `net/lan_transport.*` :

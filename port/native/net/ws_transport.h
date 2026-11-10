@@ -3,7 +3,7 @@
 // ws:// or wss:// (TLS, tls_conn.h). A password-protected server is joined with its password
 // (POST /login) or an invite code (/?invite=...), which give the session cookie the relay
 // asks for, as the browser gets it on the login page.
-// Multiplayer build only (gta2-mp).
+// Multiplayer build only (gta2-online).
 #pragma once
 
 #include <deque>

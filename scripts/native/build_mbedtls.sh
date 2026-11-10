@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# build_mbedtls.sh — mbedTLS (static) for gta2-mp's wss:// (port/native/net/tls_conn.cpp).
+# build_mbedtls.sh — mbedTLS (static) for gta2-online's wss:// (port/native/net/tls_conn.cpp).
 #
-# The consoles' OpenSSL differ (3 on ROCKNIX, 1.1 on AmberELEC...), so gta2-mp carries its TLS
+# The consoles' OpenSSL differ (3 on ROCKNIX, 1.1 on AmberELEC...), so gta2-online carries its TLS
 # inside. The release archive is downloaded once into downloads/ (never committed), checked
 # against the sha256 published with the release, and built into <prefix> with clang, apart
 # from the game's sources (their mandatory flags are checked in compile_commands.json).
@@ -19,7 +19,7 @@ TYPE="${2:-Release}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ARCHIVE="$ROOT/downloads/mbedtls-$VERSION.tar.bz2"
 # MBEDTLS_PLATFORM_ZEROIZE_ALT: built against glibc >= 2.25, mbedTLS would call explicit_bzero,
-# and gta2-mp would need GLIBC 2.25 where the game needs 2.17: tls_conn.cpp has the function.
+# and gta2-online would need GLIBC 2.25 where the game needs 2.17: tls_conn.cpp has the function.
 FLAGS="-ffunction-sections -fdata-sections -DMBEDTLS_PLATFORM_ZEROIZE_ALT"
 STAMP="$PREFIX/.mbedtls-$VERSION-$TYPE-$(echo "$FLAGS" | sha1sum | cut -c1-8)"
 

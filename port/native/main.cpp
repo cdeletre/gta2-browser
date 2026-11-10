@@ -67,7 +67,7 @@ extern "C" void Gta2Native_AudioShutdown();
 extern "C" int gta2_port_set_view_width(int width);   // port/render/vid_web.cpp
 extern "C" int gta2_port_set_view_height(int height); // port/render/vid_web.cpp (native only)
 #if defined(GTA2_NATIVE_NET)
-extern "C" int Gta2Net_PreGame(char* cmd, int size, const char* confDir); // net/net_main.cpp (gta2-mp only)
+extern "C" int Gta2Net_PreGame(char* cmd, int size, const char* confDir); // net/net_main.cpp (gta2-online only)
 extern "C" void Gta2Net_AfterMatch(char** argv);
 extern "C" bool Gta2Net_EndRequested();
 #if !defined(GTA2_NATIVE_HEADLESS)
@@ -237,7 +237,7 @@ int main(int argc, char** argv)
     }
     strncpy(cmd, args.c_str(), sizeof(cmd) - 1);
 #if defined(GTA2_NATIVE_NET)
-    // gta2-mp: the lobby first; the game then starts as a network game (-N), as in the browser
+    // gta2-online: the lobby first; the game then starts as a network game (-N), as in the browser
     if (const int lobby = Gta2Net_PreGame(cmd, sizeof(cmd), confDir.c_str()))
     {
         Gta2Native_AudioShutdown();
@@ -437,7 +437,7 @@ int main(int argc, char** argv)
 #if defined(GTA2_NATIVE_NET)
     if (gameEnded)
     {
-        Gta2Net_AfterMatch(argv); // gta2-mp: back to the lobby (does not return when it restarts)
+        Gta2Net_AfterMatch(argv); // gta2-online: back to the lobby (does not return when it restarts)
     }
 #endif
     (void)gameEnded;

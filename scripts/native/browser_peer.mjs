@@ -1,6 +1,6 @@
 // A browser player for native multiplayer tests (A3): headless Chromium (Playwright) joins a
 // co-op room on the game server (server/server.mjs) as a guest, plays with random key
-// presses, and prints the page's co-op log, so that a native gta2-mp host and a browser
+// presses, and prints the page's co-op log, so that a native gta2-online host and a browser
 // can be checked against each other (the same sync checksums every 90 ticks).
 //
 //   node scripts/native/browser_peer.mjs <server url> <invite code> <ROOM> <seconds> [name]

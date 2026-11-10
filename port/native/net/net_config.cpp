@@ -14,7 +14,7 @@
 //
 // An older file (server = <url>, password, invite, ca_file, tls_fingerprint in [net]) reads
 // as one server; it is written in this format next time.
-// Multiplayer build only (gta2-mp).
+// Multiplayer build only (gta2-online).
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -341,7 +341,7 @@ void SaveNetConfig(const NetConfig& c)
     const ServerEntry& sel = c.servers[static_cast<size_t>(c.selected)];
     if (!sel.fromEnv)
         chosen = sel.name;
-    out << "# GTA2 multiplayer (gta2-mp): the names and rooms the lobby offers (comma-separated;\n"
+    out << "# GTA2 multiplayer (gta2-online): the names and rooms the lobby offers (comma-separated;\n"
            "# the browser's lobby can join the same rooms by name), then the game servers.\n"
            "[net]\n"
         << "# the server connected last (its name, from the [server] sections below)\n"

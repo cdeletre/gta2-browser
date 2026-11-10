@@ -1,6 +1,6 @@
 // A small JSON value for the co-op lobby messages (web/net.js sends JSON text over every
 // transport). Objects keep their keys in insertion order; numbers are doubles, as in
-// JavaScript. Multiplayer build only (gta2-mp).
+// JavaScript. Multiplayer build only (gta2-online).
 #pragma once
 
 #include <memory>

@@ -2,7 +2,7 @@
 // sets up the core's network session for the lobby's match, connects the core's game
 // messages to the lobby (gta2_js_net_send / gta2_port_net_receive), and while the match
 // runs shares a checksum of the game every 90 ticks and compares it with the others'.
-// Multiplayer build only (gta2-mp).
+// Multiplayer build only (gta2-online).
 #include "coop_native.h"
 
 #include <stdint.h>

@@ -153,7 +153,7 @@ if(NOT GTA2_HEADLESS)
   find_library(GLESV2_LIBRARY NAMES GLESv2 REQUIRED)
 endif()
 
-# One game binary: the solo gta2, or gta2-mp with the network code (port/native/net).
+# One game binary: the solo gta2, or gta2-online with the network code (port/native/net).
 function(gta2_add_game target)
   add_executable(${target} ${GTA2_PORT_SHARED} ${GTA2_NATIVE_SOURCES} ${ARGN})
   target_compile_options(${target} PRIVATE ${GTA2_COMMON_FLAGS} ${GTA2_OPT} ${GTA2_SAN})
@@ -178,11 +178,11 @@ endfunction()
 gta2_add_game(gta2)
 
 # ---------------------------------------------------------------------------
-# Multiplayer (branch native-multiplayer): a separate binary, gta2-mp, so that the solo
+# Multiplayer (branch native-multiplayer): a separate binary, gta2-online, so that the solo
 # gta2 carries no network code. port/native/net: the lobby (web/net.js's CoopLobby) and
 # the transports; gta2_net has no engine code, so gta2-net-test checks it on its own.
 # ---------------------------------------------------------------------------
-option(GTA2_MULTIPLAYER "Build gta2-mp and gta2-net-test" ON)
+option(GTA2_MULTIPLAYER "Build gta2-online and gta2-net-test" ON)
 if(GTA2_MULTIPLAYER)
   add_library(gta2_net STATIC
     "${NATIVE}/net/json.cpp"
@@ -206,9 +206,9 @@ if(GTA2_MULTIPLAYER)
   target_compile_definitions(gta2_net PRIVATE MBEDTLS_PLATFORM_ZEROIZE_ALT)
   target_link_libraries(gta2_net PUBLIC ${GTA2_MBEDTLS_LIBRARIES})
 
-  gta2_add_game(gta2-mp "${NATIVE}/net/coop_native.cpp" "${NATIVE}/net/net_main.cpp" "${NATIVE}/net/lobby_screen.cpp" "${NATIVE}/net/hud_net.cpp")
-  target_compile_definitions(gta2-mp PRIVATE GTA2_NATIVE_NET=1)
-  target_link_libraries(gta2-mp PRIVATE gta2_net)
+  gta2_add_game(gta2-online "${NATIVE}/net/coop_native.cpp" "${NATIVE}/net/net_main.cpp" "${NATIVE}/net/lobby_screen.cpp" "${NATIVE}/net/hud_net.cpp")
+  target_compile_definitions(gta2-online PRIVATE GTA2_NATIVE_NET=1)
+  target_link_libraries(gta2-online PRIVATE gta2_net)
 
   # gta2-lan: the local network with no server (net/lan_transport.cpp), its own launcher
   gta2_add_game(gta2-lan "${NATIVE}/net/coop_native.cpp" "${NATIVE}/net/net_main.cpp" "${NATIVE}/net/lobby_screen.cpp" "${NATIVE}/net/hud_net.cpp")

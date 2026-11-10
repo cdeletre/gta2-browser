@@ -5,7 +5,7 @@
 //     while the game waits for them, and types into the game as a keyboard would, a key down
 //     then up per character (Frontend::HandlePlayerNameTyping_4B2F60 reads the DirectInput key
 //     states and wants a release between two presses); the text shown is the game's own;
-//   - the port's own fields (gta2-mp's lobby: name, room), through Gta2Native_OskStart.
+//   - the port's own fields (gta2-online's lobby: name, room), through Gta2Native_OskStart.
 // A QWERTY layout:
 //     1 2 3 4 5 6 7 8 9 0 - = [Back]
 //      Q W E R T Y U I O P

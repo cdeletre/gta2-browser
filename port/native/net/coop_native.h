@@ -1,4 +1,4 @@
-// See coop_native.cpp. Multiplayer build only (gta2-mp).
+// See coop_native.cpp. Multiplayer build only (gta2-online).
 #pragma once
 
 #include "lobby.h"

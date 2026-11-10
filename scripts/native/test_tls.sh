@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# test_tls.sh — gta2-mp's ws:// and wss:// against scripts/native/test_relay.py, in the build
+# test_tls.sh — gta2-online's ws:// and wss:// against scripts/native/test_relay.py, in the build
 # container: test certificates (an authority, a server certificate for localhost and 127.0.0.1,
 # one for another name, an expired one, one not valid yet, a self-signed one, another authority),
 # one relay per case, then gta2-net-test's TLS checks (GTA2_NET_TEST_TLS).

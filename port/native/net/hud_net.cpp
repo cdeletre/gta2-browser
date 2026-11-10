@@ -1,4 +1,4 @@
-// gta2-mp on screen during a match, drawn over the game in the Options screen's style
+// gta2-online on screen during a match, drawn over the game in the Options screen's style
 // (render/gles_renderer.cpp's overlay, through platform/options_native.cpp's hooks):
 //   - the scoreboard while Select is held (Tab on a keyboard), the browser's columns and
 //     order (web/shell.js coopView): player, kills, deaths, points; free-for-all by kills,
@@ -12,7 +12,7 @@
 //     edge in its direction with the distance in blocks (Options: Waypoints on/off hides the
 //     other players');
 //   - the final standings when the match ends, before the lobby.
-// Multiplayer build with a window only (gta2-mp).
+// Multiplayer build with a window only (gta2-online).
 #if !defined(GTA2_NATIVE_HEADLESS)
 #include <stdint.h>
 #include <stdio.h>

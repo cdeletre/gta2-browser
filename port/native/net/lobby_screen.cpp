@@ -1,4 +1,4 @@
-// gta2-mp's lobby screen, for the controller, before the game starts: the browser's co-op
+// gta2-online's lobby screen, for the controller, before the game starts: the browser's co-op
 // lobby (web/shell.js wireCoopLobby) in the Options screen's style (overlay font, the same
 // inputs: up/down choose a line, left/right change it, A acts, B goes back).
 //
@@ -16,7 +16,7 @@
 // gta2-lan (GTA2_NET_LAN): instead of the servers, the games heard on the local network (A
 // joins one), Host a game, the room's PIN (A edits it as a padlock: left/right the digit,
 // up/down its value, A done) and Join by address; the room itself is the same screen.
-// Multiplayer builds with a window only (gta2-mp, gta2-lan).
+// Multiplayer builds with a window only (gta2-online, gta2-lan).
 #if !defined(GTA2_NATIVE_HEADLESS)
 #include <stdint.h>
 #include <stdio.h>

@@ -131,7 +131,7 @@ server {
 ```
 
 Only nginx needs to reach port 8790: close it to everything else. Native players
-(`gta2-mp`) use `server = wss://gta2.example.com` in `conf/net.ini`; a Let's Encrypt
+(`gta2-online`) use `server = wss://gta2.example.com` in `conf/net.ini`; a Let's Encrypt
 certificate needs nothing more on the consoles.
 
 ## Running it on this computer
@@ -167,7 +167,7 @@ get the JSON (`/games` without `Accept: text/html`, or `/games.json`):
   30 s: the players are on the results). Rooms in play come first.
 - `players`: those of the host's roster still connected. A host alone in its room has sent
   nothing yet, so its name is empty until someone joins.
-- **The score.** Every 150 ticks (5 s), each player of the match (`gta2-mp`, or a browser on
+- **The score.** Every 150 ticks (5 s), each player of the match (`gta2-online`, or a browser on
   this server) sends the standings at that tick to `@server`, which is no one in the room, so
   the relay passes it on to no one. Lockstep makes every report of one tick the same, so they
   are compared: `score` is the version most players sent for the latest tick, `confirmed` once

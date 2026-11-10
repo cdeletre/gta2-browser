@@ -185,7 +185,7 @@ CASE_ALIASES="$ROOT/build/native/case-aliases"
 python3 scripts/native/case_aliases.py "$CASE_ALIASES" \
   port/native/compat port/core/compat "$WORK/Source" "$WORK" port
 
-# TLS of gta2-mp (wss://): mbedTLS, built once apart from the game (scripts/native/build_mbedtls.sh).
+# TLS of gta2-online (wss://): mbedTLS, built once apart from the game (scripts/native/build_mbedtls.sh).
 MBEDTLS_PREFIX="$ROOT/build/native/third_party/mbedtls"
 scripts/native/build_mbedtls.sh "$MBEDTLS_PREFIX" Release
 
@@ -255,8 +255,8 @@ echo "   SDL : ${sdl_dep:-non lié dynamiquement (attendu : libSDL2-2.0.so.0)}"
 if [[ "$PRESET" == "release" && $SANITIZE -eq 0 ]]; then
   DIST="$BUILD_DIR/dist"
   mkdir -p "$DIST"
-  # gta2 (solo) and, when built, gta2-mp (game servers) and gta2-lan (local network), each with its launch script
-  for target in gta2 gta2-mp gta2-lan; do
+  # gta2 (solo) and, when built, gta2-online (game servers) and gta2-lan (local network), each with its launch script
+  for target in gta2 gta2-online gta2-lan; do
     [[ -x "$BUILD_DIR/$target" ]] || continue
     NAME="$target.$(uname -m)"
     objcopy --only-keep-debug "$BUILD_DIR/$target" "$DIST/$NAME.debug"
@@ -264,7 +264,7 @@ if [[ "$PRESET" == "release" && $SANITIZE -eq 0 ]]; then
     needed=$(objdump -p "$DIST/$NAME" | awk '/NEEDED/ {print $2}' | tr '\n' ' ')
     glibc=$(objdump -T "$DIST/$NAME" 2>/dev/null | grep -o 'GLIBC_[0-9.]*' | sort -Vu | tail -1 || true)
     echo "   dist/$NAME : $(du -h "$DIST/$NAME" | cut -f1), ${glibc:-GLIBC ?}, bibliothèques : $needed"
-    # gta2-mp carries mbedTLS: it must not ask for a newer glibc than the game (explicit_bzero...)
+    # gta2-online carries mbedTLS: it must not ask for a newer glibc than the game (explicit_bzero...)
     if [[ -n "$glibc_max" && -n "$glibc" && "$(printf '%s\n%s\n' "$glibc" "$glibc_max" | sort -V | tail -1)" != "$glibc_max" ]]; then
       die "dist/$NAME demande $glibc, plus que gta2 ($glibc_max)"
     fi

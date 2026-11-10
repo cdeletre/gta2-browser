@@ -6,7 +6,7 @@
 // share a room through the server's relay.
 //
 // Single-threaded: Poll() is called once per main-loop iteration and runs the callbacks.
-// Multiplayer build only (gta2-mp).
+// Multiplayer build only (gta2-online).
 #pragma once
 
 #include <stdint.h>

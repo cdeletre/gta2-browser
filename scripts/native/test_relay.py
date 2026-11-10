@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""A stand-in for server/server.mjs's /relay and login, for gta2-mp's tests in the build
+"""A stand-in for server/server.mjs's /relay and login, for gta2-online's tests in the build
 container (its Node is too old for server.mjs): the same relay rules (join, peers, joined,
 left, msg / ping / pong to one or everyone else, binary [id length, id, payload]), the same
 login (POST /login password=..., or /?invite=<code>, giving the gta2_session cookie), in
-plain TCP or in TLS (--cert, --key), to try gta2-mp's wss://. Python 3.8, no packages.
+plain TCP or in TLS (--cert, --key), to try gta2-online's wss://. Python 3.8, no packages.
 
   test_relay.py --port 8443 [--cert server.pem --key server.key] [--password pw]
 """

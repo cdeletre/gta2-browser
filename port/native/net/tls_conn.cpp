@@ -87,7 +87,7 @@ Shared& Common(std::string* error)
         mbedtls_entropy_init(&s.entropy);
         mbedtls_ctr_drbg_init(&s.drbg);
         mbedtls_x509_crt_init(&s.authorities);
-        static const char kSeed[] = "gta2-mp";
+        static const char kSeed[] = "gta2-online";
         const int rc = mbedtls_ctr_drbg_seed(&s.drbg, mbedtls_entropy_func, &s.entropy,
                                              reinterpret_cast<const unsigned char*>(kSeed), sizeof(kSeed) - 1);
         if (psa != PSA_SUCCESS)

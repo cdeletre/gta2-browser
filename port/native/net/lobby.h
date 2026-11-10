@@ -7,7 +7,7 @@
 // The players and the settings are kept as JSON, as the browser keeps them, so that a
 // roster from a browser host comes back unchanged (fields this port does not know about
 // are kept).
-// Multiplayer build only (gta2-mp).
+// Multiplayer build only (gta2-online).
 #pragma once
 
 #include <functional>

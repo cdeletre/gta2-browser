@@ -1,4 +1,4 @@
-// gta2-mp before and during the game: joins a room on the game server, runs the lobby
+// gta2-online before and during the game: joins a room on the game server, runs the lobby
 // until the host starts the match and everyone is loaded, then lets main.cpp start the game
 // as a network game (-N), as web/shell.js does before gta2_start; while the match runs,
 // polls the transport and the sync checks once per main-loop iteration.
@@ -17,7 +17,7 @@
 //   GTA2_NET_CA_FILE=pem, GTA2_NET_TLS_FINGERPRINT=sha256:...   wss://: as ca_file, tls_fingerprint
 //   GTA2_NET_PASSWORD=..., GTA2_NET_INVITE=<code>   its password, or an invite code
 //   GTA2_NET_ROOM=name, GTA2_NET_NAME=name
-// Multiplayer build only (gta2-mp).
+// Multiplayer build only (gta2-online).
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

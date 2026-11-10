@@ -1,10 +1,10 @@
 // A connection to the game server: TCP, plain (ws://, http://) or in TLS (wss://, https://),
-// with mbedTLS built into gta2-mp (scripts/native/build_mbedtls.sh): the consoles' own
+// with mbedTLS built into gta2-online (scripts/native/build_mbedtls.sh): the consoles' own
 // OpenSSL differ from one system to the next.
 // The server's certificate is always checked: against the authorities of the console (its
 // usual bundle files, or SSL_CERT_FILE), or of ca_file, and for the server's name; or, for a
 // server with a certificate of its own making, it is exactly the one whose sha256 is given.
-// Multiplayer build only (gta2-mp).
+// Multiplayer build only (gta2-online).
 #pragma once
 
 #include <stddef.h>

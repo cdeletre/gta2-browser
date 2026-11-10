@@ -9,7 +9,7 @@
 // tests the native input mapping end to end. The test aids used (gta2_dev_give_weapon, gta2_dev_spawn_car)
 // are the web developer probe's, and use the game's own functions.
 // GTA2_SOAK_AIDS=0 leaves them out (keys only): they change this player's game alone, so a
-// co-op match (gta2-mp, lockstep) would drift apart at once.
+// co-op match (gta2-online, lockstep) would drift apart at once.
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
