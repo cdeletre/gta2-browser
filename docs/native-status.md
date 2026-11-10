@@ -1066,8 +1066,25 @@ restants. CPU du jeu (3 relevés d'une minute) : Air X 39 %, RP Mini 16 %, R36S 
 ordre que la nuit en `ws://` à 3 joueurs immobiles (26-42 %, 16 %, 33-52 %) : pas de coût du
 TLS visible. Mémoire 86 Mo (Air X, RP Mini) et 165 Mo (R36S, GPU compris), comme en `ws://`.
 
-Pas encore vérifié : vrai certificat (serveur public derrière nginx, étape 7), session longue
-en `wss://`.
+**Serveur public (10 novembre)** : `game-server-01` (LXC, `scripts/deploy_lxc.sh`, service
+systemd), derrière le nginx du propriétaire (certificat Let's Encrypt) : `wss://gta2.example.org`.
+Vu :
+- depuis Docker, deux `gta2-mp` sans tête, 10 min, seulement les autorités du système (pas de
+  `ca_file`) : TLS 1.3, contrôles identiques jusqu'au tick 16 290, 30,3 ticks/s, 21 ms ;
+- propriétaire, Mac sur un VPN au Canada (100 à 150 ms dans le lobby) : Free-for-all avec Air X,
+  RP Mini et le navigateur, « fonctionnait très bien » ;
+- six joueurs en Free-for-all (Air X hôte, R36S, TSP S, CubeXX, RP Mini, navigateur), environ
+  7 min : TLS 1.3 (ChaCha20-Poly1305) sur les cinq consoles, délai d'entrée 2 ticks, contrôles
+  identiques jusqu'au tick 12 510, aucune divergence ; 28,5 ticks/s la première minute (attente
+  du chargement de la R36S), puis 30,0 à 30,3. Départs un par un à la fin : les restants
+  continuent, contrôles bons après chaque départ. CPU du jeu (moyenne/max) : Air X 29/33 %,
+  RP Mini 12/13 %, R36S 37/42 % (67 °C), TSP S 32/36 %, CubeXX 31/37 % tant que le CPU est à
+  1,8 GHz. Sur la CubeXX, muOS est passé en `powersave` (288 MHz) au milieu de la partie,
+  probablement son économie d'énergie après un moment sans appui (non vérifié) : 77 à 114 %
+  d'un cœur, mais toujours 30 ticks/s. Mémoire : 84 à 90 Mo (RP Mini, Air X, TSP S),
+  166-176 Mo (R36S, CubeXX, GPU compris).
+
+Pas encore vérifié : session longue (une heure ou plus) en `wss://` sur le serveur public.
 
 Reste : A5 (consoles), A7 (scores, chat, points de passage), puis D1-D4 (transport TCP local,
 découverte UDP, consoles, paquet).
