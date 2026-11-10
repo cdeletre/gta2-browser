@@ -8,7 +8,8 @@
 //   GTA2_NET_HOST=1                  this player creates the room and starts the match...
 //   GTA2_NET_PLAYERS=n               ...once n players are in it (default 2)
 //   GTA2_NET_MODE=roam|wars|ffa, GTA2_NET_DISTRICT=downtown|residential|industrial,
-//   GTA2_NET_FRIENDLY_FIRE=1, GTA2_NET_MINUTES=m, GTA2_NET_KILLS=n   the host's settings
+//   GTA2_NET_FRIENDLY_FIRE=1, GTA2_NET_MINUTES=m, GTA2_NET_KILLS=n, GTA2_NET_POINTS=n
+//                                    the host's settings (points: Gang Wars' target)
 //   GTA2_NET_CREW=name, GTA2_NET_SIDE=gang code   this player's Gang Wars crew and gang
 //   GTA2_NET_WAIT=s                  how long to wait in the lobby (default 300)
 // Both read conf/net.ini, which these override:
@@ -326,6 +327,7 @@ int AutoLobby(const NetConfig& config)
         s.Set("friendlyFire", atoi(Env("GTA2_NET_FRIENDLY_FIRE", "0").c_str()) != 0);
         s.Set("minutes", atoi(Env("GTA2_NET_MINUTES", "0").c_str()));
         s.Set("killLimit", atoi(Env("GTA2_NET_KILLS", "10").c_str()));
+        s.Set("pointsTarget", atoi(Env("GTA2_NET_POINTS", "0").c_str()));
         gLobby->SetSettings(s);
     }
     const std::string crew = Env("GTA2_NET_CREW", "");
@@ -428,6 +430,12 @@ extern "C" int Gta2Net_PreGame(char* cmd, int size, const char* confDir)
 extern "C" bool Gta2Net_InMatch()
 {
     return gInMatch && gLobby != nullptr;
+}
+
+// main.cpp: the match should end now (a Gang Wars crew reached the points target, 6 s ago).
+extern "C" bool Gta2Net_EndRequested()
+{
+    return gInMatch && CoopEndRequested();
 }
 
 // Once per main-loop iteration.

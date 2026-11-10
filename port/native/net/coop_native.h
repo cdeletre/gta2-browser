@@ -15,6 +15,10 @@ void CoopStatus(int* lastSyncTick, bool* drifted);
 // The match as the lobby started it (players, mode, crews), null before.
 const Json& CoopMatch();
 int CoopMySlot();
+// Gang Wars with a points target: the crew that reached it first ("" until one does).
+const std::string& CoopWinner();
+// True once the match should end (6 s after a Gang Wars win, as the browser ends it).
+bool CoopEndRequested();
 // A chat line for the screen (hud_net.cpp), from a player or this one.
 void CoopChatLine(int slot, const std::string& text);
 // A player's waypoint (blocks; set false: cleared), for the screen (hud_net.cpp).

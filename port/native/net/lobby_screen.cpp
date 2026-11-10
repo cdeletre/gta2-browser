@@ -84,6 +84,19 @@ const char* const kDistricts[] = {"downtown", "residential", "industrial"};
 const char* const kDistrictNames[] = {"Downtown", "Residential", "Industrial"};
 const int kMinutes[] = {0, 5, 10, 15, 20, 30, 45, 60};
 const int kKills[] = {5, 10, 15, 20, 30, 50};
+const int kPoints[] = {0, 10000, 25000, 50000, 100000, 250000, 500000, 1000000}; // Gang Wars' target
+
+std::string MoneyText(int v)
+{
+    std::string d = std::to_string(v), out;
+    for (size_t i = 0; i < d.size(); ++i)
+    {
+        if (i && (d.size() - i) % 3 == 0)
+            out += ',';
+        out += d[i];
+    }
+    return "$" + out;
+}
 
 template <typename T, size_t N>
 int IndexOf(const T (&list)[N], const T& v)
@@ -298,6 +311,14 @@ void BuildItems()
     }
     if (mode == "wars")
     {
+        // the points target (a browser host's own value shows as it is; left/right go from the nearest)
+        const int points = s["pointsTarget"].Int(0);
+        int pi = 0;
+        for (int i = 0; i < 8; ++i)
+            pi = kPoints[i] <= points ? i : pi;
+        it.push_back({"Points target", [points] { return points > 0 ? MoneyText(points) : std::string("None"); },
+                      hostOnly([pi](int d) { SetSetting("pointsTarget", kPoints[Wrap(pi + d, 8)]); }),
+                      nullptr});
         const Json* me = Me();
         const std::string crew = me ? (*me)["crew"].Str() : "";
         std::vector<std::string> crews = {""};

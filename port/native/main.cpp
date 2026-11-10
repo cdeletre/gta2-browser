@@ -69,6 +69,7 @@ extern "C" int gta2_port_set_view_height(int height); // port/render/vid_web.cpp
 #if defined(GTA2_NATIVE_NET)
 extern "C" int Gta2Net_PreGame(char* cmd, int size, const char* confDir); // net/net_main.cpp (gta2-mp only)
 extern "C" void Gta2Net_AfterMatch(char** argv);
+extern "C" bool Gta2Net_EndRequested();
 #if !defined(GTA2_NATIVE_HEADLESS)
 extern "C" void Gta2Net_MatchOverScreen(); // net/hud_net.cpp
 #endif
@@ -365,6 +366,15 @@ int main(int argc, char** argv)
                         end - loopStart, tEvents - loopStart, tAudio - tEvents, tGame - tAudio, end - tGame);
             }
         }
+#if defined(GTA2_NATIVE_NET)
+        if (Gta2Net_EndRequested())
+        {
+            // a Gang Wars crew reached the points target: the match ends, as the browser ends it
+            fprintf(stderr, "gta2: game ended (Gang Wars won)\n");
+            gameEnded = true;
+            break;
+        }
+#endif
         if (slice != -1)
         {
             code = slice;

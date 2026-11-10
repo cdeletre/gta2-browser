@@ -27,6 +27,7 @@ void gta2_port_net_receive(int from, const uint8_t* data, int len);
 void gta2_port_net_peer_left(int idx);
 const int32_t* gta2_dev_sync_history();
 const int32_t* gta2_port_net_debug();
+const int32_t* gta2_port_coop_players();
 const int32_t* gta2_dev_sync_dump(int at);
 const int32_t* gta2_dev_sync_peds();
 }
@@ -53,6 +54,8 @@ int gHeldFrame = -1;
 double gHeldSince = 0;
 uint32_t gLastWaiting = 0;
 double gLastWatch = 0;
+std::string gWinner;     // Gang Wars: the crew that reached the points target
+double gWonAt = 0;
 double gMatchStart = 0;
 int32_t gLastQuit = 0;
 uint8_t gLastDropped[6];
@@ -132,6 +135,8 @@ int CrewOf(const Json& match, const std::string& id)
     return -1;
 }
 } // namespace
+
+void CheckPointsTarget();
 
 // setupCoop()
 void SetupCoop(Lobby* lobby, const Json& match)
@@ -273,6 +278,7 @@ void WatchCoop(double nowMs)
             fprintf(stderr, "gta2: co-op: ped %d id %d at (%d, %d) sprite %d type %d\n", i, o[0], o[1], o[2], o[3], o[4]);
         }
     }
+    CheckPointsTarget();
     // who are we waiting for?
     const int32_t* d = gta2_port_net_debug();
     if (d[4] != gHeldFrame)
@@ -337,6 +343,52 @@ void CoopWaypointLine(int slot, bool set, double x, double y)
 {
     if (HudWaypoint)
         HudWaypoint(slot, set, x, y);
+}
+
+const std::string& CoopWinner()
+{
+    return gWinner;
+}
+
+bool CoopEndRequested()
+{
+    return !gWinner.empty() && NowMs() - gWonAt > 6000;
+}
+
+// Gang Wars with a points target (web/shell.js watchCoop): the crews' points (their members'
+// cash earned, as gta2_port_coop_players has it); the leading crew wins once it has the target.
+void CheckPointsTarget()
+{
+    if (!gWinner.empty() || gMatch["mode"].Str() != "wars")
+        return;
+    const int target = gMatch["pointsTarget"].Int(0);
+    if (target <= 0)
+        return;
+    const int32_t* v = gta2_port_coop_players();
+    const Json& crews = gMatch["crews"];
+    const Json& players = gMatch["players"];
+    int bestPoints = 0;
+    std::string best;
+    for (const Json& crew : crews.Items())
+    {
+        int points = 0;
+        for (const Json& m : crew["members"].Items())
+            for (size_t s = 0; s < players.size() && s < 6; ++s)
+                if (players[s]["id"].Str() == m.Str() && v[s * 12])
+                    points += v[s * 12 + 11];
+        if (best.empty() || points > bestPoints)
+        {
+            best = crew["name"].Str();
+            bestPoints = points;
+        }
+    }
+    if (!best.empty() && bestPoints >= target)
+    {
+        gWinner = best;
+        gWonAt = NowMs();
+        fprintf(stderr, "gta2: co-op: %s%s win the Gang War with %d points (target %d)\n", Stamp().c_str(), best.c_str(),
+                bestPoints, target);
+    }
 }
 
 // The latest checksum this player shared and whether a drift was seen (status line, tests).

@@ -982,6 +982,14 @@ Vu dans le conteneur (captures) : saisie et validation du nom et de la salle dan
 Pas encore vérifié : l'ouverture automatique dans le menu solo (les appuis scriptés n'y
 arrivent pas de façon fiable) ; à tester sur console.
 
+**Gang Wars, objectif de points (9 novembre)** : ligne « Points target » de l'hôte dans le
+lobby (aucun, 10 000 $ à 1 000 000 $ ; la valeur d'un hôte navigateur s'affiche telle quelle).
+Comme `watchCoop` du navigateur : toutes les 250 ms, les points de chaque équipe (argent gagné
+de ses membres) ; l'équipe en tête qui a l'objectif gagne, une bannière l'annonce, et 6 s plus
+tard le match se termine (classement final « … win the Gang War », puis le lobby). Vu dans le
+conteneur (`GTA2_NET_POINTS=100`, soak) : victoire annoncée à 102 points, fin du match 6 s
+après.
+
 Reste : A5 (consoles), A6 (`wss://` si le serveur public est en HTTPS), A7 (scores, chat,
 points de passage), puis D1-D4 (transport TCP local, découverte UDP, consoles, paquet).
 

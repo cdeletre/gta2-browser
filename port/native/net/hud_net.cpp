@@ -214,6 +214,8 @@ void DrawScoreboard(int dw, int dh, bool final)
     const float x0 = (dw - width) / 2;
     float y = (dh - lines * lineH) / 2;
     Gta2Native_OverlayRect(x0 - 2 * cell, y - lineH, width + 4 * cell, (lines + 1) * lineH, 0xd8000000);
+    if (!CoopWinner().empty())
+        title = CoopWinner() + " win the Gang War";
     const std::string head = final ? "Match over: " + title : title;
     Gta2Native_OverlayText(x0, y, px, kYellow, head.substr(0, kCols).c_str());
     y += 1.5f * lineH;
@@ -505,6 +507,16 @@ extern "C" void Gta2Net_HudDraw(int dw, int dh)
     }
     DrawWaypoints(dw, dh);
     DrawChat(dw, dh);
+    if (!CoopWinner().empty())
+    {
+        // the browser's banner: who won, until the match ends
+        const std::string t = CoopWinner() + " win the Gang War!";
+        const float px = PixelSize(dw, dh, 30, 14);
+        const float w = static_cast<float>(t.size()) * 6 * px;
+        const float x = (dw - w) / 2, y = dh * 0.18f;
+        Gta2Native_OverlayRect(x - 6 * px, y - 4 * px, w + 12 * px, 15 * px, 0xd0000000);
+        Gta2Native_OverlayTextExact(x, y, px, kYellow, t.c_str());
+    }
     if (gScoreboard)
         DrawScoreboard(dw, dh, false);
 }
