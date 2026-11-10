@@ -778,7 +778,8 @@ void Gta2Native_InputEvent(const SDL_Event& e)
                     const SDL_Scancode sc = e.key.keysym.scancode;
                     const int action = sc == SDL_SCANCODE_UP ? 0 : sc == SDL_SCANCODE_DOWN ? 1 : sc == SDL_SCANCODE_LEFT ? 2
                                      : sc == SDL_SCANCODE_RIGHT ? 3 : sc == SDL_SCANCODE_RETURN || sc == SDL_SCANCODE_KP_ENTER ? 4
-                                     : sc == SDL_SCANCODE_ESCAPE || sc == SDL_SCANCODE_BACKSPACE ? 5 : -1;
+                                     : sc == SDL_SCANCODE_ESCAPE || sc == SDL_SCANCODE_BACKSPACE ? 5
+                                     : sc == SDL_SCANCODE_DELETE ? 6 : -1;
                     if (action >= 0)
                     {
                         Gta2Native_OptionsInput(action);
@@ -904,7 +905,7 @@ void Gta2Native_InputFrame()
             int input, action;
         } kMap[] = {{kPadUp, 0},   {kStickUp, 0},   {kPadDown, 1},  {kStickDown, 1},  {kPadLeft, 2},
                     {kStickLeft, 2}, {kPadRight, 3}, {kStickRight, 3}, {kA, 4},       {kB, 5},
-                    {kStart, 5}};
+                    {kStart, 5},     {kXBtn, 6}}; // 6: gta2-mp's lobby deletes a list entry
         for (const auto& m : kMap)
         {
             if (gPressed[m.input] && !gOptionsHeld[m.input])

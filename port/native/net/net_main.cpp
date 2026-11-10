@@ -105,6 +105,16 @@ std::string RosterText(const Json& players)
 }
 } // namespace
 
+std::vector<std::string> DefaultNames()
+{
+    return SplitList(kDefaultNames);
+}
+
+std::vector<std::string> DefaultRooms()
+{
+    return SplitList(kDefaultRooms);
+}
+
 NetConfig LoadNetConfig(const std::string& confDir)
 {
     NetConfig c;

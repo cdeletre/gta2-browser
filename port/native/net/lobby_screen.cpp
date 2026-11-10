@@ -55,6 +55,7 @@ struct Item
     std::function<std::string()> value; // shown on the right ("" for none)
     std::function<void(int)> change;    // left/right (-1, +1); null: not changeable
     std::function<void()> act;          // A; null: A changes it forward
+    std::function<void()> remove;       // X; null: nothing to delete
 };
 
 struct Screen
@@ -72,6 +73,8 @@ struct Screen
     std::string refused;    // set while the transport polls; acted on after it (Leave frees it)
     double joinedAt = 0;    // when this player entered the room
     bool otherHost = false; // host: someone else hosts this room too
+    bool nameDefault = false; // the Name line shows its "DEFAULT" entry
+    bool roomDefault = false; // the Room line shows its "DEFAULT" entry
 };
 Screen gS;
 
@@ -139,6 +142,8 @@ void Leave(const std::string& why, bool error)
 
 void Enter(bool host)
 {
+    gS.nameDefault = false;
+    gS.roomDefault = false;
     std::string error;
     Notice(host ? "Creating room " + gS.config->room + "..." : "Joining room " + gS.config->room + "...", false);
     if (!JoinRoom(*gS.config, gS.config->name, gS.config->room, host, &error))
@@ -171,6 +176,30 @@ void RememberIn(std::vector<std::string>& list, const std::string& value)
         list.insert(list.begin(), value);
 }
 
+// Left/right on a list line: its entries, then "DEFAULT" (onDefault), round again.
+void Cycle(std::vector<std::string>& list, std::string& current, bool& onDefault, int d)
+{
+    const int n = static_cast<int>(list.size());
+    auto pos = std::find(list.begin(), list.end(), current);
+    const int i = onDefault ? n : pos == list.end() ? 0 : static_cast<int>(pos - list.begin());
+    const int next = Wrap(i + d, n + 1);
+    onDefault = next == n;
+    if (!onDefault)
+        current = list[static_cast<size_t>(next)];
+}
+
+// X on a list line: the entry shown leaves the list (one at least stays), the next one shows.
+void Forget(std::vector<std::string>& list, std::string& current, bool onDefault)
+{
+    auto pos = std::find(list.begin(), list.end(), current);
+    if (onDefault || pos == list.end() || list.size() <= 1)
+        return;
+    const size_t i = static_cast<size_t>(pos - list.begin());
+    list.erase(pos);
+    current = list[std::min(i, list.size() - 1)];
+    SaveNetConfig(*gS.config);
+}
+
 // The lines of the current phase.
 void BuildItems()
 {
@@ -179,15 +208,21 @@ void BuildItems()
     NetConfig& c = *gS.config;
     if (gS.phase == kSetup)
     {
-        // left/right: the lists of conf/net.ini; A: the on-screen keyboard (any name; a room
-        // created by a browser has a code of its own, upper case as the browser makes it)
-        it.push_back({"Name", [&c] { return c.name; },
-                      [&c](int d) {
-                          auto pos = std::find(c.names.begin(), c.names.end(), c.name);
-                          const int i = pos == c.names.end() ? 0 : static_cast<int>(pos - c.names.begin());
-                          c.name = c.names[Wrap(i + d, static_cast<int>(c.names.size()))];
-                      },
+        // left/right: the lists of conf/net.ini, then "DEFAULT"; A: the on-screen keyboard (any
+        // name; a room created by a browser has a code of its own, upper case as the browser
+        // makes it), or on "DEFAULT" the lists a new net.ini has; X: the entry leaves the list
+        it.push_back({"Name", [&c] { return gS.nameDefault ? std::string("DEFAULT") : c.name; },
+                      [&c](int d) { Cycle(c.names, c.name, gS.nameDefault, d); },
                       [&c] {
+                          if (gS.nameDefault)
+                          {
+                              c.names = DefaultNames();
+                              c.name = c.names[0];
+                              gS.nameDefault = false;
+                              SaveNetConfig(c);
+                              Notice("Names reset to the defaults.", false);
+                              return;
+                          }
                           Gta2Native_OskStart("Your name", c.name.c_str(), 16, [](bool ok, const char* text) {
                               if (ok && text[0])
                               {
@@ -196,14 +231,20 @@ void BuildItems()
                                   SaveNetConfig(*gS.config);
                               }
                           });
-                      }});
-        it.push_back({"Room", [&c] { return c.room; },
-                      [&c](int d) {
-                          auto pos = std::find(c.rooms.begin(), c.rooms.end(), c.room);
-                          const int i = pos == c.rooms.end() ? 0 : static_cast<int>(pos - c.rooms.begin());
-                          c.room = c.rooms[Wrap(i + d, static_cast<int>(c.rooms.size()))];
                       },
+                      [&c] { Forget(c.names, c.name, gS.nameDefault); }});
+        it.push_back({"Room", [&c] { return gS.roomDefault ? std::string("DEFAULT") : c.room; },
+                      [&c](int d) { Cycle(c.rooms, c.room, gS.roomDefault, d); },
                       [&c] {
+                          if (gS.roomDefault)
+                          {
+                              c.rooms = DefaultRooms();
+                              c.room = c.rooms[0];
+                              gS.roomDefault = false;
+                              SaveNetConfig(c);
+                              Notice("Rooms reset to the defaults.", false);
+                              return;
+                          }
                           Gta2Native_OskStart("Room (as the host shows it)", c.room.c_str(), 32, [](bool ok, const char* text) {
                               std::string room = text;
                               for (char& ch : room)
@@ -217,7 +258,8 @@ void BuildItems()
                                   SaveNetConfig(*gS.config);
                               }
                           });
-                      }});
+                      },
+                      [&c] { Forget(c.rooms, c.room, gS.roomDefault); }});
         it.push_back({"Create room", nullptr, nullptr, [] { Enter(true); }});
         it.push_back({"Join room", nullptr, nullptr, [] { Enter(false); }});
         it.push_back({"Quit", nullptr, nullptr, [] { gS.quit = true; }});
@@ -330,6 +372,10 @@ void Input(int action)
             if (gS.phase == kRoom)
                 Leave("", false);
             break;
+        case 6:
+            if (item.remove)
+                item.remove();
+            break;
         default: break;
     }
 }
@@ -439,7 +485,8 @@ void Draw(int dw, int dh)
     if (!gS.message.empty())
         Gta2Native_OverlayText(x0, bottom, px, gS.messageError ? kRed : kGrey, gS.message.substr(0, kCols).c_str());
     Gta2Native_OverlayText(x0, bottom + lineH, px, kGrey,
-                           gS.phase == kRoom ? "A: choose  Left/right: change  B: leave" : "A: choose/type  Left/right: change");
+                           gS.phase == kRoom ? "A: choose  Left/right: change  B: leave"
+                                              : "A: choose/type  Left/right: change  X: delete");
 }
 
 void Sleep5ms()
@@ -485,6 +532,8 @@ void ScriptedKeys()
             Gta2Native_OskInput(kOskAction[keys[next]]);
         else if (keys[next] < 6)
             Input(keys[next]);
+        else if (keys[next] == 7)
+            Input(6); // x: delete a list entry
         ++next;
     }
 }

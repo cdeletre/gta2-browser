@@ -152,8 +152,17 @@ void Type(char c, int dik, int vk, bool shift)
         gQueue.push_back({dik, vk, static_cast<unsigned char>(c), shift});
 }
 
+// For the game's name entry: the top row's - and = are not offered (the game's names are
+// capitals and digits).
+bool Offered(const Key& k)
+{
+    return !(gMode == kGameKeys && k.special == kChar && (k.lo == '-' || k.lo == '='));
+}
+
 void TypeKey(const Key& k)
 {
+    if (!Offered(k))
+        return;
     if (gMode == kGameKeys)
     {
         // as the game's keyboard table has it: a letter's capital, a top-row key's own sign
@@ -227,6 +236,8 @@ void MoveRow(int dr)
     float bestD = 1e9f;
     for (size_t i = 0; i < rows[gRow].size(); ++i)
     {
+        if (!Offered(rows[gRow][i]))
+            continue;
         const float d = fabsf(rows[gRow][i].x + rows[gRow][i].w / 2 - centre);
         if (d < bestD)
         {
@@ -328,8 +339,13 @@ void Gta2Native_OskInput(int action)
     {
         case 0: MoveRow(-1); break;
         case 1: MoveRow(1); break;
-        case 2: gCol = (gCol + n - 1) % n; break;
-        case 3: gCol = (gCol + 1) % n; break;
+        case 2:
+        case 3:
+            do
+            {
+                gCol = (gCol + (action == 2 ? n - 1 : 1)) % n;
+            } while (!Offered(Layout()[gRow][gCol]));
+            break;
         case 4: PressSelected(); break;
         case 5: Delete(); break;
         case 6: Type(' ', kDikSpace, kVkSpace, false); break;
@@ -408,6 +424,8 @@ void Gta2Native_OskDraw(int dw, int dh)
         for (size_t c = 0; c < rows[r].size(); ++c)
         {
             const Key& k = rows[r][c];
+            if (!Offered(k))
+                continue;
             const bool sel = static_cast<int>(r) == gRow && static_cast<int>(c) == gCol;
             uint32_t bg = sel ? kSel : kKey;
             if (k.special == kShift && gShift)

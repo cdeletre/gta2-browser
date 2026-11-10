@@ -33,6 +33,9 @@ struct NetConfig
 
 // Reads conf/net.ini (written with the defaults when missing); GTA2_NET_* override it.
 NetConfig LoadNetConfig(const std::string& confDir);
+// The lists a new net.ini starts with (the lobby's "DEFAULT" entry brings them back).
+std::vector<std::string> DefaultNames();
+std::vector<std::string> DefaultRooms();
 // Remembers the name and the room picked last.
 void SaveNetConfig(const NetConfig& config);
 

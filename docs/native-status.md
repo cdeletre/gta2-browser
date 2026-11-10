@@ -974,7 +974,10 @@ et 5 du `Frontend`) et tape comme un clavier (touche enfoncée puis relâchée, 
 que `HandlePlayerNameTyping_4B2F60` attend) ; le texte affiché est celui du jeu. Dans le lobby
 de `gta2-mp`, A sur « Name » ou « Room » l'ouvre (salle en majuscules, comme le navigateur) :
 une console peut rejoindre une salle créée par un navigateur, dont le code est aléatoire ;
-la valeur tapée rejoint la tête de sa liste dans `net.ini` (gauche/droite repartent d'elle).
+la valeur tapée rejoint la tête de sa liste dans `net.ini` (gauche/droite repartent d'elle) ;
+X (Suppr au clavier) retire de sa liste l'entrée affichée (il en reste toujours une) ; après la
+dernière entrée vient « DEFAULT », où A remet la liste d'un `net.ini` neuf (noms prédéfinis,
+ROOM1 à ROOM6). Saisie du nom du jeu : sans `-` ni `=`.
 Vu dans le conteneur (captures) : saisie et validation du nom et de la salle dans le lobby.
 Pas encore vérifié : l'ouverture automatique dans le menu solo (les appuis scriptés n'y
 arrivent pas de façon fiable) ; à tester sur console.
