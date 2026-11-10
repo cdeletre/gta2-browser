@@ -104,13 +104,30 @@ void Gta2Port_CoopSnapshot()
     if (tick > 0 && tick % kScoreEvery == 0)
     {
         s32* row = gScores[(tick / kScoreEvery) % kScoresKept];
+        // a player who left: their slot is freed and its standings read 0, so their line keeps
+        // what the previous score tick had (every machine frees them at the same tick)
+        const s32* prev = gScores[(tick / kScoreEvery + kScoresKept - 1) % kScoresKept];
+        const bool hasPrev = prev[0] == tick - kScoreEvery;
         row[0] = tick;
         for (s32 i = 0; i < MAX_PLAYERS; ++i)
         {
-            row[1 + i * 3] = gPlayers[i * kFields + 7];
-            row[2 + i * 3] = gPlayers[i * kFields + 8];
-            row[3 + i * 3] = gPlayers[i * kFields + 11];
+            const bool here = gPlayers[i * kFields] != 0;
+            for (s32 k = 0; k < 3; ++k)
+            {
+                static const s32 kField[3] = {7, 8, 11}; // kills, deaths, points
+                row[1 + i * 3 + k] = here || !hasPrev ? gPlayers[i * kFields + kField[k]] : prev[1 + i * 3 + k];
+            }
         }
+    }
+}
+
+// Tests (GTA2_TEST=frags, native): sets a slot's kills, which no sync checksum covers, so
+// machines that set them a few ticks apart stay in step.
+EMSCRIPTEN_KEEPALIVE void gta2_dev_set_frags(int slot, int kills)
+{
+    if (slot >= 0 && slot < MAX_PLAYERS)
+    {
+        gGameSession_67E8E0.field_490_frags_list[slot] = kills;
     }
 }
 

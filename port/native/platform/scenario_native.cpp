@@ -29,6 +29,8 @@
 //   GTA2_TEST=boom         network game, one machine only: the next player is seated in a car
 //                          beside this one, which then explodes with them in it (as a rocket
 //                          or a fire does: Car_BC::TriggerExplosion_43D7B0)
+//   GTA2_TEST=frags        network game, on every machine: each slot's kills set to slot + 1
+//                          after the delay (no checksum covers them: the game stays in step)
 //   GTA2_TEST=quit         this player leaves as a person does: Escape (the quit prompt),
 //                          then Return twice (ARE YOU SURE?), after the delay
 //   GTA2_TEST_DAMAGE_PVP=1  network game: this player hits the next player instead, through
@@ -61,6 +63,7 @@ extern "C" const s32* gta2_dev_state();
 extern "C" int gta2_dev_add_cash(int cash);
 extern "C" int gta2_dev_give_weapon(int kind, int ammo);
 extern "C" int gta2_dev_test_friendly_fire(int victim, int attacker, int damage);
+extern "C" void gta2_dev_set_frags(int slot, int kills); // port/platform/coop_web.cpp
 extern "C" int gta2_dev_seat_player_driver(int slot, int model, int dx, int dy);
 extern "C" int gta2_dev_teleport(int x, int y);
 extern "C" int gta2_dev_unlock_areas();
@@ -80,7 +83,8 @@ enum Test
     kDamage,
     kPvp,
     kBoom,
-    kQuit
+    kQuit,
+    kFrags
 };
 Test gTest = kNone;
 int gPhone = 0;
@@ -291,6 +295,7 @@ extern "C" void Gta2Native_ScenarioInit()
         : !strcmp(test, "pvp")       ? kPvp
         : !strcmp(test, "boom")      ? kBoom
         : !strcmp(test, "quit")      ? kQuit
+        : !strcmp(test, "frags")     ? kFrags
                                      : kNone;
     if (const char* delay = getenv("GTA2_TEST_DELAY"))
     {
@@ -473,6 +478,17 @@ extern "C" void Gta2Native_ScenarioStep(double now)
         if (gStep == 0 && inGame > gDelay)
         {
             AnswerPhone();
+            gStep = 1;
+        }
+    }
+    else if (gTest == kFrags)
+    {
+        // every slot's kills set to slot + 1, once (the live score's tests: a player who leaves)
+        if (gStep == 0 && inGame > gDelay)
+        {
+            for (int s = 0; s < 6; ++s)
+                gta2_dev_set_frags(s, s + 1);
+            fprintf(stderr, "gta2: test: kills set to slot + 1\n");
             gStep = 1;
         }
     }

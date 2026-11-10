@@ -271,6 +271,16 @@ void WatchCoop(double nowMs)
         }
         gLobby->ReportScore(row[0], players);
         gLastScore = row[0];
+        if (getenv("GTA2_NET_TRACE"))
+        {
+            std::string line;
+            const int32_t* live = gta2_port_coop_players(); // 12 fields a slot, [0]: in use
+            for (size_t s = 0; s < who.size() && s < 6; ++s)
+                line += " " + who[s]["name"].Str() + (live[s * 12] ? "" : " (left)") + " " +
+                        std::to_string(row[1 + s * 3]) + "/" + std::to_string(row[2 + s * 3]) + "/" +
+                        std::to_string(row[3 + s * 3]);
+            fprintf(stderr, "gta2: co-op: %sscore at tick %d (kills/deaths/points):%s\n", Stamp().c_str(), row[0], line.c_str());
+        }
     }
     for (auto it = gMine.begin(); it != gMine.end();)
     {
