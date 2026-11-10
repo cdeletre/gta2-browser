@@ -72,6 +72,7 @@ std::string RosterText(const Json& players)
 }
 } // namespace
 
+#if !defined(GTA2_NET_LAN)
 ServerCheck ConnectServer(NetConfig& config, int index)
 {
     DisconnectServer(config);
@@ -101,6 +102,52 @@ void DisconnectServer(NetConfig& config)
     config.server.cookie.clear();
 }
 
+#endif
+
+LanDiscovery* Discovery()
+{
+    static std::unique_ptr<LanDiscovery> discovery;
+    if (!discovery)
+        discovery = std::make_unique<LanDiscovery>(atoi(Env("GTA2_LAN_BEACON_PORT", "27900").c_str()));
+    return discovery.get();
+}
+
+bool JoinLanRoom(const NetConfig& config, const std::string& roomId, const std::vector<std::string>& seeds,
+                 const std::string& room, bool host, std::string* error)
+{
+    LeaveRoom();
+    LanOptions o;
+    o.roomId = roomId;
+    o.room = room;
+    o.name = config.name;
+    o.pin = config.lanPin;
+    o.host = host;
+    o.seeds = seeds;
+    o.port = atoi(Env("GTA2_LAN_PORT", std::to_string(kLanPort).c_str()).c_str());
+    fprintf(stderr, "gta2: lan: %s room \"%s\" as \"%s\"\n", host ? "creating" : "joining", room.c_str(), config.name.c_str());
+    std::unique_ptr<LanTransport> t = LanTransport::Create(o, Discovery(), error);
+    if (!t)
+    {
+        fprintf(stderr, "gta2: lan: %s\n", error->c_str());
+        return false;
+    }
+    // the host's beacon: what the room's lobby shows of it
+    t->beaconInfo = [] {
+        Json i = Json::Object();
+        if (gLobby)
+        {
+            i.Set("mode", gLobby->Settings()["mode"].Str());
+            i.Set("players", static_cast<int>(gLobby->Players().size()));
+            i.Set("state", gLobby->Started() ? "playing" : "lobby");
+        }
+        return i;
+    };
+    gTransport = std::move(t);
+    gLobby = std::make_unique<Lobby>(gTransport.get(), config.name, host);
+    return true;
+}
+
+#if !defined(GTA2_NET_LAN)
 bool JoinRoom(const NetConfig& config, const std::string& name, const std::string& room, bool host, std::string* error)
 {
     LeaveRoom();
@@ -118,6 +165,8 @@ bool JoinRoom(const NetConfig& config, const std::string& name, const std::strin
     gLobby = std::make_unique<Lobby>(gTransport.get(), name, host);
     return true;
 }
+
+#endif
 
 void LeaveRoom()
 {
@@ -177,8 +226,46 @@ int AutoLobby(const NetConfig& config)
     const int wanted = atoi(Env("GTA2_NET_PLAYERS", "2").c_str());
     const double waitMs = atof(Env("GTA2_NET_WAIT", "300").c_str()) * 1000.0;
     std::string error;
+#if defined(GTA2_NET_LAN)
+    // the local network: the host creates the room; a guest joins GTA2_LAN_JOIN (an address) or
+    // the room of that name it hears of (in the lobby)
+    bool joined = false;
+    if (host)
+    {
+        joined = JoinLanRoom(config, "", {}, config.room, true, &error);
+    }
+    else if (!Env("GTA2_LAN_JOIN", "").empty())
+    {
+        joined = JoinLanRoom(config, "", {Env("GTA2_LAN_JOIN", "")}, config.room, false, &error);
+    }
+    else
+    {
+        const double until = NowMs() + waitMs;
+        while (!joined && NowMs() < until)
+        {
+            Discovery()->Poll();
+            for (const auto& [id, g] : Discovery()->Games())
+            {
+                if (g.room == config.room && g.state != "playing" && !g.hostName.empty())
+                {
+                    std::vector<std::string> seeds;
+                    for (const LanGame::Member& m : g.members)
+                        seeds.push_back(m.address);
+                    joined = JoinLanRoom(config, g.roomId, seeds, g.room, false, &error);
+                    break;
+                }
+            }
+            Sleep10ms();
+        }
+        if (!joined)
+            fprintf(stderr, "gta2: lan: no room \"%s\" heard of on the network\n", config.room.c_str());
+    }
+    if (!joined)
+        return 2;
+#else
     if (!JoinRoom(config, config.name, config.room, host, &error))
         return 2;
+#endif
 
     Json match;
     bool refused = false;

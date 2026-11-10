@@ -1116,6 +1116,29 @@ diverge) : désaccord signalé au tick 2550, version de la majorité (2 sur 3) a
 et un navigateur (build web reconstruit) : mêmes rapports dès le tick 150, partie synchronisée ;
 fin de match dans « Recent matches ».
 
+**gta2-lan : le réseau local sans serveur (10 novembre)** : un troisième binaire (`gta2-lan`, cible
+CMake avec `GTA2_NET_LAN`, 2,2 Mo, sans mbedTLS ni code serveur). `net/lan_transport.*` :
+chaque joueur d'une salle est relié en TCP à tous les autres (maillage, port 27901 ou les
+suivants s'il est pris) ; le lobby, le lockstep, le chat, les points de passage tournent dessus
+comme sur le relais. Découverte : chaque membre d'une salle s'annonce chaque seconde en broadcast
+UDP (27900 ; `SO_REUSEPORT` pour plusieurs jeux sur une machine) ; une salle non entendue depuis
+5 s disparaît. Rejoindre : connexion aux membres annoncés ; chacun répond avec ceux qu'il connaît
+(le nouveau s'y connecte) ; deux connexions croisées : celle du plus petit id reste, sans faux
+départ (un joueur n'est annoncé parti qu'une fois toute connexion vers lui fermée, y compris
+celle qui s'ouvre). PIN de salle (4 chiffres, 0000 par défaut, `[lan] pin` dans `net.ini`) vérifié
+à chaque connexion. Score : pas de serveur, `@server` n'est envoyé à personne.
+Lobby : les jeux entendus (nom, hôte, joueurs, mode ; « playing » ou autre version en gris), Host
+a game, Name, Room, PIN (A l'édite comme un cadenas : gauche/droite le chiffre, haut/bas sa
+valeur, A valide, B annule), Join by address (clavier à l'écran, `ip` ou `ip:port`), Quit ; la
+salle est l'écran du mode en ligne. Le curseur reste sur sa ligne quand des jeux apparaissent.
+Vu dans le conteneur : `gta2-net-test` 259 vérifications (maillage à trois dont un trouvé par la
+liste d'un autre, messages, ping, PIN faux refusé, départ, annonces, lobby hôte + invité sur le
+maillage), aussi sous ASan + UBSan ; trois `gta2-lan` sans tête qui se trouvent par les annonces
+(cinq essais : aucun faux départ) et quatre en Gang Wars : contrôles identiques jusqu'au tick 1 800,
+30,3 ticks/s ; captures : liste, cadenas « 0 <1> 0 0 », PIN faux refusé, salle rejointe.
+Pas encore fait : les départs brutaux (perte du Wi-Fi en pleine partie : un joueur peut avoir
+reçu la dernière entrée du partant et pas un autre), consoles, lanceur et paquet.
+
 Reste : A5 (consoles), A7 (scores, chat, points de passage), puis D1-D4 (transport TCP local,
 découverte UDP, consoles, paquet).
 

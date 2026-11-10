@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "lan_transport.h"
 #include "lobby.h"
 #include "ws_transport.h"
 
@@ -42,6 +43,7 @@ struct NetConfig
     std::string chat[4];              // the quick messages: Select + up, down, left, right
     bool showChat = true;             // other players' chat messages on screen (Options)
     bool showWaypoints = true;        // other players' waypoints on screen (Options)
+    std::string lanPin = "0000";      // gta2-lan: the PIN typed last ([lan] pin)
     std::string path;                 // conf/net.ini
     std::string confDir;              // conf/ (a relative ca_file is there)
 };
@@ -67,6 +69,13 @@ extern std::unique_ptr<Lobby> gLobby;
 // previous server is let go first). Then config.server is its settings with the session.
 ServerCheck ConnectServer(NetConfig& config, int index);
 void DisconnectServer(NetConfig& config);
+
+// gta2-lan: the beacons heard (made on first use), and entering a room of the local network:
+// roomId "" with host creates one (named room); roomId "" without host joins the room of
+// seeds[0] (an address); else the room heard of, with its members' addresses as seeds.
+LanDiscovery* Discovery();
+bool JoinLanRoom(const NetConfig& config, const std::string& roomId, const std::vector<std::string>& seeds,
+                 const std::string& room, bool host, std::string* error);
 
 // Connects to the server and enters a room (creating it when host); false and why on failure.
 bool JoinRoom(const NetConfig& config, const std::string& name, const std::string& room, bool host, std::string* error);

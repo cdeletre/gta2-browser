@@ -255,8 +255,8 @@ echo "   SDL : ${sdl_dep:-non lié dynamiquement (attendu : libSDL2-2.0.so.0)}"
 if [[ "$PRESET" == "release" && $SANITIZE -eq 0 ]]; then
   DIST="$BUILD_DIR/dist"
   mkdir -p "$DIST"
-  # gta2 (solo) and, when built, gta2-mp (multiplayer, its own launch script)
-  for target in gta2 gta2-mp; do
+  # gta2 (solo) and, when built, gta2-mp (game servers) and gta2-lan (local network), each with its launch script
+  for target in gta2 gta2-mp gta2-lan; do
     [[ -x "$BUILD_DIR/$target" ]] || continue
     NAME="$target.$(uname -m)"
     objcopy --only-keep-debug "$BUILD_DIR/$target" "$DIST/$NAME.debug"

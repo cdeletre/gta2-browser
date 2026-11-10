@@ -187,6 +187,7 @@ if(GTA2_MULTIPLAYER)
   add_library(gta2_net STATIC
     "${NATIVE}/net/json.cpp"
     "${NATIVE}/net/lobby.cpp"
+    "${NATIVE}/net/lan_transport.cpp"
     "${NATIVE}/net/memory_transport.cpp"
     "${NATIVE}/net/net_config.cpp"
     "${NATIVE}/net/tls_conn.cpp"
@@ -208,6 +209,11 @@ if(GTA2_MULTIPLAYER)
   gta2_add_game(gta2-mp "${NATIVE}/net/coop_native.cpp" "${NATIVE}/net/net_main.cpp" "${NATIVE}/net/lobby_screen.cpp" "${NATIVE}/net/hud_net.cpp")
   target_compile_definitions(gta2-mp PRIVATE GTA2_NATIVE_NET=1)
   target_link_libraries(gta2-mp PRIVATE gta2_net)
+
+  # gta2-lan: the local network with no server (net/lan_transport.cpp), its own launcher
+  gta2_add_game(gta2-lan "${NATIVE}/net/coop_native.cpp" "${NATIVE}/net/net_main.cpp" "${NATIVE}/net/lobby_screen.cpp" "${NATIVE}/net/hud_net.cpp")
+  target_compile_definitions(gta2-lan PRIVATE GTA2_NATIVE_NET=1 GTA2_NET_LAN=1)
+  target_link_libraries(gta2-lan PRIVATE gta2_net)
 
   add_executable(gta2-net-test "${NATIVE}/net/tests/net_test.cpp")
   target_compile_options(gta2-net-test PRIVATE ${GTA2_COMMON_FLAGS} ${GTA2_OPT} ${GTA2_SAN})

@@ -10,6 +10,7 @@
 
 #include <fstream>
 #include <functional>
+#include <map>
 #include <sstream>
 #include <memory>
 #include <string>
@@ -17,6 +18,7 @@
 
 #include "json.h"
 #include "lobby.h"
+#include "lan_transport.h"
 #include "memory_transport.h"
 #include "net_session.h"
 #include "ws_transport.h"
@@ -417,6 +419,138 @@ void TestVersion()
     CHECK(guest.Players().size() == 0);
 }
 
+// ---- gta2-lan: the mesh of LanTransport (127.0.0.1), the beacons, a lobby over it ----
+
+bool PumpAll(const std::vector<Transport*>& ts, const std::function<bool()>& done, double ms = 3000)
+{
+    const double end = NowMs() + ms;
+    while (!done() && NowMs() < end)
+    {
+        for (Transport* t : ts)
+            t->Poll();
+        struct timespec ts2 = {0, 2000000};
+        nanosleep(&ts2, nullptr);
+    }
+    return done();
+}
+
+void TestLan()
+{
+    LanOptions o;
+    o.room = "LANTEST";
+    o.name = "Host";
+    o.host = true;
+    o.port = 27931;
+    std::string error;
+    auto a = LanTransport::Create(o, nullptr, &error);
+    CHECK(a != nullptr);
+    if (!a)
+    {
+        fprintf(stderr, "  lan: %s\n", error.c_str());
+        return;
+    }
+    const std::string seed = "127.0.0.1:" + std::to_string(a->Port());
+    LanOptions g = o;
+    g.host = false;
+    g.roomId = a->RoomId();
+    g.seeds = {seed};
+    g.name = "B";
+    auto b = LanTransport::Create(g, nullptr, &error);
+    g.name = "C";
+    auto c = LanTransport::Create(g, nullptr, &error);
+    CHECK(b && c && b->Port() != a->Port() && c->Port() != b->Port());
+    std::map<std::string, std::vector<std::string>> joined;
+    std::map<std::string, std::vector<std::string>> left;
+    std::map<std::string, std::vector<Message>> got;
+    for (LanTransport* t : {a.get(), b.get(), c.get()})
+    {
+        const std::string me = t->Id();
+        t->onPeerJoined = [&joined, me](const std::string& id) { joined[me].push_back(id); };
+        t->onPeerLeft = [&left, me](const std::string& id) { left[me].push_back(id); };
+        t->onMessage = [&got, me](const std::string&, const Message& m) { got[me].push_back(m); };
+    }
+    a->Join();
+    b->Join();
+    c->Join(); // C knows only A: B comes from A's list of members
+    const std::vector<Transport*> all = {a.get(), b.get(), c.get()};
+    CHECK(PumpAll(all, [&] { return joined[a->Id()].size() == 2 && joined[b->Id()].size() == 2 && joined[c->Id()].size() == 2; }));
+    fprintf(stderr, "  lan mesh: joined %zu %zu %zu\n", joined[a->Id()].size(), joined[b->Id()].size(), joined[c->Id()].size());
+    // to everyone, to one, binary, a large one, a ping
+    a->Send("", Message::Of(J(R"({"hello":"lan"})")));
+    Bytes every(256);
+    for (int i = 0; i < 256; ++i)
+        every[i] = static_cast<uint8_t>(i);
+    b->Send(c->Id(), Message::Of(every));
+    a->Send("@server", Message::Of(J(R"({"lobby":"score"})"))); // no one here
+    CHECK(PumpAll(all, [&] { return got[b->Id()].size() == 1 && got[c->Id()].size() == 2; }));
+    CHECK(got[c->Id()].size() == 2 && got[c->Id()][1].binary && got[c->Id()][1].bytes == every);
+    double rtt = -1;
+    c->Ping(a->Id(), [&](double ms) { rtt = ms; }, [] {});
+    CHECK(PumpAll(all, [&] { return rtt >= 0; }));
+    // a wrong PIN is refused
+    LanOptions w = g;
+    w.pin = "1234";
+    w.name = "Wrong";
+    auto x = LanTransport::Create(w, nullptr, &error);
+    std::string why;
+    x->onRefused = [&](const std::string& r) { why = r; };
+    x->Join();
+    CHECK(PumpAll({a.get(), b.get(), c.get(), x.get()}, [&] { return !why.empty(); }));
+    CHECK_EQ(why, std::string("pin"));
+    CHECK(joined[a->Id()].size() == 2);
+    x.reset();
+    // C leaves: A and B see it go
+    c->Leave();
+    CHECK(PumpAll({a.get(), b.get()}, [&] { return left[a->Id()].size() == 1 && left[b->Id()].size() == 1; }));
+    c.reset();
+    b.reset();
+    a.reset();
+
+    // the beacons (over loopback here) list a room with its members
+    setenv("GTA2_LAN_LOOPBACK", "1", 1);
+    LanDiscovery listen(27935);
+    LanDiscovery d(27935);
+    CHECK(listen.Ok() && d.Ok());
+    LanOptions h = o;
+    h.port = 27941;
+    auto host = LanTransport::Create(h, &d, &error);
+    host->beaconInfo = [] {
+        Json i = Json::Object();
+        i.Set("mode", "ffa");
+        i.Set("state", "lobby");
+        i.Set("players", 1);
+        return i;
+    };
+    host->Join();
+    CHECK(PumpAll({host.get()}, [&] {
+        listen.Poll();
+        return listen.Games().count(host->RoomId()) > 0;
+    }));
+    if (listen.Games().count(host->RoomId()))
+    {
+        const LanGame& lg = listen.Games().at(host->RoomId());
+        CHECK_EQ(lg.room, std::string("LANTEST"));
+        CHECK_EQ(lg.hostName, std::string("Host"));
+        CHECK_EQ(lg.mode, std::string("ffa"));
+        CHECK_EQ(lg.members.size(), size_t(1));
+        fprintf(stderr, "  lan beacon: %s by %s at %s\n", lg.room.c_str(), lg.hostName.c_str(), lg.members[0].address.c_str());
+    }
+    // a guest found from the beacons alone (no seed), then a lobby over the mesh
+    LanOptions gg = o;
+    gg.host = false;
+    gg.port = 27945;
+    gg.roomId = host->RoomId();
+    gg.name = "Guest";
+    LanDiscovery d2(27935);
+    auto guest = LanTransport::Create(gg, &d2, &error);
+    Lobby hostLobby(host.get(), "Host", true);
+    Lobby guestLobby(guest.get(), "Guest", false);
+    guest->Join();
+    CHECK(PumpAll({host.get(), guest.get()}, [&] { return hostLobby.Players().size() == 2 && guestLobby.Players().size() == 2; }, 6000));
+    fprintf(stderr, "  lan lobby: host sees %zu players, guest %zu\n", hostLobby.Players().size(), guestLobby.Players().size());
+    unsetenv("GTA2_LAN_LOOPBACK");
+}
+
 // ---- conf/net.ini: several [server] sections, the older format, the environment ----
 
 std::string WriteFile(const std::string& dir, const std::string& text)
@@ -728,6 +862,7 @@ int main()
     TestBrowserRoster();
     TestVersion();
     TestNetConfig();
+    TestLan();
     TestWebSocket();
     printf("gta2-net-test: %d checks, %d failed\n", gChecks, gFailures);
     return gFailures ? 1 : 0;

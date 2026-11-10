@@ -130,6 +130,7 @@ NetConfig LoadNetConfig(const std::string& confDir)
     {
         kNet,
         kServer,
+        kLan,
         kOther
     } section = kNet;
     std::string line;
@@ -146,6 +147,10 @@ NetConfig LoadNetConfig(const std::string& confDir)
             if (head == "net")
             {
                 section = kNet;
+            }
+            else if (head == "lan")
+            {
+                section = kLan;
             }
             else if (head == "server")
             {
@@ -164,6 +169,15 @@ NetConfig LoadNetConfig(const std::string& confDir)
             continue;
         const std::string key = Trim(line.substr(0, eq));
         const std::string value = Trim(line.substr(eq + 1));
+        if (section == kLan)
+        {
+            const bool digits = value.size() == 4 && value.find_first_not_of("0123456789") == std::string::npos;
+            if (key == "pin" && digits)
+                c.lanPin = value;
+            else
+                fprintf(stderr, "gta2: net: net.ini line %d: [lan] %s skipped (pin = 4 digits)\n", number, key.c_str());
+            continue;
+        }
         if (section == kServer)
         {
             ServerEntry& s = c.servers.back();
@@ -347,6 +361,10 @@ void SaveNetConfig(const NetConfig& c)
         << "# show the other players' chat messages and waypoints (also in Options)\n"
         << "show_chat = " << (c.showChat ? 1 : 0) << "\n"
         << "show_waypoints = " << (c.showWaypoints ? 1 : 0) << "\n"
+        << "\n"
+           "# gta2-lan (the local network, no server): the room PIN typed last (4 digits)\n"
+           "[lan]\n"
+        << "pin = " << c.lanPin << "\n"
         << "\n"
            "# One [server] section per game server, in the lobby's order. url: ws:// or wss://\n"
            "# (TLS). password: optional, the lobby asks for it (and keeps it here); or the code of\n"

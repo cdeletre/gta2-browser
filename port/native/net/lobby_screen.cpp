@@ -13,7 +13,10 @@
 // there: the default names are).
 // GTA2_LOBBY_KEYS=up,down,left,right,ok,back,wait,x,y,start,select,...: presses for tests,
 // one a second (to the on-screen keyboard while it is up).
-// Multiplayer build with a window only (gta2-mp).
+// gta2-lan (GTA2_NET_LAN): instead of the servers, the games heard on the local network (A
+// joins one), Host a game, the room's PIN (A edits it as a padlock: left/right the digit,
+// up/down its value, A done) and Join by address; the room itself is the same screen.
+// Multiplayer builds with a window only (gta2-mp, gta2-lan).
 #if !defined(GTA2_NATIVE_HEADLESS)
 #include <stdint.h>
 #include <stdio.h>
@@ -86,6 +89,9 @@ struct Screen
     int scroll = 0;           // the first line shown
     int askPassword = -1;     // the server whose password the window asks for (next frame)
     int passwordFor = -1;     // the server the window is asking for
+    int pinDigit = -1;        // gta2-lan: the PIN digit being changed (-1: not editing)
+    std::string pinBefore;    // the PIN before editing (B puts it back)
+    std::string chosen;       // the chosen line's label: kept on it when lines come and go above
 };
 Screen gS;
 
@@ -164,19 +170,52 @@ void Leave(const std::string& why, bool error)
         Notice(why, error);
 }
 
-void Enter(bool host)
+#if defined(GTA2_NET_LAN)
+bool JoinLan(bool host, const std::string& roomId, const std::vector<std::string>& seeds, const std::string& room,
+             std::string* error)
+{
+    return JoinLanRoom(*gS.config, roomId, seeds, room, host, error);
+}
+#endif
+
+// host: creates the room; else joins it. gta2-lan: lanGame is the room heard of (or null:
+// joinAddress), or none when hosting.
+void Enter(bool host, const LanGame* lanGame = nullptr, const std::string& joinAddress = "")
 {
     gS.crewSent = false;
     gS.scroll = 0;
     gS.nameDefault = false;
     gS.roomDefault = false;
     std::string error;
+#if defined(GTA2_NET_LAN)
+    const std::string roomName = lanGame ? lanGame->room : gS.config->room;
+    Notice(host ? "Creating room " + roomName + "..."
+                : lanGame ? "Joining room " + roomName + "..." : "Joining the game at " + joinAddress + "...",
+           false);
+    std::vector<std::string> seeds;
+    if (lanGame)
+    {
+        for (const LanGame::Member& m : lanGame->members)
+            seeds.push_back(m.address);
+    }
+    else if (!joinAddress.empty())
+    {
+        seeds.push_back(joinAddress.find(':') == std::string::npos ? joinAddress + ":" + std::to_string(kLanPort) : joinAddress);
+    }
+    if (!JoinLan(host, lanGame ? lanGame->roomId : "", seeds, roomName, &error))
+    {
+        Notice(error, true);
+        return;
+    }
+    gS.config->room = roomName; // the room its screen shows
+#else
     Notice(host ? "Creating room " + gS.config->room + "..." : "Joining room " + gS.config->room + "...", false);
     if (!JoinRoom(*gS.config, gS.config->name, gS.config->room, host, &error))
     {
         Notice(error, true);
         return;
     }
+#endif
     SaveNetConfig(*gS.config);
     gLobby->onStart = [](const Json& m) { gS.match = m; };
     gLobby->onOtherHost = [](const std::string&) { gS.otherHost = true; };
@@ -184,6 +223,8 @@ void Enter(bool host)
     gS.joinedAt = NowMs();
     gLobby->onRefused = [](const std::string& why) {
         gS.refused = why == "full"                     ? "That room is full."
+            : why == "pin"                       ? "Wrong PIN for that game (set it on the PIN line)."
+            : why == "room"                      ? "That game is gone."
             : why.compare(0, 8, "version:") == 0 ? "That room runs another version of the game (co-op " + why.substr(8) +
                 "; this one " + std::to_string(kCoopVersion) + ")."
                                                        : "Could not enter the room (id taken).";
@@ -194,6 +235,7 @@ void Enter(bool host)
     gS.messageError = false;
 }
 
+#if !defined(GTA2_NET_LAN)
 void Connect(int index, bool typed);
 
 // The window for a server's password (the on-screen keyboard over the lobby).
@@ -246,6 +288,8 @@ void Connect(int index, bool typed)
     if (r.needsPassword)
         gS.askPassword = index; // the window opens on the next frame
 }
+
+#endif
 
 // A value typed on the on-screen keyboard joins the front of its list (left/right then turn
 // from it, and it is offered next time; conf/net.ini keeps the list).
@@ -399,8 +443,52 @@ void BuildItems()
     std::vector<Item>& it = gS.items;
     it.clear();
     NetConfig& c = *gS.config;
+#if defined(GTA2_NET_LAN)
     if (gS.phase == kSetup)
     {
+        // the games heard on the network: A joins one in its lobby
+        it.push_back({"-- Games on this network --", nullptr, nullptr, nullptr, nullptr, 0, true});
+        int found = 0;
+        for (const auto& [roomId, g] : Discovery()->Games())
+        {
+            if (g.hostName.empty())
+                continue; // its host is not heard (yet): nothing to join
+            ++found;
+            const LanGame game = g;
+            const bool other = g.version != kCoopVersion;
+            const bool playing = g.state == "playing";
+            Item line;
+            line.label = g.room + " (" + g.hostName + ")";
+            const std::string mode = g.mode == "wars" ? "Gang Wars" : g.mode == "ffa" ? "Free-for-all" : "Free roam";
+            const std::string value = other ? std::string("other version")
+                : playing                   ? std::string("playing")
+                                            : std::to_string(g.players) + (g.players == 1 ? " player, " : " players, ") + mode;
+            line.value = [value] { return value; };
+            line.act = [game, other, playing] {
+                if (other)
+                    Notice("That game runs another version of gta2-lan.", true);
+                else if (playing)
+                    Notice("That game has started: wait for its next match.", true);
+                else
+                    Enter(false, &game);
+            };
+            line.off = other || playing;
+            line.exact = true;
+            line.help = "A: join (with the PIN below)";
+            it.push_back(line);
+        }
+        if (!found)
+            it.push_back({"No game heard yet: host one below.", nullptr, nullptr, nullptr, nullptr, 0, true});
+        Item hostLine;
+        hostLine.label = "Host a game";
+        hostLine.act = [] { Enter(true); };
+        hostLine.help = "A: host room " + c.room + " with the PIN below";
+        it.push_back(hostLine);
+    }
+#endif
+    if (gS.phase == kSetup)
+    {
+#if !defined(GTA2_NET_LAN)
         // the servers of conf/net.ini: A connects (or disconnects)
         for (int i = 0; i < static_cast<int>(c.servers.size()); ++i)
         {
@@ -414,6 +502,7 @@ void BuildItems()
             line.exact = true;
             it.push_back(line);
         }
+#endif
         // left/right: the lists of conf/net.ini, then "DEFAULT"; A: the on-screen keyboard (any
         // name; a room created by a browser has a code of its own, upper case as the browser
         // makes it), or on "DEFAULT" the lists a new net.ini has; X: the entry leaves the list
@@ -466,6 +555,38 @@ void BuildItems()
                           });
                       },
                       [&c] { Forget(c.rooms, c.room, gS.roomDefault); }});
+#if defined(GTA2_NET_LAN)
+        // the PIN, as a padlock: A edits it (left/right the digit, up/down its value, A done)
+        Item pin;
+        pin.label = "PIN";
+        pin.value = [&c] {
+            if (gS.pinDigit < 0)
+                return c.lanPin;
+            std::string v;
+            for (int d = 0; d < 4; ++d)
+                v += d == gS.pinDigit ? "<" + c.lanPin.substr(static_cast<size_t>(d), 1) + ">" : " " + c.lanPin.substr(static_cast<size_t>(d), 1) + " ";
+            return v;
+        };
+        pin.act = [&c] {
+            gS.pinBefore = c.lanPin;
+            gS.pinDigit = 0;
+        };
+        pin.help = "A: change it (the same for all players)";
+        it.push_back(pin);
+        Item byAddress;
+        byAddress.label = "Join by address";
+        byAddress.act = [] {
+            Gta2Native_OskStart("A player's address (ip, or ip:port)", "", 21, [](bool ok, const char* text) {
+                std::string a = text;
+                while (!a.empty() && a.back() == ' ')
+                    a.pop_back();
+                if (ok && !a.empty())
+                    Enter(false, nullptr, a);
+            });
+        };
+        byAddress.help = "A: type a player's address";
+        it.push_back(byAddress);
+#else
         const bool connected = c.connected >= 0;
         for (const bool host : {true, false})
         {
@@ -480,7 +601,14 @@ void BuildItems()
             line.off = !connected;
             it.push_back(line);
         }
+#endif
         it.push_back({"Quit", nullptr, nullptr, [] { gS.quit = true; }});
+        // the chosen line stays chosen when the games heard come and go above it
+        for (size_t i = 0; i < it.size() && !gS.chosen.empty(); ++i)
+        {
+            if (it[i].label == gS.chosen)
+                gS.line = static_cast<int>(i);
+        }
         return;
     }
     if (gS.phase != kRoom || !gLobby)
@@ -543,6 +671,32 @@ void Input(int action)
 {
     if (gS.phase == kStarting)
         return;
+    if (gS.pinDigit >= 0)
+    {
+        // the PIN's padlock: up/down the digit's value, left/right the digit, A done, B back
+        std::string& pin = gS.config->lanPin;
+        char& d = pin[static_cast<size_t>(gS.pinDigit)];
+        if (action == 0)
+            d = d == '9' ? '0' : static_cast<char>(d + 1);
+        else if (action == 1)
+            d = d == '0' ? '9' : static_cast<char>(d - 1);
+        else if (action == 2)
+            gS.pinDigit = std::max(0, gS.pinDigit - 1);
+        else if (action == 3)
+            gS.pinDigit = std::min(3, gS.pinDigit + 1);
+        else if (action == 4)
+        {
+            gS.pinDigit = -1;
+            SaveNetConfig(*gS.config);
+            Notice("PIN " + pin + ".", false);
+        }
+        else if (action == 5)
+        {
+            pin = gS.pinBefore;
+            gS.pinDigit = -1;
+        }
+        return;
+    }
     BuildItems();
     const int n = static_cast<int>(gS.items.size());
     if (n == 0)
@@ -560,6 +714,7 @@ void Input(int action)
                 if (!gS.items[static_cast<size_t>(gS.line)].info)
                     break;
             }
+            gS.chosen = gS.phase == kSetup ? gS.items[static_cast<size_t>(gS.line)].label : "";
             break;
         case 2:
         case 3:
@@ -602,6 +757,13 @@ void Draw(int dw, int dh)
 
     if (gS.phase == kSetup)
     {
+#if defined(GTA2_NET_LAN)
+        Gta2Native_OverlayText(x0, y, px, kWhite, "GTA2 on the local network");
+        y += lineH;
+        Gta2Native_OverlayText(x0, y, px, kGrey, Discovery()->Ok() ? "No server: the consoles play together directly"
+                                                                    : "Cannot listen for games (UDP 27900 in use?)");
+        y += 2 * lineH;
+#else
         Gta2Native_OverlayText(x0, y, px, kWhite, "GTA2 multiplayer");
         y += lineH;
         const NetConfig& c = *gS.config;
@@ -611,6 +773,7 @@ void Draw(int dw, int dh)
             snprintf(buf, sizeof(buf), "%s", "Not connected: pick a server");
         Gta2Native_OverlayText(x0, y, px, kGrey, buf);
         y += 2 * lineH;
+#endif
     }
     else if (gLobby)
     {
@@ -731,7 +894,9 @@ void Draw(int dw, int dh)
     }
     const std::string& lineHelp =
         gS.line < static_cast<int>(gS.items.size()) ? gS.items[static_cast<size_t>(gS.line)].help : std::string();
-    if (!lineHelp.empty() && gS.phase == kRoom)
+    if (gS.pinDigit >= 0)
+        Gta2Native_OverlayText(x0, bottom + lineH, px, kGrey, "Up/down: digit  Left/right: next  A: done");
+    else if (!lineHelp.empty() && gS.phase == kRoom)
         Gta2Native_OverlayText(x0, bottom + lineH, px, kGrey, (lineHelp + "  B: leave").substr(0, kCols).c_str());
     else if (!lineHelp.empty())
         Gta2Native_OverlayText(x0, bottom + lineH, px, kGrey, lineHelp.substr(0, kCols).c_str());
@@ -793,13 +958,19 @@ void ScriptedKeys()
 // One frame of the screen: events, the transport, the host's pings, drawing.
 bool Frame()
 {
+#if !defined(GTA2_NET_LAN)
     if (gS.askPassword >= 0 && !Gta2Native_OskOpen())
     {
         const int i = gS.askPassword;
         gS.askPassword = -1;
         AskPassword(i);
     }
+#endif
     ScriptedKeys();
+#if defined(GTA2_NET_LAN)
+    if (gS.phase == kSetup)
+        Discovery()->Poll(); // the games heard (the transport polls it once in a room)
+#endif
     if (!Gta2Native_PumpEvents())
     {
         gS.quit = true;
@@ -841,6 +1012,9 @@ int RunLobbyScreen(NetConfig& config)
 {
     gS.config = &config;
     gS.active = true;
+#if defined(GTA2_NET_LAN)
+    gS.chosen = "Host a game"; // (the games heard come above it)
+#else
     gS.line = config.selected; // on the server connected last
     // back from a match: connected again to its server (net_main.cpp's Gta2Net_AfterMatch)
     if (const char* again = getenv("GTA2_NET_RECONNECT"))
@@ -853,6 +1027,7 @@ int RunLobbyScreen(NetConfig& config)
                 Connect(i, false);
         }
     }
+#endif
     while (Frame())
     {
         if (!gS.match.IsNull())
