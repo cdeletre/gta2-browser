@@ -549,6 +549,19 @@ void Lobby::MeasurePings()
     }
 }
 
+void Lobby::PingSlot(int slot, std::function<void(double)> ok, std::function<void()> fail)
+{
+    for (const auto& [id, s] : mSlots)
+    {
+        if (s == slot && id != mT->Id() && !mGone.count(id))
+        {
+            mT->Ping(id, std::move(ok), std::move(fail));
+            return;
+        }
+    }
+    fail();
+}
+
 // start()
 void Lobby::Start()
 {

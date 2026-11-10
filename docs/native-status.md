@@ -1159,6 +1159,27 @@ reçu la dernière entrée du partant et pas un autre), consoles, lanceur et paq
 Reste : A5 (consoles), A7 (scores, chat, points de passage), puis D1-D4 (transport TCP local,
 découverte UDP, consoles, paquet).
 
+### Lockstep amélioré (branche `native-multiplayer-experimental`)
+
+Plan : 0 mesurer, 1 envoi redondant des entrées, 2 délai d'entrée adaptatif annoncé « au tick T »,
+3 rythme lissé, 4 UDP en LAN, 5 validation ; ensuite le transfert d'état (option 6).
+
+**Étape 0, les mesures (10 novembre)** : `net/net_stats.cpp`, dans gta2-online et gta2-lan. Pendant
+un match, une ligne `gta2: net stats:` toutes les `GTA2_NET_STATS` secondes (5 par défaut, 0 :
+aucune) :
+- ticks joués et cadence (30/s quand rien ne retient le jeu) ;
+- « held up » : le temps où le tick suivant était dû alors qu'une entrée manquait encore, et de
+  qui (attendre une entrée avant l'heure du tick ne coûte rien et n'est pas compté) ;
+- la boucle : itérations, plus grand écart entre deux, travail par itération (jeu et dessin,
+  sans `SDL_GL_SwapWindow`, l'attente de la vsync), avec un tick ou non, temps du swap ;
+- par joueur : entrées reçues, marge (de combien de ticks une entrée arrive avant d'être lue,
+  min/moy/max ; 0 = juste à temps ou attendue), aller-retour mesuré pendant le match (un ping
+  par période, par le même transport que les entrées : `Lobby::PingSlot`).
+Vu dans le conteneur (`scripts/native/test_lan_stats.sh`, deux gta2-lan hors écran en jeu
+aléatoire, `GTA2_SOAK_AIDS=0`, sinon les aides de test désynchronisent au tick 90) : lignes
+cohérentes, aucune désynchronisation ; les chiffres eux-mêmes ne valent rien là (deux jeux en
+rendu logiciel sur un processeur partagé : images jusqu'à 150 ms). Les consoles diront.
+
 ## Reste à faire
 
 Points 1 à 5 : le jalon 1. Les points 3 et 4 ne le bloquent pas dans le conteneur (montage

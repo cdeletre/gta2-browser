@@ -93,6 +93,9 @@ class Lobby
     std::string StartProblem() const;
     // Host: measures the round trip to every player (sets their ping, and so the input delay).
     void MeasurePings();
+    // During a match: the round trip to the player in a slot, through the transport (as the
+    // game messages go); fail when they do not answer, or are not in the match.
+    void PingSlot(int slot, std::function<void(double)> ok, std::function<void()> fail);
     // Host: starts the match for everyone in the room.
     void Start();
     // Every player's game is loaded: go() runs when all can enter the match together.

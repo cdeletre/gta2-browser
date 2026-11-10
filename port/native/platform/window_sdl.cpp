@@ -242,6 +242,8 @@ void Gta2Native_DrawableSize(int* w, int* h)
     SDL_GL_GetDrawableSize(gWindow, w, h);
 }
 
+static double gSwapMs = 0;
+
 // After the renderer has drawn a frame (gles_renderer.cpp).
 void Gta2Native_EndFrame()
 {
@@ -254,7 +256,15 @@ void Gta2Native_EndFrame()
             ++gNextShot;
         }
     }
+    const double before = emscripten_get_now();
     SDL_GL_SwapWindow(gWindow);
+    gSwapMs += emscripten_get_now() - before;
+}
+
+// The time spent in SDL_GL_SwapWindow so far, waiting for vsync mostly (net/net_stats.cpp).
+extern "C" double Gta2Native_SwapMsTotal()
+{
+    return gSwapMs;
 }
 
 // Once per loop iteration. Returns false when the window is closed, or when the game is
