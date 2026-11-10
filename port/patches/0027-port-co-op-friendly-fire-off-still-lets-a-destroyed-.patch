@@ -1,0 +1,40 @@
+From 58232a6baa0885d5f24ca3bb80bb2aa20092fb7f Mon Sep 17 00:00:00 2001
+From: GTA2 port <port@localhost>
+Date: Mon, 9 Nov 2026 18:15:57 -0500
+Subject: [PATCH] port: co-op friendly fire off still lets a destroyed car's
+ occupants die
+
+With friendly fire off, Ped::Kill_46F9D0 ignored a kill blamed on another player. The
+game kills a car's occupants only when it destroys the car (explosion, crusher,
+drowning), then clears the driver and frees the car's physics: a player spared there
+stayed alive in the wreck, still in that car, and the next tick's steering went
+through the freed physics (a crash natively, a write near address 0 in the browser).
+A ped in a car is now always killed. Bullets and blows still go through TakeDamage,
+which friendly fire keeps blocking. Changes gta2.wasm (co-op version 3).
+---
+ Source/Ped.cpp | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/Source/Ped.cpp b/Source/Ped.cpp
+index 776c1e76..09812fa6 100644
+--- a/Source/Ped.cpp
++++ b/Source/Ped.cpp
+@@ -11639,9 +11639,13 @@ MATCH_FUNC(0x46f9d0)
+ void Ped::Kill_46F9D0()
+ {
+ #ifdef GTA2_PORT
+-    if (Gta2Port_BlockFriendlyFire(this))
++    // co-op with friendly fire off: killed by another player (run over, car bomb...). Not a
++    // ped in a car: the game kills a car's occupants only when it destroys the car (an
++    // explosion, the crusher, drowning) and then frees its physics, so an occupant spared
++    // here was left alive in a wreck with no physics, and steering it crashed the game.
++    if (!get_car_416B60() && Gta2Port_BlockFriendlyFire(this))
+     {
+-        return; // co-op with friendly fire off: killed by another player (run over, car bomb...)
++        return;
+     }
+ #endif
+     if ((field_21C & ped_flag_mask::k_ped_on_fire) != 0)
+-- 
+2.54.0
+

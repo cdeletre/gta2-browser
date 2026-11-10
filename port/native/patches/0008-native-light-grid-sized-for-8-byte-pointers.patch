@@ -1,7 +1,7 @@
-From fa02ec37bfa33f0860d91df7368635f8c45f0640 Mon Sep 17 00:00:00 2001
+From e1461be6d6519f325747090620af91b99d2489d6 Mon Sep 17 00:00:00 2001
 From: GTA2 port <port@localhost>
 Date: Sat, 7 Nov 2026 20:00:57 -0500
-Subject: [PATCH] native: light grid sized for 8-byte pointers
+Subject: [PATCH 08/16] native: light grid sized for 8-byte pointers
 
 LightGrid::AllocGrid_4D6E00 allocated 0x4000 bytes for 4096 Light_28 pointers.
 ---

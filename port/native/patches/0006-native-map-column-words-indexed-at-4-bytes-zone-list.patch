@@ -1,7 +1,7 @@
-From 5e83eb3eb2c04f40e04f3d2234eaa6e57e229ce7 Mon Sep 17 00:00:00 2001
+From 533028f785f800b43f0fdde23b945b3dc4abfcfa Mon Sep 17 00:00:00 2001
 From: GTA2 port <port@localhost>
 Date: Sat, 7 Nov 2026 20:00:57 -0500
-Subject: [PATCH] native: map column words indexed at 4 bytes; zone list
+Subject: [PATCH 06/16] native: map column words indexed at 4 bytes; zone list
  pointer size; save format asserts
 
 field_40008_pColumn (the .gmp column words, 4 bytes each) was typed u16** and

@@ -1,7 +1,7 @@
-From 2e8aabb020a0780928c1f59ea35c425f1ed2c0b7 Mon Sep 17 00:00:00 2001
+From 78c585b2095e81cf3e25d47fb9f1f2470e28ddae Mon Sep 17 00:00:00 2001
 From: cdeletre <cyril.deletre@gmail.com>
 Date: Sun, 8 Nov 2026 00:46:57 -0500
-Subject: [PATCH] native: no ErrorLog intro line on the way out
+Subject: [PATCH 14/16] native: no ErrorLog intro line on the way out
 
 The original writes "Coop vX.Y" and a time stamp to each of its log files
 when it closes them. The port sends ErrorLog to the console, so the native

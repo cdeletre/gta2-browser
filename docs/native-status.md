@@ -20,6 +20,30 @@ commencé.
 | RG34XX-H | H700, Mali-G31, libmali | muOS | 720×480, fbdev |
 | RG40XX-H | H700, Mali-G31, libmali | muOS | 640×480, fbdev |
 
+## Reporté de la branche multijoueur (10 novembre 2026)
+
+Ce qui sert aussi le solo, repris de `native-multiplayer` (le code réseau, `port/native/net/`,
+mbedTLS et `gta2-mp` restent sur cette branche-là) :
+- `rand()` de musl (`platform/rand_native.cpp`) : la même suite que le navigateur (wasm), au
+  lieu de celle de la glibc ;
+- `-ffp-contract=off`, drapeau obligatoire (vérifié par `build_native.sh`) : pas de FMA fusionné
+  sur ARM, les mêmes résultats flottants que wasm et x87 ;
+- patches partagés 0026 (lectures d'émetteur radio hors de 1..5 : un enregistrement vide) et
+  0027 (tir ami désactivé : les occupants d'une voiture détruite meurent quand même), et la série
+  native régénérée par-dessus ;
+- le clavier à l'écran (`platform/osk_native.cpp`) pour le nom et le mot de passe du menu du jeu
+  (majuscules et chiffres, sans `-` ni `=`, comme `eng_kb.cfg`), et la police de l'overlay avec
+  minuscules et `@ # & * _ $` ;
+- la disposition de manette par défaut d'après la version PlayStation (✕ = A accélérer,
+  □ = B freiner, △ = Y voiture, ○ = X spécial, R1 saut, R2 tirer, L1/L2 armes ; haut/bas de la
+  croix gardés) ; le mode `pad` du soak appuie sur les nouveaux boutons ;
+- `main.cpp`, `js_bridge_null.cpp` et les écrans d'options : les crochets du multijoueur sont
+  sous `GTA2_NATIVE_NET` (jamais défini ici) ou faibles ; scénarios de test (`GTA2_TEST`).
+
+Vu dans le conteneur (release et debug) : `dist/gta2.aarch64` 1,5 Mo, GLIBC 2.17, aucun symbole
+réseau ni mbedTLS ; soak manette de 70 s : `controls.ini` écrit avec la disposition PSX, R2 tire,
+L1/L2 changent d'arme, R1 saute, Y monte en voiture, 30,3 ticks/s.
+
 ## Soak de nuit, 8 consoles (observé, 9 novembre 2026)
 
 Binaire release `4a8c9e1e` (commit 4caf9cb : textures 16 bits, libération des textures,

@@ -1,7 +1,8 @@
-From f117fe2c12d66ffad9c654733c8b4ed92f68128a Mon Sep 17 00:00:00 2001
+From 64378e524e27718a50bbead0d46e09a1de5cbb88 Mon Sep 17 00:00:00 2001
 From: GTA2 port <port@localhost>
 Date: Sat, 7 Nov 2026 20:00:56 -0500
-Subject: [PATCH] native: .gxt keys converted from their 12-byte file records
+Subject: [PATCH 04/16] native: .gxt keys converted from their 12-byte file
+ records
 
 TKEY_Load_5B5960 read the TKEY chunk (12-byte records: string offset, 8-char key)
 straight into text_0xC, whose first field becomes a pointer in place. On LP64

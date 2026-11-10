@@ -1,7 +1,7 @@
-From ccef7091938b1145974c950c786bc7eabf4b7d89 Mon Sep 17 00:00:00 2001
+From e39c3d92754fd154566d9ba7911cabb3da2df742 Mon Sep 17 00:00:00 2001
 From: GTA2 port <port@localhost>
 Date: Sun, 8 Nov 2026 18:08:05 -0500
-Subject: [PATCH] native: the station count starts at 0 in each game
+Subject: [PATCH 16/16] native: the station count starts at 0 in each game
 
 gStationCount_6FF1CC was never reset: it grew with every district
 loaded, and past the 100 entries of field_0_stations the bus stop

@@ -1,7 +1,7 @@
-From e5c069e41a27d8ebfc5badbf3ae868c5ef07b1b7 Mon Sep 17 00:00:00 2001
+From 65ebe9e25a66d6b8d13ff3909f23731ad3b53378 Mon Sep 17 00:00:00 2001
 From: GTA2 port <port@localhost>
 Date: Sat, 7 Nov 2026 20:16:26 -0500
-Subject: [PATCH] native: Car_18_Cmd keeps its 4-byte thread slot
+Subject: [PATCH 09/16] native: Car_18_Cmd keeps its 4-byte thread slot
 
 Car_18_Cmd (Car_BC.cpp) is a script command read in place from the .scr bytes, like
 the SCR_* commands, with a miss2_0x11C* in a union at offset 8. On LP64 its later

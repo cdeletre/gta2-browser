@@ -49,20 +49,21 @@ ROCKNIX), G350 (dArkOS), TrimUI Smart Pro S (REG Linux).
 
 | Button | Action |
 |--|--|
-| D-pad / Left stick | Walk, steer |
-| R2 / L2 | Accelerate / Reverse (also forward / backward on foot) |
-| A | Attack, shoot |
-| B | Horn (in a car), taunt (on foot) |
-| X | Jump, handbrake |
+| D-pad / Left stick | Walk, steer (up / down: forward / backward) |
+| A / B | Accelerate / Reverse (also forward / backward on foot) |
+| R2 | Attack, shoot |
+| X | Horn (in a car), taunt (on foot) |
+| R1 | Jump, handbrake |
 | Y | Enter / exit a vehicle |
-| L1 / R1 | Previous / next weapon |
+| L1 / L2 | Next / previous weapon |
 | L3 (hold) | Look around with the D-pad |
 | R3 | Status |
 | Select | Next radio station (in a car) |
 | Start | Quit prompt: then A, A to quit, B to resume, Select for Options |
 | Menus: A / B | Confirm / Back |
 
-Every button can be changed in `conf/controls.ini`.
+The layout follows the PlayStation version (cross = A, square = B, triangle = Y, circle = X). Every button
+can be changed in `conf/controls.ini`.
 
 ## Compile
 

@@ -1,7 +1,8 @@
-From 9c4535c23244cceaaa4998a24e1c19033b6f5d43 Mon Sep 17 00:00:00 2001
+From 820ded60af9b10a371b987d1b79e92a7559e8fea Mon Sep 17 00:00:00 2001
 From: GTA2 port <port@localhost>
 Date: Sat, 7 Nov 2026 20:20:06 -0500
-Subject: [PATCH] native: radio emitters keep the original's 0x1C-byte layout
+Subject: [PATCH 11/16] native: radio emitters keep the original's 0x1C-byte
+ layout
 
 sound_obj::field_544C is one sound_7 (slot 0, a real sound object) followed in memory
 by radio emitters 1..5 of 0x1C bytes, emitter 5 lying over field_54D8..field_54F2[1]
@@ -103,7 +104,7 @@ index a8f76da8..2bdda022 100644
              return i;
          }
 diff --git a/Source/sound_obj.hpp b/Source/sound_obj.hpp
-index d2489db2..659cec21 100644
+index e21d39bc..392704d4 100644
 --- a/Source/sound_obj.hpp
 +++ b/Source/sound_obj.hpp
 @@ -207,6 +207,23 @@ class sound_obj
@@ -130,15 +131,15 @@ index d2489db2..659cec21 100644
      sound_7 field_544C[5]; // sound_f16_pos_0x1C instead of sound_7 ?
  
      // Radio emitters use indices 1..5
-@@ -214,6 +231,7 @@ class sound_obj
-     {
+@@ -228,6 +245,7 @@ class sound_obj
+ #endif
          return ((sound_f16_pos_0x1C*)field_544C)[idx];
      }
 +#endif
  
      char_type field_54D8[5];
      char_type field_54DD;
-@@ -421,3 +439,8 @@ class sound_obj
+@@ -435,3 +453,8 @@ class sound_obj
  };
  
  EXTERN_GLOBAL(sound_obj, gSound_obj_66F680);

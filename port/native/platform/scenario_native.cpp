@@ -22,6 +22,18 @@
 //                          Hud_Health_4::DrawHealth_5D0260 draws) around each hit
 //   GTA2_TEST_DAMAGE=n     points per hit (default 10, a bullet; a punch is 2)
 //   GTA2_TEST_DAMAGE_EVERY=s  seconds between hits (default 5); the first after the delay
+//   GTA2_TEST=pvp          network game, one machine only (it drifts apart): this player is
+//                          moved one block north of the next player, walks south into them
+//                          and attacks (fists, or GTA2_TEST_WEAPON=kind with ammo first);
+//                          the other player's health, height and state are logged each second
+//   GTA2_TEST=boom         network game, one machine only: the next player is seated in a car
+//                          beside this one, which then explodes with them in it (as a rocket
+//                          or a fire does: Car_BC::TriggerExplosion_43D7B0)
+//   GTA2_TEST=quit         this player leaves as a person does: Escape (the quit prompt),
+//                          then Return twice (ARE YOU SURE?), after the delay
+//   GTA2_TEST_DAMAGE_PVP=1  network game: this player hits the next player instead, through
+//                          the player-on-player path (killer id set, friendly fire rules;
+//                          gta2_dev_test_friendly_fire). One machine only: it drifts apart.
 //   GTA2_TEST_UNLOCK=1     unlocks the three areas for the current player in the menus (as the
 //                          UKGAMER name cheat; gta2_dev_unlock_areas), so GTA2_MENU_KEYS
 //                          can start area 2 or 3 with a fresh profile; works with any test
@@ -38,6 +50,8 @@
 
 #include "Game_0x40.hpp"
 #include "Player.hpp"
+#include "Car_BC.hpp"
+#include "explosion_type.hpp"
 #include "Weapon_30.hpp"
 #include "ScriptManager_C1EA8.hpp"
 #include "Object_2C_Pool.hpp"
@@ -46,6 +60,8 @@
 extern "C" const s32* gta2_dev_state();
 extern "C" int gta2_dev_add_cash(int cash);
 extern "C" int gta2_dev_give_weapon(int kind, int ammo);
+extern "C" int gta2_dev_test_friendly_fire(int victim, int attacker, int damage);
+extern "C" int gta2_dev_seat_player_driver(int slot, int model, int dx, int dy);
 extern "C" int gta2_dev_teleport(int x, int y);
 extern "C" int gta2_dev_unlock_areas();
 extern "C" void gta2_port_key(int scancode, int vk, int down, int ch);
@@ -61,7 +77,10 @@ enum Test
     kSave,
     kPhone,
     kWatch,
-    kDamage
+    kDamage,
+    kPvp,
+    kBoom,
+    kQuit
 };
 Test gTest = kNone;
 int gPhone = 0;
@@ -269,6 +288,9 @@ extern "C" void Gta2Native_ScenarioInit()
         : !strcmp(test, "phone")     ? kPhone
         : !strcmp(test, "watch")     ? kWatch
         : !strcmp(test, "damage")    ? kDamage
+        : !strcmp(test, "pvp")       ? kPvp
+        : !strcmp(test, "boom")      ? kBoom
+        : !strcmp(test, "quit")      ? kQuit
                                      : kNone;
     if (const char* delay = getenv("GTA2_TEST_DELAY"))
     {
@@ -454,6 +476,119 @@ extern "C" void Gta2Native_ScenarioStep(double now)
             gStep = 1;
         }
     }
+    else if (gTest == kQuit)
+    {
+        // Escape, then Return, then Return: one press a second, each held 150 ms
+        static const int kSteps[3][2] = {{0x01, 0x1B}, {0x1C, 0x0D}, {0x1C, 0x0D}};
+        if (gStep == 0 && inGame > gDelay)
+        {
+            gStep = 1;
+            gStepAt = now - 1000;
+        }
+        if (gStep >= 1 && gStep <= 6 && now - gStepAt >= (gStep % 2 ? 1000 : 150))
+        {
+            const int* k = kSteps[(gStep - 1) / 2];
+            const bool down = gStep % 2 == 1;
+            gta2_port_key(k[0], k[1], down ? 1 : 0, 0);
+            if (down)
+                fprintf(stderr, "gta2: test: quit step %d (%s)\n", (gStep + 1) / 2, k[0] == 0x01 ? "Escape" : "Return");
+            gStepAt = now;
+            ++gStep;
+        }
+        return;
+    }
+    else if (gTest == kBoom)
+    {
+        const int other = player->get_idx_4219D0() == 0 ? 1 : 0;
+        Player* op = gGame_0x40_67E008->get_player_4219E0(static_cast<u8>(other));
+        Ped* target = op ? op->field_2C4_player_ped : nullptr;
+        if (gStep == 0 && inGame > gDelay)
+        {
+            fprintf(stderr, "gta2: test: seating player %d in a car beside us: %d\n", other,
+                    gta2_dev_seat_player_driver(other, 10, 1, 0));
+            gStep = 1;
+            gStepAt = now;
+        }
+        else if (gStep == 1 && now - gStepAt > 2000)
+        {
+            Car_BC* car = target ? target->get_car_416B60() : nullptr;
+            fprintf(stderr, "gta2: test: blowing up player %d's car (%p), health %d\n", other, static_cast<void*>(car),
+                    target ? target->get_health_433B70() : -1);
+            if (car)
+            {
+                // blamed on this player, as when they shot the car: the friendly fire rule applies
+                target->field_204_killer_id = player->GetPlayerPed_41D020()->field_200_id;
+                car->TriggerExplosion_43D7B0(explosion_type::large_20);
+            }
+            gStep = 2;
+            gStepAt = now;
+        }
+        else if (gStep >= 2 && gStep < 12 && now - gStepAt > 1000)
+        {
+            ++gStep;
+            gStepAt = now;
+            fprintf(stderr, "gta2: test: player %d health %d, state %d, in a car %d\n", other,
+                    target ? target->get_health_433B70() : -1, target ? static_cast<int>(target->field_278_ped_state_1) : -1,
+                    target && target->get_car_416B60() ? 1 : 0);
+        }
+        return;
+    }
+    else if (gTest == kPvp)
+    {
+        Player* other = gGame_0x40_67E008->get_player_4219E0(player->get_idx_4219D0() == 0 ? 1 : 0);
+        Ped* target = other ? other->field_2C4_player_ped : nullptr;
+        Ped* me = player->GetPlayerPed_41D020();
+        if (!target || !me)
+        {
+            return;
+        }
+        static double nextLog = 0;
+        if (gStep == 0 && inGame > gDelay)
+        {
+            if (const char* w = getenv("GTA2_TEST_WEAPON"))
+            {
+                fprintf(stderr, "gta2: test: weapon %d given (%d)\n", atoi(w), gta2_dev_give_weapon(atoi(w), 99));
+            }
+            const int tx = target->get_cam_x().mValue >> 14;
+            const int ty = target->get_cam_y().mValue >> 14;
+            fprintf(stderr, "gta2: test: moving next to player %d at (%d, %d): %d\n", other->get_idx_4219D0(), tx, ty,
+                    gta2_dev_teleport(tx, ty - 1));
+            gta2_port_key(0xD0, 0x28, 1, 0); // Down: walk south, into the other player
+            gStepAt = now;
+            gStep = 1;
+        }
+        if (gStep == 1 && now - gStepAt > 400)
+        {
+            gta2_port_key(0xD0, 0x28, 0, 0);
+            gStep = 2;
+            gStepAt = now;
+        }
+        if (gStep >= 2 && gStep < 60)
+        {
+            // attack: Ctrl down 150 ms, up 150 ms, 40 times
+            const bool down = (gStep % 2) == 0;
+            if (now - gStepAt > 150)
+            {
+                gta2_port_key(0x1D, 0x11, down ? 1 : 0, 0);
+                gStepAt = now;
+                ++gStep;
+            }
+        }
+        if (gStep > 0 && now >= nextLog)
+        {
+            nextLog = now + 1000;
+            fprintf(stderr,
+                    "gta2: test: me at (%.2f, %.2f, %.2f) group %p, other at (%.2f, %.2f, %.2f) group %p, health %d, "
+                    "state %d/%d, invulnerability %u\n",
+                    me->get_cam_x().mValue / 16384.0, me->get_cam_y().mValue / 16384.0, me->get_cam_z().mValue / 16384.0,
+                    static_cast<void*>(me->field_164_ped_group), target->get_cam_x().mValue / 16384.0,
+                    target->get_cam_y().mValue / 16384.0, target->get_cam_z().mValue / 16384.0,
+                    static_cast<void*>(target->field_164_ped_group), target->get_health_433B70(),
+                    static_cast<int>(target->field_278_ped_state_1), static_cast<int>(target->field_27C_ped_state_2),
+                    target->field_208_invulnerability);
+        }
+        return;
+    }
     else if (gTest == kDamage)
     {
         static const int points = getenv("GTA2_TEST_DAMAGE") ? atoi(getenv("GTA2_TEST_DAMAGE")) : 10;
@@ -482,9 +617,21 @@ extern "C" void Gta2Native_ScenarioStep(double now)
         if (now >= nextHit)
         {
             nextHit = now + every;
-            fprintf(stderr, "gta2: test: hit for %d (health %d, invulnerability %u)\n", points, health,
-                    ped->field_208_invulnerability);
-            ped->TakeDamage(static_cast<s16>(points));
+            static const bool pvp = getenv("GTA2_TEST_DAMAGE_PVP") && atoi(getenv("GTA2_TEST_DAMAGE_PVP")) != 0;
+            if (pvp)
+            {
+                const int me = player->get_idx_4219D0();
+                const int other = me == 0 ? 1 : 0;
+                const int r = gta2_dev_test_friendly_fire(other, me, points);
+                fprintf(stderr, "gta2: test: player %d hits player %d for %d: health %d -> %d\n", me, other, points,
+                        r < 0 ? -1 : r / 1000, r < 0 ? -1 : r % 1000);
+            }
+            else
+            {
+                fprintf(stderr, "gta2: test: hit for %d (health %d, invulnerability %u)\n", points, health,
+                        ped->field_208_invulnerability);
+                ped->TakeDamage(static_cast<s16>(points));
+            }
         }
     }
 

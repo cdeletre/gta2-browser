@@ -1,0 +1,44 @@
+From 91e2c7c685026468f3b6ff618cca3629cfeb2128 Mon Sep 17 00:00:00 2001
+From: GTA2 port <port@localhost>
+Date: Mon, 9 Nov 2026 16:37:45 -0500
+Subject: [PATCH] port: radio emitter lookups outside 1..5 get a blank record
+
+field_54F7[0] holds 101 for police and service vehicles (no radio), and 0x66 or 127
+when no emitter is chosen; some paths still ask for RadioEmitter(field_54F7[0] + 1).
+The original then reads and writes 2-3 KB past gSound_obj, in unrelated globals, and
+ProcessType3_CopRadioAndMusic_57DD50 stores that read in the car's
+field_B0_emitter_status. Such indices now get a blank record zeroed on each access:
+reads give 0, writes are dropped, as the native build does (native patch 0013), so a
+browser and a native player stay in step in co-op. Changes gta2.wasm.
+---
+ Source/sound_obj.hpp | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+diff --git a/Source/sound_obj.hpp b/Source/sound_obj.hpp
+index d2489db2..e21d39bc 100644
+--- a/Source/sound_obj.hpp
++++ b/Source/sound_obj.hpp
+@@ -212,6 +212,20 @@ class sound_obj
+     // Radio emitters use indices 1..5
+     inline sound_f16_pos_0x1C& RadioEmitter(s32 idx)
+     {
++#ifdef GTA2_PORT
++        // The game also asks for field_54F7[0] + 1 when field_54F7[0] holds 101 (police or
++        // service vehicle, no radio), 0x66 or 127 (none found): the original then reads and
++        // writes 2-3 KB past this object, in unrelated globals (ProcessType3_CopRadioAndMusic
++        // stores that read in the car's field_B0_emitter_status). Such an index gets a blank
++        // record, zeroed on each access: reads give 0 ("no emitter", the car picks one again),
++        // writes are dropped. The same as the native build, so co-op games stay in step.
++        if (idx < 1 || idx > 5)
++        {
++            static sound_f16_pos_0x1C sNoEmitter;
++            memset(&sNoEmitter, 0, sizeof(sNoEmitter));
++            return sNoEmitter;
++        }
++#endif
+         return ((sound_f16_pos_0x1C*)field_544C)[idx];
+     }
+ 
+-- 
+2.54.0
+

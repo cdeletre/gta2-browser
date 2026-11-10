@@ -34,6 +34,7 @@ set(GTA2_REQUIRED_FLAGS
   -fsigned-char          # char is unsigned by default on aarch64
   -fwrapv                # signed overflow wraps, as the MSVC code assumed
   -fno-strict-aliasing   # decompiled code type-puns a lot
+  -ffp-contract=off      # no fused multiply-add: the same float results as wasm (co-op lockstep) and x87
 )
 set(GTA2_COMMON_FLAGS
   ${GTA2_REQUIRED_FLAGS}

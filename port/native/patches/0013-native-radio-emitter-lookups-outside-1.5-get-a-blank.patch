@@ -1,7 +1,8 @@
-From 0ded20f60237174b59a65cbe9f3c10557124b91d Mon Sep 17 00:00:00 2001
+From 08a5dc2366d23f610c3239e0275a922d8b39dde3 Mon Sep 17 00:00:00 2001
 From: GTA2 port <port@localhost>
 Date: Sat, 7 Nov 2026 20:48:48 -0500
-Subject: [PATCH] native: radio emitter lookups outside 1..5 get a blank record
+Subject: [PATCH 13/16] native: radio emitter lookups outside 1..5 get a blank
+ record
 
 field_54F7[0] holds 101 for police and service vehicles (no radio), and 0x66 or 127
 when no emitter is chosen; some paths still ask for RadioEmitter(field_54F7[0] + 1).
@@ -16,7 +17,7 @@ deviation: 0 instead of whatever followed the object in memory.
  1 file changed, 12 insertions(+), 1 deletion(-)
 
 diff --git a/Source/sound_obj.hpp b/Source/sound_obj.hpp
-index 659cec21..abf7f6ac 100644
+index 392704d4..c414bb3a 100644
 --- a/Source/sound_obj.hpp
 +++ b/Source/sound_obj.hpp
 @@ -218,9 +218,20 @@ class sound_obj

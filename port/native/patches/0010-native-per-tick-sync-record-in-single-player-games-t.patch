@@ -1,7 +1,7 @@
-From 3ecc889532e35108d90b6b887233e8411ebaa247 Mon Sep 17 00:00:00 2001
+From aeda73b9bb440290786c5be1bd2066fef615c9be Mon Sep 17 00:00:00 2001
 From: GTA2 port <port@localhost>
 Date: Sat, 7 Nov 2026 20:16:26 -0500
-Subject: [PATCH] native: per-tick sync record in single-player games too
+Subject: [PATCH 10/16] native: per-tick sync record in single-player games too
 
 Gta2Port_SyncRecord (dev_hooks.cpp) records the tick number and the ped and car
 counts and hashes after every network tick. The native build also calls it after

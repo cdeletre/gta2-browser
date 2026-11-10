@@ -1,8 +1,8 @@
-From b17f3225cf0ec669b30f2d4dbe982b7804d05003 Mon Sep 17 00:00:00 2001
+From 2948fed0b52ecba54d18752cd95f87c9b94269a3 Mon Sep 17 00:00:00 2001
 From: GTA2 port <port@localhost>
 Date: Sat, 7 Nov 2026 19:33:31 -0500
-Subject: [PATCH] native: Miles stream positions through an S32, not the long
- parameter
+Subject: [PATCH 02/16] native: Miles stream positions through an S32, not the
+ long parameter
 
 GetVocalPosMs_58E770 and GetVocalLengthMs_58E7A0 reuse their `long`
 stream index as AIL_stream_ms_position's output. Miles writes an S32

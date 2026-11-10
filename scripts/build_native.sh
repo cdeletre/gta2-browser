@@ -21,6 +21,7 @@ REQUIRED_FLAGS=(
   -fsigned-char
   -fwrapv
   -fno-strict-aliasing
+  -ffp-contract=off
 )
 
 # ---------------------------------------------------------------------------
