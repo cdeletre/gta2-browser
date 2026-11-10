@@ -4,7 +4,7 @@
 # elsewhere. No Docker. scripts/deploy_server.sh is the DigitalOcean droplet's (Docker, Caddy).
 #
 # On the host, everything is in /opt/gta2:
-#   server/  server.mjs, crews.mjs, package.json, package-lock.json, node_modules (npm ci)
+#   server/  server.mjs, crews.mjs, games-page.mjs, package.json, package-lock.json, node_modules
 #   web/     the built game (build/port/release), read-only
 #   game/    the game's data/ folder only (no saves, executables or movies), read-only
 #   db/      saved crews, the only place the service writes (user gta2)
@@ -57,7 +57,8 @@ fi
 
 log "server code"
 "${RSYNC[@]}" --exclude node_modules \
-  "$ROOT/server/server.mjs" "$ROOT/server/crews.mjs" "$ROOT/server/package.json" "$ROOT/server/package-lock.json" \
+  "$ROOT/server/server.mjs" "$ROOT/server/crews.mjs" "$ROOT/server/games-page.mjs" \
+  "$ROOT/server/package.json" "$ROOT/server/package-lock.json" \
   "$HOST:/opt/gta2/server/"
 "${SSH[@]}" "$HOST" 'set -e; cd /opt/gta2/server && npm ci --omit=dev --no-audit --no-fund --loglevel=error'
 

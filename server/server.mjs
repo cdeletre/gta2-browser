@@ -23,6 +23,7 @@ import { extname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { CrewStore } from './crews.mjs';
+import { GAMES_PAGE } from './games-page.mjs';
 
 const REPO = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const PORT = Number(process.env.PORT || 8790);
@@ -149,7 +150,9 @@ const server = createServer(async (req, res) => {
       res.writeHead(result.ok ? 200 : 400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
       return res.end(JSON.stringify(result));
     }
-    if (url.pathname === '/games' && req.method === 'GET') {
+    if ((url.pathname === '/games' || url.pathname === '/games.json') && req.method === 'GET') {
+      // a browser gets the page (games-page.mjs), which reads /games.json; scripts get the JSON
+      if (url.pathname === '/games' && /text\/html/.test(req.headers.accept || '')) return html(res, GAMES_PAGE);
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
       return res.end(JSON.stringify(gamesNow()));
     }
