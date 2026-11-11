@@ -1308,6 +1308,41 @@ les 3-4 min par console (les plus longs, 226 et 368 ms, ressemblent à des coupu
 ~30 attentes de 7 à 19 ms par minute (le rythme entre consoles, pas le réseau). UDP gardé, par
 défaut.
 
+### Étape 5 : validation, partie longue (observé, 10-11 novembre)
+
+`gta2-lan` e89b181f, UDP, free-for-all Downtown à 5 joueurs : Air X (SD865), RP Mini (SD865),
+CubeXX (H700, muOS), RG353VS (RK3566, Panfrost), R36S (RK3326, en Ethernet), les autres en Wi-Fi.
+**7 h 22 de jeu (26 500 s, 803 000 ticks), à 30,3 ticks/s, aucune désynchronisation** : 441 à
+443 contrôles par console, tous « ok » ; ~3,2 millions de messages envoyés par console, rien de
+perdu. Les départs en fin de partie, chacun vu par tous les restants au même tick (Kdog, Ace, Moose
+puis Nina ; la R36S, dernière, seule).
+
+| console | jeu retenu | arrêts/min | fenêtres de 5 s avec un arrêt ≥ 100 ms | temps au délai 1 |
+|---|---|---|---|---|
+| R36S (Ethernet) | 0,45 % | 10,6 | 249 (0,56/min) | 92 % |
+| Air X | 0,46 % | 16,5 | 261 (0,59/min) | 86 % |
+| RP Mini | 0,46 % | 15,0 | 278 (0,63/min) | 88 % |
+| RG353VS | 0,48 % | 19,1 | 269 (0,61/min) | 81 % |
+| CubeXX | 0,84 % | 16,0 | 624 (1,41/min) | 50 % |
+
+- Stable sur la durée : heure par heure, 0,36 à 0,63 % retenu (CubeXX 0,70 à 1,06 %), pas de
+  dérive ni de dégradation.
+- Délai : 5 → 1 en 10 à 40 s au départ ; ensuite des montées à 2-3 pendant quelques dizaines de
+  secondes, qui redescendent. Le pire, vers 6 h 16 : 2-3 min de Wi-Fi perturbé (attentes de 500
+  à 900 ms sur les 5 consoles au même moment), CubeXX et RG353VS montent à 6, revenues à 1 en
+  ~60 s.
+- Les arrêts de 200 à 530 ms tombent aux mêmes instants sur toutes les consoles : le Wi-Fi commun,
+  pas une console. Les arrêts de 1,1 à 2,6 s ne sont qu'au chargement (première fenêtre).
+- CubeXX : elle attend les 4 autres à parts égales, donc la cause est chez elle ; sur les 100
+  premières minutes, 91 fenêtres sur 1 200 ont une image de 40 ms ou plus (jusqu'à 91 ms), les à-coups de rendu
+  de la H700 la mettent en retard. Elle est la seule à passer la moitié du temps au délai 2.
+- UDP : ~2 000 à 2 800 messages renvoyés par minute et par console, sans effet visible (chaque
+  datagramme reprend tout ce qui n'est pas accusé).
+
+Comparé à l'essai C en UDP (4 consoles, 0,65 % retenu, 31 arrêts/min) : moins d'attente avec un
+joueur de plus. L'option 1 est validée pour le LAN. Reste : les arrêts de la CubeXX (son rendu,
+pas le réseau), et gta2-online depuis un partage 4G.
+
 ## Reste à faire
 
 Points 1 à 5 : le jalon 1. Les points 3 et 4 ne le bloquent pas dans le conteneur (montage
