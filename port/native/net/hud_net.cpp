@@ -41,7 +41,7 @@ extern "C" void gta2_js_present(const void* cmdData, int cmdCount, const void* v
 extern "C" const int32_t* gta2_port_coop_players(); // port/platform/coop_web.cpp
 extern "C" bool Gta2Native_PadAPressed();           // input_sdl.cpp
 extern "C" const int32_t* gta2_dev_state();          // port/platform/dev_hooks.cpp: player
-extern "C" uint32_t Gta2Native_PlayerColour(int slot); // platform/player_colour_native.cpp
+extern "C" int gta2_port_player_colour(int slot); // port/platform/coop_web.cpp: 0xRRGGBB, or -1
 extern "C" s32 gGta2PortDrawnCam[2]; // port_interpolation.cpp: the camera's x, y as last drawn
 
 namespace gta2net
@@ -59,8 +59,11 @@ const uint32_t kWhite = 0xffffffff, kGrey = 0xffa0a0a0, kYellow = 0xff30d0ff;
 // browser's colour for their slot until the game has one.
 uint32_t ColourOf(int slot)
 {
-    const uint32_t c = Gta2Native_PlayerColour(slot);
-    return c ? c : kColours[slot % 6];
+    const int rgb = gta2_port_player_colour(slot);
+    if (rgb < 0)
+        return kColours[slot % 6];
+    // the overlay takes 0xAABBGGRR
+    return 0xff000000u | ((rgb & 0xff) << 16) | (rgb & 0xff00) | ((rgb >> 16) & 0xff);
 }
 
 struct ChatLine

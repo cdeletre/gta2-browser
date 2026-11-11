@@ -1248,12 +1248,16 @@ logiciel n'y tiennent pas 30 ticks/s sans à-coups. À régler sur les consoles.
 
 **Couleurs des joueurs (10 novembre)** : les marqueurs, le tableau des scores et les noms du
 chat prenaient les couleurs du navigateur par place (`PLAYER_COLOURS`), qui ne sont pas celles du
-jeu (flèches, scores en $). `platform/player_colour_native.cpp` lit celles du jeu dans le style
+jeu (flèches, scores en $). `gta2_port_player_colour` (`port/platform/coop_web.cpp`, partagé avec le
+web) lit celles du jeu dans le style
 chargé : la palette « user remap » du joueur (`Player::field_790_hud_palette`, celle que
 `ColorScoreFromRemap_569A10` donne à ses chiffres), comparée à la palette neutre (user remap 1) ;
 elle en change une rampe de 5 teintes, et la teinte du milieu est celle des chiffres à l'écran.
 Vu sur une capture à 3 joueurs : violet #5b439f, vert #87d700, bleu #4743cf, comme les scores du
-jeu. Le navigateur a le même écart (non corrigé : `web/shell.js`).
+jeu. Le navigateur aussi (`web/shell.js` : carte, radar, noms, tableau des scores, chat) : la
+couleur du jeu d'abord, puis celle de l'équipe en Gang Wars, puis celle de la place tant que le jeu
+n'en a pas. Côté web, seule la syntaxe de `shell.js` est vérifiée (Node 22) : emsdk n'est pas
+installé ici, le build web n'a pas été refait.
 
 ## Reste à faire
 

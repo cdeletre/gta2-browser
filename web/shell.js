@@ -1091,8 +1091,20 @@ function watchCoop(Module, coop) {
   }, 250);
 }
 
-// Co-op player colours by slot (map, radar, names, scoreboard).
+// Co-op player colours by slot (map, radar, names, scoreboard), until the game has its own.
 const PLAYER_COLOURS = ['#4fc3ff', '#ff6b6b', '#7ee081', '#c792ff', '#ffa94d', '#ff7ad9'];
+
+/**
+ * A player's colour as the game shows it (their arrow, their score in $: from their remap in
+ * the loaded style, gta2_port_player_colour), else their crew's in Gang Wars, else their slot's.
+ */
+function playerColour(Module) {
+  const game = Module.cwrap('gta2_port_player_colour', 'number', ['number']);
+  return (slot, fallback) => {
+    const rgb = game(slot);
+    return rgb >= 0 ? '#' + rgb.toString(16).padStart(6, '0') : fallback || PLAYER_COLOURS[slot % PLAYER_COLOURS.length];
+  };
+}
 
 /**
  * What the map and radar need about the other players in a co-op match:
@@ -1104,9 +1116,10 @@ function coopView(Module, { lobby, players, mySlot, mode = 'roam', crews = [] })
   lobby.onWaypoint = (slot, wp) => { if (wp) waypoints.set(slot, wp); else waypoints.delete(slot); };
   const read = Module.cwrap('gta2_port_coop_players', 'number', []);
   const crewOf = (slot) => (mode === 'wars' ? crews.findIndex((c) => c.members.includes(players[slot].id)) : -1);
+  const gameColour = playerColour(Module);
   const colour = (slot) => {
     const c = crewOf(slot);
-    return c >= 0 ? crews[c].colour : PLAYER_COLOURS[slot % PLAYER_COLOURS.length];
+    return gameColour(slot, c >= 0 ? crews[c].colour : null);
   };
   const myCrew = crewOf(mySlot);
   const view = {
@@ -1303,7 +1316,7 @@ async function start(getFiles, { cacheAfterStart = false, coop = null, loadSlot 
     const chat = coop ? new CoopChat({
       lobby: coop.lobby, mySlot: coop.mySlot, releaseKeys: releaseAll,
       name: (slot) => (coop.players[slot] ? coop.players[slot].name : t('shell.playerN', { n: slot + 1 })),
-      colour: (slot) => PLAYER_COLOURS[slot % PLAYER_COLOURS.length],
+      colour: playerColour(Module),
     }) : null;
     // Quick save and load (single player): a snapshot of the whole game.
     // Save states (single player): the Saves screen, the autosave after a job, Continue on the front page.

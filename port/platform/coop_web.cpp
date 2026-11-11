@@ -3,12 +3,16 @@
 // local game; it only reads.
 #include <emscripten.h>
 
+#include <algorithm>
+#include <vector>
+
 #include "Car_BC.hpp"
 #include "Game_0x40.hpp"
 #include "GameSession_578.hpp"
 #include "Ped.hpp"
 #include "Player.hpp"
 #include "char.hpp"
+#include "gtx_0x106C.hpp"
 #include "sprite.hpp"
 
 extern "C" s32 gGta2PortDrawnPlayers[6][4]; // port_interpolation.cpp: positions as last drawn
@@ -18,6 +22,24 @@ extern "C" s32 gGta2PortBusted[6];         // (only kept up to date while interp
 
 namespace
 {
+// Player colours (gta2_port_player_colour): the plain user remap a player's is compared with,
+// and the colours found, per slot, for the palette they were found for.
+constexpr s16 kBaseRemap = 1;
+s32 gColour[6];
+s32 gColourPalette[6] = {-1, -1, -1, -1, -1, -1};
+
+// of 0xRRGGBB: the brightest channel, and how far the others are from it
+s32 Brightness(u32 rgb)
+{
+    const s32 r = (rgb >> 16) & 0xff, g = (rgb >> 8) & 0xff, b = rgb & 0xff;
+    return std::max(r, std::max(g, b));
+}
+s32 Saturation(u32 rgb)
+{
+    const s32 r = (rgb >> 16) & 0xff, g = (rgb >> 8) & 0xff, b = rgb & 0xff;
+    return Brightness(rgb) - std::min(r, std::min(g, b));
+}
+
 constexpr s32 kFields = 12;
 s32 gPlayers[MAX_PLAYERS * kFields];
 
@@ -159,6 +181,61 @@ extern "C" s32 gGta2PortRideTogether;
 EMSCRIPTEN_KEEPALIVE void gta2_port_set_ride_together(int policy)
 {
     gGta2PortRideTogether = policy == 1 || policy == 2 ? policy : 0;
+}
+
+// A player's colour as the game shows it (their arrow, their score in $), 0xRRGGBB, or -1 when
+// the game has none for that slot (not in use; no player remap, as in single player). For the
+// shell's map, radar, names and scoreboard, and the native overlays (hud_net.cpp).
+// The game colours a player by their ped's remap: Player::ColorScoreFromRemap_569A10 gives their
+// score digits a "user remap" palette (field_790_hud_palette, of type 7), and the arrows follow
+// the same remaps. The palette is read from the loaded style's physical palettes (256 colours, a
+// colour every 256 bytes: gtx_0x106C::GetPalData_5AA6A0) and compared with the plain one (user
+// remap 1): in the original style a player's changes a ramp of 5 shades, dark to light, and a grey.
+// The player's colour is the middle shade, the one the digits on screen look like.
+EMSCRIPTEN_KEEPALIVE int gta2_port_player_colour(int slot)
+{
+    if (slot < 0 || slot >= 6 || !gGame_0x40_67E008 || !gGtx_0x106C_703DD4)
+    {
+        return -1;
+    }
+    Player* p = gGame_0x40_67E008->get_player_4219E0(static_cast<u8>(slot));
+    if (!p || !p->field_8E_bInUse || p->field_78C_hud_palette_type != palette_types_enum::user_remaps_7)
+    {
+        return -1;
+    }
+    const s16 pal = static_cast<s16>(p->field_790_hud_palette);
+    if (gColourPalette[slot] == pal)
+    {
+        return gColour[slot];
+    }
+    gtx_0x106C* gtx = gGtx_0x106C_703DD4;
+    auto palette = [gtx](s16 user) {
+        return gtx->GetPalData_5AA6A0(
+            gtx->get_phys_pal_5AA6F0(static_cast<u16>(gtx->GetTruePalette_5AA5F0(palette_types_enum::user_remaps_7, user))));
+    };
+    auto colour = [](const BYTE* data, s32 c) { // b, g, r, a -> 0xRRGGBB
+        const BYTE* e = data + c * 256;
+        return (static_cast<u32>(e[2]) << 16) | (static_cast<u32>(e[1]) << 8) | e[0];
+    };
+    const BYTE* mine = palette(pal);
+    const BYTE* base = palette(kBaseRemap);
+    std::vector<u32> shades;
+    for (s32 c = 1; c < 256; ++c)
+    {
+        const u32 own = colour(mine, c);
+        if (colour(base, c) != own && Saturation(own) >= 32)
+        {
+            shades.push_back(own);
+        }
+    }
+    if (shades.empty())
+    {
+        return -1;
+    }
+    std::sort(shades.begin(), shades.end(), [](u32 a, u32 b) { return Brightness(a) < Brightness(b); });
+    gColour[slot] = static_cast<s32>(shades[shades.size() / 2]);
+    gColourPalette[slot] = pal;
+    return gColour[slot];
 }
 
 } // extern "C"
