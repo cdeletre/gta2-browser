@@ -1343,6 +1343,22 @@ Comparé à l'essai C en UDP (4 consoles, 0,65 % retenu, 31 arrêts/min) : moins
 joueur de plus. L'option 1 est validée pour le LAN. Reste : les arrêts de la CubeXX (son rendu,
 pas le réseau), et gta2-online depuis un partage 4G.
 
+### gta2-online en 4G, et le ping au tableau des scores (observé, 11 novembre)
+
+Partie de 7 min 30 via le serveur : Air X, CubeXX et un navigateur en Wi-Fi local, TSP S en partage
+4G. Aller-retour vers la TSP 50-65 ms (au plus 85-117), une retransmission TCP en tout ; délai 3
+ticks toute la partie (la marge des entrées de la TSP tombait parfois à 0, donc pas de descente) ;
+jeu retenu 0,00-0,05 %, aucun arrêt de 100 ms ou plus, aucune désynchronisation. Propriétaire :
+« vraiment fluide ». Vu aussi : moins de voitures autour de l'Air X ; c'est le moteur d'origine, qui
+plafonne le trafic à 16 voitures pour toute la partie (`Car_14::SpawnTrafficCar_582480`), réparties
+caméra par caméra, dans l'ordre des joueurs (les compteurs étaient les mêmes sur les 3 consoles).
+
+Tableau des scores (natif et navigateur) : une colonne Ping, l'aller-retour vers chaque joueur
+(médiane des 3 derniers pings, un toutes les 2,5 s ; orange au-dessus de 130 ms, rouge au-dessus
+de 200), et une ligne « Input delay: n ticks (ms) » (adaptatif sur console, celui de l'hôte dans un
+navigateur). Pas sur le classement final. Vu : partie LAN à 3 dans le conteneur (2 et 6 ms), et
+console + Chromium sans écran via le serveur de test (51 ms, « 1 tick (33 ms) », synchronisée).
+
 ## Reste à faire
 
 Points 1 à 5 : le jalon 1. Les points 3 et 4 ne le bloquent pas dans le conteneur (montage
