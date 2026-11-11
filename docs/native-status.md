@@ -715,14 +715,23 @@ et « Écarts par rapport à l'original » ci-dessous).
 - **More traffic** (gta2-lan, patch natif 0019, 11 novembre ; choix de l'hôte, désactivé par
   défaut) : l'original permet 16 voitures de circulation pour toute la partie, servies caméra
   par caméra dans l'ordre des joueurs, si bien qu'à 4 joueurs et plus certains n'en voient
-  presque pas. Avec « Traffic: More », la limite passe à 16 par joueur, au plus 64. Au-delà
-  de 16, une voiture n'apparaît que si le pool de voitures (306 places, jamais vérifié par le
-  moteur) garde de la place pour que chaque autre catégorie atteigne son plafond, et s'il reste
-  48 places de piétons. Vu dans le conteneur, 4 joueurs, 7 min chacun, 27 contrôles de
-  synchronisation « ok » par machine, aucun plantage : en Normal la circulation plafonne à 16
-  (moyenne ~10) ; en More elle monte jusqu'à 32 (moyenne ~22). Le moteur ne va pas jusqu'à 64 :
-  la densité qu'il vise par caméra (taille de la vue) limite avant. Travail par tick 5,3 →
-  5,5 ms. Pas proposé dans gta2-online : les navigateurs ne le connaissent pas.
+  presque pas. Avec « Traffic: More », la limite passe à 16 par joueur, au plus 64 (prudence :
+  pools fixes, CPU des petites consoles). Au-delà de 16, une voiture n'apparaît que si le pool
+  de voitures (306 places, jamais vérifié par le moteur) garde la place de ce qui peut encore en
+  créer à sa propre limite (police, barrages, missions, pompiers, ambulances) plus 48, et s'il
+  reste 48 places de piétons. Le générateur de circulation amène aussi la police de patrouille
+  (un modèle de police parmi la circulation) : une limite toujours atteinte arrête les deux.
+  Première version (11 novembre) : la réserve comptait les voitures garées jusqu'à 200, ce qui
+  bloquait la circulation à exactement 32 ; vu sur 6 consoles (30,2-30,3 ticks/s, synchronisées,
+  plus de voitures partout, mais peu ou pas de police). Les voitures garées viennent avec la
+  carte (une voiture qui devient garée était déjà dans le pool) : la réserve ne les compte plus.
+  Vu dans le conteneur ensuite, 6 joueurs, 7 min chacun, 27 contrôles « ok » par machine, aucun
+  plantage : Normal, circulation 13,8 en moyenne (16 au plus) ; More, 29,1 en moyenne, de 3 à
+  64, plus bloquée. Piétons 29-31 en moyenne (au plus 38). Travail par tick 9,2 → 9,7 ms (le
+  conteneur fait tourner 6 jeux, 18 ticks/s : à mesurer sur console). Police : le jeu aléatoire
+  du test n'a presque pas d'avis de recherche (0,6-0,7 voiture de police en moyenne dans les
+  deux), le retour de la police avec un niveau de recherche reste à voir sur console. Pas
+  proposé dans gta2-online : les navigateurs ne le connaissent pas.
 
 - **`rand()` de la bibliothèque C** (`platform/rand_native.cpp`, 9 novembre) : le natif
   remplace celui de la glibc par celui d'Emscripten (musl), que le build web a. Les nombres
