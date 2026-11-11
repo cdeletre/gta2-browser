@@ -712,6 +712,18 @@ et « Écarts par rapport à l'original » ci-dessous).
 
 ## Écarts par rapport à l'original (natif seulement)
 
+- **More traffic** (gta2-lan, patch natif 0019, 11 novembre ; choix de l'hôte, désactivé par
+  défaut) : l'original permet 16 voitures de circulation pour toute la partie, servies caméra
+  par caméra dans l'ordre des joueurs, si bien qu'à 4 joueurs et plus certains n'en voient
+  presque pas. Avec « Traffic: More », la limite passe à 16 par joueur, au plus 64. Au-delà
+  de 16, une voiture n'apparaît que si le pool de voitures (306 places, jamais vérifié par le
+  moteur) garde de la place pour que chaque autre catégorie atteigne son plafond, et s'il reste
+  48 places de piétons. Vu dans le conteneur, 4 joueurs, 7 min chacun, 27 contrôles de
+  synchronisation « ok » par machine, aucun plantage : en Normal la circulation plafonne à 16
+  (moyenne ~10) ; en More elle monte jusqu'à 32 (moyenne ~22). Le moteur ne va pas jusqu'à 64 :
+  la densité qu'il vise par caméra (taille de la vue) limite avant. Travail par tick 5,3 →
+  5,5 ms. Pas proposé dans gta2-online : les navigateurs ne le connaissent pas.
+
 - **`rand()` de la bibliothèque C** (`platform/rand_native.cpp`, 9 novembre) : le natif
   remplace celui de la glibc par celui d'Emscripten (musl), que le build web a. Les nombres
   aléatoires « du monde » du moteur (`gRng_6F6784` : où naissent les passants, etc.) viennent
