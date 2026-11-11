@@ -730,8 +730,15 @@ et « Écarts par rapport à l'original » ci-dessous).
   64, plus bloquée. Piétons 29-31 en moyenne (au plus 38). Travail par tick 9,2 → 9,7 ms (le
   conteneur fait tourner 6 jeux, 18 ticks/s : à mesurer sur console). Police : le jeu aléatoire
   du test n'a presque pas d'avis de recherche (0,6-0,7 voiture de police en moyenne dans les
-  deux), le retour de la police avec un niveau de recherche reste à voir sur console. Pas
-  proposé dans gta2-online : les navigateurs ne le connaissent pas.
+  deux), le retour de la police avec un niveau de recherche reste à voir sur console.
+  Sur 6 consoles ensuite (Air X, TSP S, RG353VS, CubeXX, RP Mini, R36S ; 18 min, 18 contrôles
+  « ok » chacune) : circulation 13 → 64 en 4 min puis 54-64 ; police 1 à 6 voitures ;
+  propriétaire : « la police, pompiers et ambulances sont bien présents ». Jeu retenu 0,40-0,54 %
+  (CubeXX 0,98 %), comme sans l'option (partie longue : 0,45-0,48 %, CubeXX 0,84 %). Les autres
+  attendent surtout la CubeXX : son travail moyen ne monte pas (13,4 ms par tick contre 14,6),
+  mais ses images de 50 ms ou plus passent de 1,8 % à 10,3 % des fenêtres de 5 s (jusqu'à 84 ms).
+  La R36S elle-même tient (7,2 ms par tick, aucune image de 50 ms) ; les « quelques lags » qu'on
+  y sent sont ces attentes. Pas proposé dans gta2-online : les navigateurs ne le connaissent pas.
 
 - **`rand()` de la bibliothèque C** (`platform/rand_native.cpp`, 9 novembre) : le natif
   remplace celui de la glibc par celui d'Emscripten (musl), que le build web a. Les nombres
