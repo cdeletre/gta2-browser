@@ -63,8 +63,25 @@ log "server code"
 "${SSH[@]}" "$HOST" 'set -e; cd /opt/gta2/server && npm ci --omit=dev --no-audit --no-fund --loglevel=error'
 
 if [[ -n "$WEB" ]]; then
+  # The build going out of service stays in old/<build>/ (the first 24 hex digits of its
+  # gta2.wasm's sha256, as scripts/build_port.py names builds): the Saves screen opens a save
+  # made with it there. old/ is never deleted; the build's leftovers that are not for players
+  # (obj/, objects.rsp, old-local/: earlier local builds, dev/) never go out, and are removed
+  # where an earlier deploy sent them.
+  log "keeping the live build in old/"
+  "${SSH[@]}" "$HOST" 'set -e; cd /opt/gta2/web
+    if [ -f gta2.wasm ]; then
+      b=$(sha256sum gta2.wasm | cut -c1-24)
+      if [ ! -f old/$b/gta2.wasm ]; then
+        mkdir -p old/$b
+        for f in *; do case "$f" in obj|objects.rsp|old|old-local|dev) ;; *) cp -a "$f" old/$b/ ;; esac; done
+        echo "   old/$b"
+      fi
+    fi
+    rm -rf old-local objects.rsp obj dev'
   log "the built game: $WEB"
-  "${RSYNC[@]}" --exclude obj/ "${WEB%/}/" "$HOST:/opt/gta2/web/"
+  "${RSYNC[@]}" --exclude obj/ --exclude objects.rsp --exclude old-local/ --exclude old/ --exclude dev/ \
+    "${WEB%/}/" "$HOST:/opt/gta2/web/"
 fi
 if [[ -n "$GAME" ]]; then
   # data/ only: never the saves (player/, ...); not what the server refuses to serve anyway
