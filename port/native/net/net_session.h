@@ -55,6 +55,7 @@ struct NetConfig
     bool showWaypoints = true;        // other players' waypoints on screen (Options)
     std::string lanPin = "0000";      // gta2-lan: the PIN typed last ([lan] pin)
     bool lanUdp = true;               // gta2-lan: game messages over UDP ([lan] udp; GTA2_LAN_UDP)
+    bool lanTraffic = false;          // gta2-lan: the host's More traffic, chosen last ([lan] traffic)
     std::string path;                 // conf/online.ini or conf/lan.ini
     std::string confDir;              // conf/ (a relative ca_file is there)
 };
