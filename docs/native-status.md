@@ -1256,8 +1256,18 @@ elle en change une rampe de 5 teintes, et la teinte du milieu est celle des chif
 Vu sur une capture à 3 joueurs : violet #5b439f, vert #87d700, bleu #4743cf, comme les scores du
 jeu. Le navigateur aussi (`web/shell.js` : carte, radar, noms, tableau des scores, chat) : la
 couleur du jeu d'abord, puis celle de l'équipe en Gang Wars, puis celle de la place tant que le jeu
-n'en a pas. Côté web, seule la syntaxe de `shell.js` est vérifiée (Node 22) : emsdk n'est pas
-installé ici, le build web n'a pas été refait.
+n'en a pas. Vu : build web release refait (emsdk 6.0.12, conteneur de test 10.20.0.158) ; une
+partie natif (hôte, sans écran) + Chromium (invité) sur son serveur : contrôles identiques, et
+dans le navigateur le point de l'hôte au bord de la minicarte est violet comme son score en $,
+le score du navigateur vert comme sa couleur de joueur.
+
+**Essai C rejoué (10 novembre, délai : seule l'entrée en retard compte)** : délais à 2-3 ticks la
+plupart du temps (5 au plus, une fois), au lieu de 4-7 ; jeu retenu 0,7 à 1,6 % du temps (au
+lieu de 0,3 à 0,6 % avec les délais longs), en à-coups de 100 à 200 ms : « ok, avec un fps
+variable ». Les à-coups culminent à 183-200 ms, le délai minimal de retransmission de TCP sous
+Linux (200 ms), et les trois consoles H700 (RG34XX-H, RG40XX-H, CubeXX) ont 93 à 142
+retransmissions TCP en 6 min, contre 25 à 37 pour les autres : les étapes 1 et 4 (entrées
+répétées, UDP en LAN) visent exactement ça.
 
 ## Reste à faire
 
