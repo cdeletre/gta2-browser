@@ -22,7 +22,9 @@ constexpr double kRoundMs = 2000;     // a report to each player, and a decision
 constexpr unsigned kQuietTicks = 300; // no delay change in the first 10 s (loading speeds differ)
 constexpr int kDownRounds = 5;        // 10 s of a margin of a tick or more before going shorter
 constexpr double kUpHoldMs = 15000;   // no shorter within 15 s of going longer
-constexpr int kHeldMs = 50;           // held up more than this in a round: longer
+constexpr int kHeldMs = 50;           // our inputs late by more than this in a round...
+constexpr int kLateRounds = 2;        // ...in 2 of a player's last 3 reports: longer (one Wi-Fi drop
+                                      // is not mended by a tick more; latency that stays is)
 constexpr double kInStep = 0.5;       // ticks: closer than this to the others, no pacing
 constexpr double kSettled = 1.0;      // ticks: further than this, pacing first, no delay change
 constexpr int kPaceEvery = 2;         // pacing: 1 ms on one tick in 2 (1.5 %)...
@@ -42,6 +44,7 @@ struct Report // what a player said of this machine's inputs
     double avgMargin = 0;
     int delay = 0;
     int round = -1; // the round it came in
+    unsigned late = 0; // bit 0: the last report said late, bit 1 the one before...
 };
 
 Lobby* gLobby = nullptr;
@@ -85,6 +88,7 @@ void Decide(double now, unsigned tick)
     // the pacing: in step with the mean of the others
     double sum = 0;
     int known = 0, others = 0, good = 0, worstHeld = 0;
+    bool lateOften = false;
     for (int s = 0; s < gCount; ++s)
     {
         if (s == gMe || !InGame(s))
@@ -100,6 +104,7 @@ void Decide(double now, unsigned tick)
         if (r.round >= gRound - 1) // came in this round or the last
         {
             worstHeld = std::max(worstHeld, r.heldMs);
+            lateOften = lateOften || __builtin_popcount(r.late & 7u) >= kLateRounds;
             if (gGood[s] >= kDownRounds)
                 ++good;
         }
@@ -122,14 +127,17 @@ void Decide(double now, unsigned tick)
     const int delay = gGta2PortNetInputDelay;
     if (!gOn || tick < kQuietTicks || gStep != 0 || (gOffsetKnown && fabs(gOffset) > kSettled))
         return;
-    if (worstHeld > kHeldMs && delay < gMax)
+    if (lateOften && delay < gMax)
     {
         gStep = 1;
         gLastUp = now;
-        fprintf(stderr, "gta2: net: input delay %d -> %d ticks at tick %u (a player was held up %d ms by ours)\n", delay,
-                delay + 1, tick, worstHeld);
+        fprintf(stderr, "gta2: net: input delay %d -> %d ticks at tick %u (our inputs late in %d of 3 rounds, %d ms last)\n",
+                delay, delay + 1, tick, kLateRounds, worstHeld);
         for (int s = 0; s < gCount; ++s)
+        {
             gGood[s] = 0;
+            gReport[s].late = 0;
+        }
     }
     else if (good == others && delay > gMin && now - gLastUp > kUpHoldMs)
     {
@@ -162,6 +170,7 @@ void NetDelayStart(Lobby* lobby, const Json& match)
         r.avgMargin = avgMargin10 / 10.0;
         r.delay = delay;
         r.round = gRound;
+        r.late = (r.late << 1) | (heldMs > kHeldMs ? 1u : 0u);
         gGood[slot] = heldMs == 0 && minMargin >= 1 ? gGood[slot] + 1 : 0;
     };
     fprintf(stderr, "gta2: net: input delay %s (%d to %d ticks), pacing %s\n", gOn ? "adaptive" : "fixed", gMin, gMax,

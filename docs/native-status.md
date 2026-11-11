@@ -1231,6 +1231,30 @@ différents par joueur, aussi sous ASan + UBSan (rapports UBSan : ceux déjà co
 `gta2-net-test` 169 vérifications. Le rythme n'a pas pu être réglé là : les jeux en rendu
 logiciel n'y tiennent pas 30 ticks/s sans à-coups. À régler sur les consoles.
 
+**Essais sur consoles avec le délai adaptatif (10 novembre)** :
+- A, Air X + RP Mini : délai 2 → 1 vers 12-15 s, puis stable ; jeu retenu 0,1 % ; avance
+  estimée ±0,5 tick ; une retransmission TCP en tout. « Très fluide sur les deux consoles. »
+- B', Air X + G350 : délai 2 → 1, G350 jamais retenue ; le « Waiting for Zed » vu sur la Air X
+  était le chargement (3,0 à 4,3 s) ; pas de coupure Wi-Fi cette fois. « Très fluide. »
+- C, TSP S + RG34XX-H + RG353VS + RG40XX-H + CubeXX : aucune désynchronisation, jeu retenu 0,3 à
+  0,6 %, avance presque toujours sous ±0,5 tick ; mais délais montés à 4-7 ticks (130 à 230 ms),
+  « un peu moins fluide ». 22 à 63 retransmissions TCP par console en 5 min.
+  Cause : était compté comme fautif tout joueur dont l'entrée manquait pendant une attente ; à
+  5, avec la règle qui retient aussi des entrées arrivées à temps (InputDue, 3 joueurs et plus),
+  un seul retard faisait monter tout le monde. Corrigé : seule l'entrée arrivée après l'heure de
+  son tick compte, pour son retard ; et il faut un retard de plus de 50 ms dans 2 des 3 derniers
+  rapports d'un joueur (une coupure isolée ne fait plus monter : un tick de plus ne l'aurait pas
+  évitée). Pas encore revu sur les consoles.
+
+**Couleurs des joueurs (10 novembre)** : les marqueurs, le tableau des scores et les noms du
+chat prenaient les couleurs du navigateur par place (`PLAYER_COLOURS`), qui ne sont pas celles du
+jeu (flèches, scores en $). `platform/player_colour_native.cpp` lit celles du jeu dans le style
+chargé : la palette « user remap » du joueur (`Player::field_790_hud_palette`, celle que
+`ColorScoreFromRemap_569A10` donne à ses chiffres), comparée à la palette neutre (user remap 1) ;
+elle en change une rampe de 5 teintes, et la teinte du milieu est celle des chiffres à l'écran.
+Vu sur une capture à 3 joueurs : violet #5b439f, vert #87d700, bleu #4743cf, comme les scores du
+jeu. Le navigateur a le même écart (non corrigé : `web/shell.js`).
+
 ## Reste à faire
 
 Points 1 à 5 : le jalon 1. Les points 3 et 4 ne le bloquent pas dans le conteneur (montage

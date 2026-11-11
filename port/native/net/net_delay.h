@@ -3,8 +3,10 @@
 // player's inputs as a stream, so a change needs no agreement).
 //
 // Every 2 s each machine tells each other player how their inputs did here: the time its
-// game was held up waiting for them, and the smallest margin they arrived with (ticks before
-// being needed). A player whose inputs held anyone up goes one tick longer; one whose inputs
+// game was held up by their inputs coming in after their tick was due (only the late input is
+// counted), and the smallest margin they arrived with (ticks before being needed). A player whose
+// inputs were late by more than 50 ms in 2 of a player's last 3 reports goes one tick longer (one
+// Wi-Fi drop alone does not: a tick more would not have mended it); one whose inputs
 // had a margin of a tick or more everywhere for 10 s, and no increase in the last 15 s, goes one
 // tick shorter (not below 1). Nothing changes in the first 10 s of a match (loading speeds
 // differ). A browser does not report: with one in the match, the delay can go up, never down.

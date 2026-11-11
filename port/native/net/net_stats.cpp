@@ -11,6 +11,7 @@
 #include "lobby.h"
 #include "net_delay.h"
 
+extern "C" double emscripten_get_now(void);       // platform/time_native.cpp: the main loop's clock
 extern "C" const int32_t* gta2_port_net_debug(); // winmain.cpp (patch 0017): [3] waiting, [4] tick, [6] for whom
 // window_sdl.cpp: the time spent in SDL_GL_SwapWindow so far (none in a headless build)
 extern "C" double Gta2Native_SwapMsTotal() __attribute__((weak));
@@ -207,6 +208,15 @@ void NetStatsGameMessage(int slot, const Bytes& bytes)
     p.slackMin = std::min(p.slackMin, slack);
     p.slackMax = std::max(p.slackMax, slack);
     NetDelayMargin(slot, slack);
+    // the input for the tick this game is waiting for, after that tick was due: late by that much
+    // (only the late input counts: with three players or more, inputs that came in time can be
+    // held back too, behind a late one)
+    if (slack == 0 && gPrevPending && gDue > 0)
+    {
+        const double late = emscripten_get_now() - gDue;
+        if (late > 0)
+            NetDelayHeld(slot, late);
+    }
 }
 
 } // namespace gta2net
@@ -262,10 +272,7 @@ extern "C" void Gta2Net_AfterSlice(double startMs, double endMs)
         gCurWait += held;
         for (int s = 0; s < gCount; ++s)
             if (gPrevWaiting & (1u << s))
-            {
                 gPeers[s].waitMs += held;
-                NetDelayHeld(s, held);
-            }
     }
     if ((!pending || frame != gLastFrame) && gCurWait > 0)
     {
