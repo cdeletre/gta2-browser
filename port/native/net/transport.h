@@ -50,6 +50,7 @@ struct LinkStats
 {
     double rttMs = 0;
     uint32_t retransmits = 0;
+    bool udp = false; // gta2-lan's UDP game messages: their round trip, and the messages sent again
 };
 
 class Transport

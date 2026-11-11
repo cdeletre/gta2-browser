@@ -160,7 +160,7 @@ void Report(double now, uint32_t frame)
         LinkStats link;
         if (gLobby->LinkInfo(s, &link))
         {
-            snprintf(buf, sizeof(buf), ", tcp %.0f ms, %u resent", link.rttMs,
+            snprintf(buf, sizeof(buf), ", %s %.0f ms, %u resent", link.udp ? "udp" : "tcp", link.rttMs,
                      p.linkKnown ? link.retransmits - p.retransStart : 0u);
             line += buf;
         }

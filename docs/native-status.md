@@ -1269,6 +1269,29 @@ Linux (200 ms), et les trois consoles H700 (RG34XX-H, RG40XX-H, CubeXX) ont 93 �
 retransmissions TCP en 6 min, contre 25 à 37 pour les autres : les étapes 1 et 4 (entrées
 répétées, UDP en LAN) visent exactement ça.
 
+### Étapes 1 et 4 : les messages de jeu en UDP (branche `native-multiplayer-udp`, 10 novembre)
+
+`gta2-lan` envoie les messages de jeu (les entrées du lockstep) en UDP quand les deux côtés
+l'ont (le hello dit `udp` : son port, le même numéro que le TCP) ; le lobby, le chat, les
+rapports et les contrôles restent sur TCP. Fiables et dans l'ordre, comme `net_web.cpp` les
+attend : numérotés, gardés jusqu'à l'accusé de réception, et chaque datagramme porte tous ceux
+qui n'en ont pas encore (la redondance : un perdu revient avec le suivant, ou après 30 ms) ; le
+receveur ne prend que la suite et accuse réception dans ses propres datagrammes. L'état UDP est
+par joueur (une connexion TCP peut être remplacée par l'autre, faite au même moment). Un joueur
+qui part envoie sur TCP un `bye` avec le numéro de son dernier message ; les autres n'annoncent
+son départ qu'une fois tout reçu jusque-là (au plus 3 s), sinon le départ pouvait passer avant
+ses dernières entrées et désynchroniser. `[lan] udp = 0` dans `conf/lan.ini` (ou
+`GTA2_LAN_UDP=0`) : tout en TCP, comme avant. `GTA2_LAN_DROP=pourcent` (tests) : ce taux de
+messages de jeu perdu en sortie (UDP : datagramme jeté ; TCP : connexion retenue 200 ms, comme
+une retransmission). Les lignes `net stats` disent `udp` ou `tcp` par lien, avec l'aller-retour et
+les messages renvoyés.
+Vu dans le conteneur : `gta2-net-test` 178 vérifications, aussi avec 20 et 50 % de pertes (300
+messages dans l'ordre ; un joueur qui envoie 40 messages et part aussitôt : les 40 arrivent avant
+son départ), et sous ASan + UBSan ; 3 joueurs, 3 % de pertes, 85 s, aucune désynchronisation :
+TCP 21,5 ticks/s, à-coups jusqu'à 342-398 ms, délais montés à 7-8 ; UDP 26,7 ticks/s, à-coups
+jusqu'à 178-186 ms (les images lentes du conteneur), délais 4-6. À mesurer sur les consoles
+(essai C, `udp = 1` puis `udp = 0`).
+
 ## Reste à faire
 
 Points 1 à 5 : le jalon 1. Les points 3 et 4 ne le bloquent pas dans le conteneur (montage

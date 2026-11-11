@@ -121,6 +121,7 @@ bool JoinLanRoom(const NetConfig& config, const std::string& roomId, const std::
     o.room = room;
     o.name = config.name;
     o.pin = config.lanPin;
+    o.udp = config.lanUdp;
     o.host = host;
     o.seeds = seeds;
     o.port = atoi(Env("GTA2_LAN_PORT", std::to_string(kLanPort).c_str()).c_str());
