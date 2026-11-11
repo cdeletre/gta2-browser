@@ -206,12 +206,12 @@ if(GTA2_MULTIPLAYER)
   target_compile_definitions(gta2_net PRIVATE MBEDTLS_PLATFORM_ZEROIZE_ALT)
   target_link_libraries(gta2_net PUBLIC ${GTA2_MBEDTLS_LIBRARIES})
 
-  gta2_add_game(gta2-online "${NATIVE}/net/coop_native.cpp" "${NATIVE}/net/net_main.cpp" "${NATIVE}/net/lobby_screen.cpp" "${NATIVE}/net/hud_net.cpp")
+  gta2_add_game(gta2-online "${NATIVE}/net/coop_native.cpp" "${NATIVE}/net/net_main.cpp" "${NATIVE}/net/lobby_screen.cpp" "${NATIVE}/net/hud_net.cpp" "${NATIVE}/net/net_stats.cpp" "${NATIVE}/net/net_delay.cpp")
   target_compile_definitions(gta2-online PRIVATE GTA2_NATIVE_NET=1)
   target_link_libraries(gta2-online PRIVATE gta2_net)
 
   # gta2-lan: the local network with no server (net/lan_transport.cpp), its own launcher
-  gta2_add_game(gta2-lan "${NATIVE}/net/coop_native.cpp" "${NATIVE}/net/net_main.cpp" "${NATIVE}/net/lobby_screen.cpp" "${NATIVE}/net/hud_net.cpp")
+  gta2_add_game(gta2-lan "${NATIVE}/net/coop_native.cpp" "${NATIVE}/net/net_main.cpp" "${NATIVE}/net/lobby_screen.cpp" "${NATIVE}/net/hud_net.cpp" "${NATIVE}/net/net_stats.cpp" "${NATIVE}/net/net_delay.cpp")
   target_compile_definitions(gta2-lan PRIVATE GTA2_NATIVE_NET=1 GTA2_NET_LAN=1)
   target_link_libraries(gta2-lan PRIVATE gta2_net)
 

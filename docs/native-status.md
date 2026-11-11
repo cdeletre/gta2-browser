@@ -724,6 +724,16 @@ et « Écarts par rapport à l'original » ci-dessous).
   côtés (D07). Avec la marge d'activation (active par défaut, comme dans le web), les
   limites de la caméra qui décident de l'apparition et de la disparition des peds et des
   voitures couvrent aussi cette hauteur. En 4:3 et plus large, rien ne change.
+- **Rythme des ticks en multijoueur** (patch natif 0018, branche `native-multiplayer-experimental`) :
+  une console en avance sur les autres attend 1 ms de plus un tick sur deux (1,5 % plus lente),
+  une console en retard 1 ms de moins, au plus 30 ms par tranche de 2 s, jusqu'à être à moins
+  d'un demi-tick des autres. Le jeu reste à 30 ticks/s en moyenne. Ce que fait un tick ne change
+  pas ; la partie reste identique sur toutes les machines.
+- **Délai d'entrée variable en multijoueur** (patch natif 0017, même branche) : le délai entre
+  l'appui et l'action de son propre joueur monte ou descend d'un tick en cours de partie (1 à 8),
+  au lieu de rester celui choisi au lancement. Les entrées de chaque joueur forment un flux joué
+  une entrée par tick sur toutes les machines : la partie reste identique partout, un
+  navigateur compris.
 
 Les deux suivants remplacent une lecture hors de son objet, dont le résultat dépendait de ce qui
 suivait en mémoire, par une valeur fixe :
@@ -1158,6 +1168,180 @@ reçu la dernière entrée du partant et pas un autre), consoles, lanceur et paq
 
 Reste : A5 (consoles), A7 (scores, chat, points de passage), puis D1-D4 (transport TCP local,
 découverte UDP, consoles, paquet).
+
+### Lockstep amélioré (branche `native-multiplayer-experimental`)
+
+Plan : 0 mesurer, 1 envoi redondant des entrées, 2 délai d'entrée adaptatif annoncé « au tick T »,
+3 rythme lissé, 4 UDP en LAN, 5 validation ; ensuite le transfert d'état (option 6).
+
+**Étape 0, les mesures (10 novembre)** : `net/net_stats.cpp`, dans gta2-online et gta2-lan. Pendant
+un match, une ligne `gta2: net stats:` toutes les `GTA2_NET_STATS` secondes (5 par défaut, 0 :
+aucune) :
+- ticks joués et cadence (30/s quand rien ne retient le jeu) ;
+- « held up » : le temps où le tick suivant était dû alors qu'une entrée manquait encore, et de
+  qui (attendre une entrée avant l'heure du tick ne coûte rien et n'est pas compté) ;
+- la boucle : itérations, plus grand écart entre deux, travail par itération (jeu et dessin,
+  sans `SDL_GL_SwapWindow`, l'attente de la vsync), avec un tick ou non, temps du swap ;
+- par joueur : entrées reçues, marge (de combien de ticks une entrée arrive avant d'être lue,
+  min/moy/max ; 0 = juste à temps ou attendue), aller-retour mesuré pendant le match (un ping
+  par période, par le même transport que les entrées : `Lobby::PingSlot`).
+Vu dans le conteneur (`scripts/native/test_lan_stats.sh`, deux gta2-lan hors écran en jeu
+aléatoire, `GTA2_SOAK_AIDS=0`, sinon les aides de test désynchronisent au tick 90) : lignes
+cohérentes, aucune désynchronisation ; les chiffres eux-mêmes ne valent rien là (deux jeux en
+rendu logiciel sur un processeur partagé : images jusqu'à 150 ms). Les consoles diront.
+
+**Essais sur consoles (10 novembre, gta2-lan, free-for-all et free roam, 3 à 5 min)** :
+- A, Air X + RP Mini en Wi-Fi, délai 2 : 30,2-30,3 ticks/s ; jeu retenu 0,1 % du temps hors
+  démarrage ; travail par image 1 à 2,5 ms ; aller-retour 17 ms (médiane) ; marges cumulées
+  3,5 ticks pour un délai de 2, donc 1 tick suffit.
+- B, Air X (Wi-Fi) + R36S (Ethernet), délai 1 : 30 ticks/s, R36S à 4,6 ms par image (13 au
+  pire), jamais retenue en cours de partie.
+- B', Air X + G350 en Wi-Fi (dongle), délai 2 : même chose, plus un gel d'environ 1 s vers
+  180 s, sur les deux consoles à la fois, avec un ping de 936 ms : une coupure du lien Wi-Fi.
+  La G350 n'a jamais dépassé 7,7 ms par image.
+- Dans les trois : 1,2 à 1,8 s de blocage au tout début (la console la plus lente finit de
+  charger le niveau), et un délai choisi au lobby qui varie d'une partie à l'autre (2, 1, 2)
+  sur le même réseau : le ping du lobby compte l'attente d'une image de chaque côté.
+Conclusion : ni le processeur ni le réseau ne pèsent en temps normal ; le levier est le délai,
+puis les coupures Wi-Fi (à confirmer par les retransmissions TCP).
+
+**Étapes 2 et 3, le délai adaptatif et le rythme (10 novembre)** : `net/net_delay.cpp`, patches
+natifs 0017 et 0018. Les entrées de chaque joueur forment un flux que toutes les machines
+jouent une entrée par tick (0017 : une file au lieu d'un anneau de taille fixe) : envoyer deux
+fois la même entrée allonge son délai d'un tick, n'en envoyer aucune le raccourcit, sans accord
+entre machines ni changement chez les autres (un navigateur compris). Toutes les 2 s, chaque
+machine dit à chaque autre comment ses entrées sont arrivées (temps retenu, marge mini et
+moyenne, son propre délai : message de lobby `margin`, qu'un navigateur ignore). D'après les
+marges dans les deux sens, chacune sait de combien de ticks elle est en avance ; plus d'un
+demi-tick : elle ralentit ou accélère de 1,5 % (0018), pour la moitié de l'écart, au plus 30 ms
+par tranche. Le délai ne change qu'une fois les machines à moins d'un tick l'une de l'autre :
++1 si une autre a été retenue plus de 50 ms en 2 s par ses entrées, -1 après 10 s de marge d'au
+moins un tick partout et 15 s sans hausse ; rien dans les 10 premières secondes.
+Trouvé en route : sans le rythme, le délai adaptatif empire les choses. Une machine retenue
+parce que l'autre tourne en avance fait allonger le délai de l'autre, ce qui laisse l'avance
+grandir d'autant (vu dans le conteneur : hôte à 1 tick, invité à 6, soit 200 ms de réactivité
+perdue pour lui).
+Les lignes `net stats` donnent aussi le délai, l'avance estimée et, par lien TCP, l'aller-retour
+du noyau et les segments renvoyés (`TCP_INFO`). Le HUD affiche « Waiting for <nom>... » après
+une demi-seconde d'attente. `GTA2_NET_ADAPT=0`, `GTA2_NET_PACE=0`, `GTA2_NET_DELAY_MIN/MAX`,
+`GTA2_NET_START_DELAY` (tests).
+Vu dans le conteneur (`PLAYERS=2|3 scripts/native/test_lan_stats.sh`, départ à 3 ou 4 ticks) :
+délais qui descendent (4 → 2, 4 → 3), aucune désynchronisation à 2 et 3 joueurs avec des délais
+différents par joueur, aussi sous ASan + UBSan (rapports UBSan : ceux déjà connus du moteur) ;
+`gta2-net-test` 169 vérifications. Le rythme n'a pas pu être réglé là : les jeux en rendu
+logiciel n'y tiennent pas 30 ticks/s sans à-coups. À régler sur les consoles.
+
+**Essais sur consoles avec le délai adaptatif (10 novembre)** :
+- A, Air X + RP Mini : délai 2 → 1 vers 12-15 s, puis stable ; jeu retenu 0,1 % ; avance
+  estimée ±0,5 tick ; une retransmission TCP en tout. « Très fluide sur les deux consoles. »
+- B', Air X + G350 : délai 2 → 1, G350 jamais retenue ; le « Waiting for Zed » vu sur la Air X
+  était le chargement (3,0 à 4,3 s) ; pas de coupure Wi-Fi cette fois. « Très fluide. »
+- C, TSP S + RG34XX-H + RG353VS + RG40XX-H + CubeXX : aucune désynchronisation, jeu retenu 0,3 à
+  0,6 %, avance presque toujours sous ±0,5 tick ; mais délais montés à 4-7 ticks (130 à 230 ms),
+  « un peu moins fluide ». 22 à 63 retransmissions TCP par console en 5 min.
+  Cause : était compté comme fautif tout joueur dont l'entrée manquait pendant une attente ; à
+  5, avec la règle qui retient aussi des entrées arrivées à temps (InputDue, 3 joueurs et plus),
+  un seul retard faisait monter tout le monde. Corrigé : seule l'entrée arrivée après l'heure de
+  son tick compte, pour son retard ; et il faut un retard de plus de 50 ms dans 2 des 3 derniers
+  rapports d'un joueur (une coupure isolée ne fait plus monter : un tick de plus ne l'aurait pas
+  évitée). Pas encore revu sur les consoles.
+
+**Couleurs des joueurs (10 novembre)** : les marqueurs, le tableau des scores et les noms du
+chat prenaient les couleurs du navigateur par place (`PLAYER_COLOURS`), qui ne sont pas celles du
+jeu (flèches, scores en $). `gta2_port_player_colour` (`port/platform/coop_web.cpp`, partagé avec le
+web) lit celles du jeu dans le style
+chargé : la palette « user remap » du joueur (`Player::field_790_hud_palette`, celle que
+`ColorScoreFromRemap_569A10` donne à ses chiffres), comparée à la palette neutre (user remap 1) ;
+elle en change une rampe de 5 teintes, et la teinte du milieu est celle des chiffres à l'écran.
+Vu sur une capture à 3 joueurs : violet #5b439f, vert #87d700, bleu #4743cf, comme les scores du
+jeu. Le navigateur aussi (`web/shell.js` : carte, radar, noms, tableau des scores, chat) : la
+couleur du jeu d'abord, puis celle de l'équipe en Gang Wars, puis celle de la place tant que le jeu
+n'en a pas. Vu : build web release refait (emsdk 6.0.12, conteneur de test 10.20.0.158) ; une
+partie natif (hôte, sans écran) + Chromium (invité) sur son serveur : contrôles identiques, et
+dans le navigateur le point de l'hôte au bord de la minicarte est violet comme son score en $,
+le score du navigateur vert comme sa couleur de joueur.
+
+**Essai C rejoué (10 novembre, délai : seule l'entrée en retard compte)** : délais à 2-3 ticks la
+plupart du temps (5 au plus, une fois), au lieu de 4-7 ; jeu retenu 0,7 à 1,6 % du temps (au
+lieu de 0,3 à 0,6 % avec les délais longs), en à-coups de 100 à 200 ms : « ok, avec un fps
+variable ». Les à-coups culminent à 183-200 ms, le délai minimal de retransmission de TCP sous
+Linux (200 ms), et les trois consoles H700 (RG34XX-H, RG40XX-H, CubeXX) ont 93 à 142
+retransmissions TCP en 6 min, contre 25 à 37 pour les autres : les étapes 1 et 4 (entrées
+répétées, UDP en LAN) visent exactement ça.
+
+### Étapes 1 et 4 : les messages de jeu en UDP (branche `native-multiplayer-udp`, 10 novembre)
+
+`gta2-lan` envoie les messages de jeu (les entrées du lockstep) en UDP quand les deux côtés
+l'ont (le hello dit `udp` : son port, le même numéro que le TCP) ; le lobby, le chat, les
+rapports et les contrôles restent sur TCP. Fiables et dans l'ordre, comme `net_web.cpp` les
+attend : numérotés, gardés jusqu'à l'accusé de réception, et chaque datagramme porte tous ceux
+qui n'en ont pas encore (la redondance : un perdu revient avec le suivant, ou après 30 ms) ; le
+receveur ne prend que la suite et accuse réception dans ses propres datagrammes. L'état UDP est
+par joueur (une connexion TCP peut être remplacée par l'autre, faite au même moment). Un joueur
+qui part envoie sur TCP un `bye` avec le numéro de son dernier message ; les autres n'annoncent
+son départ qu'une fois tout reçu jusque-là (au plus 3 s), sinon le départ pouvait passer avant
+ses dernières entrées et désynchroniser. `[lan] udp = 0` dans `conf/lan.ini` (ou
+`GTA2_LAN_UDP=0`) : tout en TCP, comme avant. `GTA2_LAN_DROP=pourcent` (tests) : ce taux de
+messages de jeu perdu en sortie (UDP : datagramme jeté ; TCP : connexion retenue 200 ms, comme
+une retransmission). Les lignes `net stats` disent `udp` ou `tcp` par lien, avec l'aller-retour et
+les messages renvoyés.
+Vu dans le conteneur : `gta2-net-test` 178 vérifications, aussi avec 20 et 50 % de pertes (300
+messages dans l'ordre ; un joueur qui envoie 40 messages et part aussitôt : les 40 arrivent avant
+son départ), et sous ASan + UBSan ; 3 joueurs, 3 % de pertes, 85 s, aucune désynchronisation :
+TCP 21,5 ticks/s, à-coups jusqu'à 342-398 ms, délais montés à 7-8 ; UDP 26,7 ticks/s, à-coups
+jusqu'à 178-186 ms (les images lentes du conteneur), délais 4-6.
+Essai C sur consoles (10 novembre), mêmes 5 consoles et même Wi-Fi, l'un après l'autre, hors
+chargement, aucune désynchronisation :
+
+| | TCP (`udp = 0`) | UDP |
+|---|---|---|
+| jeu retenu | 1,26 % | 0,65 % |
+| arrêts par minute et par console | 54,5 | 31,0 |
+| fenêtres de 5 s avec un arrêt ≥ 100 ms | 58 (1,38/min) | 13 (0,28/min) |
+| retransmissions TCP par console | 55 à 220 | — |
+
+Les consoles H700 gagnent le plus (RG34XX-H 1,91 → 0,89 %, RG40XX-H 1,63 → 0,84 %, fenêtres
+≥ 100 ms 20 → 5 et 23 → 5). Délais 1-3 ticks dans les deux. Propriétaire : en TCP « plein de micro
+lag, pas très fluide » ; « en UDP l'expérience était vraiment meilleure ». Objectifs fixés (sous
+0,5 % retenu, aucun arrêt ≥ 100 ms) en partie atteints : il reste un arrêt de 100 ms ou plus toutes
+les 3-4 min par console (les plus longs, 226 et 368 ms, ressemblent à des coupures du Wi-Fi), et
+~30 attentes de 7 à 19 ms par minute (le rythme entre consoles, pas le réseau). UDP gardé, par
+défaut.
+
+### Étape 5 : validation, partie longue (observé, 10-11 novembre)
+
+`gta2-lan` e89b181f, UDP, free-for-all Downtown à 5 joueurs : Air X (SD865), RP Mini (SD865),
+CubeXX (H700, muOS), RG353VS (RK3566, Panfrost), R36S (RK3326, en Ethernet), les autres en Wi-Fi.
+**7 h 22 de jeu (26 500 s, 803 000 ticks), à 30,3 ticks/s, aucune désynchronisation** : 441 à
+443 contrôles par console, tous « ok » ; ~3,2 millions de messages envoyés par console, rien de
+perdu. Les départs en fin de partie, chacun vu par tous les restants au même tick (Kdog, Ace, Moose
+puis Nina ; la R36S, dernière, seule).
+
+| console | jeu retenu | arrêts/min | fenêtres de 5 s avec un arrêt ≥ 100 ms | temps au délai 1 |
+|---|---|---|---|---|
+| R36S (Ethernet) | 0,45 % | 10,6 | 249 (0,56/min) | 92 % |
+| Air X | 0,46 % | 16,5 | 261 (0,59/min) | 86 % |
+| RP Mini | 0,46 % | 15,0 | 278 (0,63/min) | 88 % |
+| RG353VS | 0,48 % | 19,1 | 269 (0,61/min) | 81 % |
+| CubeXX | 0,84 % | 16,0 | 624 (1,41/min) | 50 % |
+
+- Stable sur la durée : heure par heure, 0,36 à 0,63 % retenu (CubeXX 0,70 à 1,06 %), pas de
+  dérive ni de dégradation.
+- Délai : 5 → 1 en 10 à 40 s au départ ; ensuite des montées à 2-3 pendant quelques dizaines de
+  secondes, qui redescendent. Le pire, vers 6 h 16 : 2-3 min de Wi-Fi perturbé (attentes de 500
+  à 900 ms sur les 5 consoles au même moment), CubeXX et RG353VS montent à 6, revenues à 1 en
+  ~60 s.
+- Les arrêts de 200 à 530 ms tombent aux mêmes instants sur toutes les consoles : le Wi-Fi commun,
+  pas une console. Les arrêts de 1,1 à 2,6 s ne sont qu'au chargement (première fenêtre).
+- CubeXX : elle attend les 4 autres à parts égales, donc la cause est chez elle ; sur les 100
+  premières minutes, 91 fenêtres sur 1 200 ont une image de 40 ms ou plus (jusqu'à 91 ms), les à-coups de rendu
+  de la H700 la mettent en retard. Elle est la seule à passer la moitié du temps au délai 2.
+- UDP : ~2 000 à 2 800 messages renvoyés par minute et par console, sans effet visible (chaque
+  datagramme reprend tout ce qui n'est pas accusé).
+
+Comparé à l'essai C en UDP (4 consoles, 0,65 % retenu, 31 arrêts/min) : moins d'attente avec un
+joueur de plus. L'option 1 est validée pour le LAN. Reste : les arrêts de la CubeXX (son rendu,
+pas le réseau), et gta2-online depuis un partage 4G.
 
 ## Reste à faire
 

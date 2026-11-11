@@ -74,6 +74,7 @@ extern "C" bool Gta2Net_EndRequested();
 extern "C" void Gta2Net_MatchOverScreen(); // net/hud_net.cpp
 #endif
 extern "C" void Gta2Net_Frame(double nowMs);
+extern "C" void Gta2Net_AfterSlice(double startMs, double endMs); // net/net_stats.cpp
 extern "C" void Gta2Net_Status(char* out, int size);
 #endif
 #if !defined(GTA2_NATIVE_HEADLESS)
@@ -357,6 +358,9 @@ int main(int argc, char** argv)
 
         const unsigned before = gta2_port_present_count();
         const int slice = Gta2Port_RunLoopSlice();
+#if defined(GTA2_NATIVE_NET)
+        Gta2Net_AfterSlice(tGame, emscripten_get_now());
+#endif
         if (logStalls)
         {
             const double end = emscripten_get_now();

@@ -533,6 +533,12 @@ void WsTransport::OnBinary(const Bytes& data)
         onMessage(from, Message::Of(Bytes(data.begin() + 1 + data[0], data.end())));
 }
 
+bool WsTransport::LinkInfo(const std::string& id, LinkStats* out) const
+{
+    (void)id; // one connection to the server for everyone
+    return mConn && TcpLinkInfo(mConn->Fd(), out);
+}
+
 void WsTransport::Poll()
 {
     Flush();

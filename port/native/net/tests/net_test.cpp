@@ -499,9 +499,48 @@ void TestLan()
     CHECK_EQ(why, std::string("pin"));
     CHECK(joined[a->Id()].size() == 2);
     x.reset();
+    // game messages over UDP: all of them, in order
+    LinkStats link;
+    CHECK(a->UdpPort() > 0 && a->LinkInfo(b->Id(), &link) && link.udp);
+    std::vector<int> order;
+    a->onMessage = [&](const std::string& from, const Message& m) {
+        if (from == b->Id() && m.binary && m.bytes.size() == 2)
+            order.push_back(m.bytes[0] | (m.bytes[1] << 8));
+    };
+    for (int i = 0; i < 300; ++i)
+        b->Send(a->Id(), Message::Of(Bytes{static_cast<uint8_t>(i), static_cast<uint8_t>(i >> 8)}));
+    CHECK(PumpAll(all, [&] { return order.size() == 300; }));
+    bool inOrder = order.size() == 300;
+    for (size_t i = 0; i < order.size(); ++i)
+        inOrder = inOrder && order[i] == static_cast<int>(i);
+    CHECK(inOrder);
+    fprintf(stderr, "  lan udp: %zu game messages in order\n", order.size());
+    // C sends its last game messages and leaves at once: A and B take them all before its departure
+    std::map<std::string, std::vector<std::string>> events;
+    for (LanTransport* t : {a.get(), b.get()})
+    {
+        const std::string me = t->Id();
+        const std::string cid = c->Id();
+        t->onMessage = [&events, me, cid](const std::string& from, const Message& m) {
+            if (from == cid && m.binary)
+                events[me].push_back("m");
+        };
+        t->onPeerLeft = [&events, &left, me](const std::string& id) {
+            events[me].push_back("left");
+            left[me].push_back(id);
+        };
+    }
+    for (int i = 0; i < 40; ++i)
+        c->Send("", Message::Of(Bytes{3, static_cast<uint8_t>(i), 0, 0, 0, 0}));
     // C leaves: A and B see it go
     c->Leave();
     CHECK(PumpAll({a.get(), b.get()}, [&] { return left[a->Id()].size() == 1 && left[b->Id()].size() == 1; }));
+    for (LanTransport* t : {a.get(), b.get()})
+    {
+        const std::vector<std::string>& e = events[t->Id()];
+        CHECK_EQ(e.size(), size_t(41));
+        CHECK(!e.empty() && e.back() == "left");
+    }
     c.reset();
     b.reset();
     a.reset();
@@ -665,6 +704,11 @@ void TestNetConfig()
     CHECK_EQ(mLan.rooms.size(), size_t(2));
     const std::string lanText = ReadFile(dir + "/lan.ini");
     CHECK(lanText.find("pin = 4321") != std::string::npos);
+    CHECK(mLan.lanUdp && lanText.find("udp = 1") != std::string::npos); // UDP by default
+    {
+        std::ofstream(dir + "/lan.ini", std::ios::app) << "[lan]\nudp = 0\n";
+        CHECK(!LoadNetConfig(dir, NetKind::kLan).lanUdp);
+    }
     CHECK(lanText.find("[server]") == std::string::npos && lanText.find("server =") == std::string::npos &&
           lanText.find("password") == std::string::npos);
     CHECK(access((dir + "/net.ini").c_str(), F_OK) != 0 && access((dir + "/net.ini.old").c_str(), F_OK) == 0);

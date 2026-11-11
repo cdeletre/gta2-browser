@@ -14,6 +14,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <deque>
 #include <random>
 
 #include "lobby.h" // kCoopVersion
@@ -32,6 +33,7 @@ enum FrameType
     kPong = 5,    // n
     kPeers = 6,   // [{id, address}]: the members this one is connected to
     kRefused = 7, // {why}: pin, room, full
+    kBye = 8,     // the number of this player's last game message over UDP: it is leaving
 };
 
 constexpr size_t kMaxFrame = 1u << 20;
@@ -39,6 +41,34 @@ constexpr int kMaxPeers = 11;           // 12 players a room, as the relay
 constexpr double kBeaconEveryMs = 1000;
 constexpr double kForgetMs = 5000;      // a room or member not heard for this long is gone
 constexpr double kRedialMs = 5000;      // an address is tried again after this long
+// UDP game messages
+constexpr double kResendMs = 30;        // unacknowledged ones go again after this long
+constexpr double kAckMs = 10;           // an acknowledgement alone, when nothing else goes
+constexpr double kLeaveWaitMs = 3000;   // a leaving player's last game messages, awaited this long
+constexpr size_t kMaxDatagram = 1200;
+constexpr int kMaxPerDatagram = 64;
+constexpr double kTcpStallMs = 200;     // GTA2_LAN_DROP over TCP: a retransmission's wait
+
+// GTA2_LAN_DROP=percent: true for that share of the calls (tests)
+bool Lose()
+{
+    static const double share = getenv("GTA2_LAN_DROP") ? atof(getenv("GTA2_LAN_DROP")) / 100.0 : 0.0;
+    static std::mt19937 rng(std::random_device{}());
+    return share > 0 && std::uniform_real_distribution<double>(0, 1)(rng) < share;
+}
+
+void Put32(std::string& s, uint32_t v)
+{
+    s += static_cast<char>(v >> 24);
+    s += static_cast<char>(v >> 16);
+    s += static_cast<char>(v >> 8);
+    s += static_cast<char>(v);
+}
+
+uint32_t Get32(const unsigned char* p)
+{
+    return (static_cast<uint32_t>(p[0]) << 24) | (static_cast<uint32_t>(p[1]) << 16) | (static_cast<uint32_t>(p[2]) << 8) | p[3];
+}
 
 void NonBlocking(int fd)
 {
@@ -195,7 +225,48 @@ struct LanTransport::Peer
     bool joined = false;     // both hellos done: a member of the room
     bool dead = false;       // closed; removed after the poll
     std::string in, out;
+    double holdUntil = 0;    // GTA2_LAN_DROP over TCP: nothing goes out before
 };
+
+// A player's UDP game messages. A datagram: "G2", version 1, the sender's id (length, bytes),
+// the last number it took from us in order (4 bytes), a count, then per message its number
+// (4 bytes), length (2 bytes) and bytes. Numbers start at 1.
+struct LanTransport::UdpLink
+{
+    sockaddr_in addr = {};
+    struct Out
+    {
+        uint32_t seq;
+        std::string bytes;
+        double firstSent;
+        int sends;
+    };
+    std::deque<Out> unacked; // oldest first
+    uint32_t nextSeq = 1;    // the next number to give
+    uint32_t expected = 1;   // the next number to take
+    double lastSend = 0;
+    bool ackDue = false;     // something came that the other side should hear we took
+    uint32_t resent = 0;     // messages sent more than once
+    double rtt = 0;          // smoothed, from the acknowledgements
+};
+
+bool LanTransport::LinkInfo(const std::string& id, LinkStats* out) const
+{
+    auto link = mLinks.find(id);
+    if (link != mLinks.end())
+    {
+        out->udp = true;
+        out->rttMs = link->second->rtt;
+        out->retransmits = link->second->resent;
+        return true;
+    }
+    for (const auto& p : mPeers)
+    {
+        if (p->id == id && p->joined && !p->dead)
+            return TcpLinkInfo(p->fd, out);
+    }
+    return false;
+}
 
 std::unique_ptr<LanTransport> LanTransport::Create(const LanOptions& o, LanDiscovery* discovery, std::string* error)
 {
@@ -234,8 +305,32 @@ LanTransport::LanTransport(const LanOptions& o, LanDiscovery* discovery, int lis
     if (mOpt.roomId.empty() && mOpt.host)
         mOpt.roomId = mId; // a new room: this player's id
     // (a guest with no room id joins by address: it takes the room of the first that answers)
-    fprintf(stderr, "gta2: lan: room \"%s\" (%s) on TCP %d%s\n", mOpt.room.c_str(), mOpt.roomId.c_str(), mPort,
-            mOpt.host ? ", hosting" : "");
+    OpenUdp();
+    fprintf(stderr, "gta2: lan: room \"%s\" (%s) on TCP %d%s%s\n", mOpt.room.c_str(), mOpt.roomId.c_str(), mPort,
+            mUdpPort ? ", game messages over UDP" : ", game messages over TCP", mOpt.host ? ", hosting" : "");
+}
+
+void LanTransport::OpenUdp()
+{
+    const char* env = getenv("GTA2_LAN_UDP");
+    if (env ? atoi(env) == 0 : !mOpt.udp)
+        return;
+    const int fd = socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
+    if (fd < 0)
+        return;
+    sockaddr_in a = {};
+    a.sin_family = AF_INET;
+    a.sin_port = htons(static_cast<uint16_t>(mPort)); // the TCP port's number (another space)
+    a.sin_addr.s_addr = htonl(INADDR_ANY);
+    if (bind(fd, reinterpret_cast<sockaddr*>(&a), sizeof(a)) != 0)
+    {
+        fprintf(stderr, "gta2: lan: no UDP on port %d (%s): game messages over TCP\n", mPort, strerror(errno));
+        close(fd);
+        return;
+    }
+    NonBlocking(fd);
+    mUdp = fd;
+    mUdpPort = mPort;
 }
 
 LanTransport::~LanTransport()
@@ -252,6 +347,8 @@ Json LanTransport::Hello() const
     h.Set("port", mPort);
     h.Set("name", mOpt.name);
     h.Set("v", kCoopVersion);
+    if (mUdpPort)
+        h.Set("udp", mUdpPort);
     return h;
 }
 
@@ -325,7 +422,9 @@ void LanTransport::SendFrame(Peer& p, int type, const std::string& payload)
                           static_cast<char>(n), static_cast<char>(type)};
     p.out.append(head, 5);
     p.out += payload;
-    if (!p.connecting)
+    if (type == kBinary && Lose())
+        p.holdUntil = NowMs() + kTcpStallMs; // as a lost segment holds a TCP connection
+    if (!p.connecting && NowMs() >= p.holdUntil)
     {
         // what the socket takes now; the rest on the next poll
         while (!p.out.empty())
@@ -355,6 +454,24 @@ void LanTransport::Drop(Peer& p, const char* why)
         if (o.get() != &p && !o->dead && (o->id == who || (o->id.empty() && o->expect == who)))
             return;
     }
+    // said bye: its game messages up to that number come first (over UDP, they can be behind)
+    auto bye = mLeaving.find(who);
+    auto link = mLinks.find(who);
+    if (bye != mLeaving.end() && link != mLinks.end() && link->second->expected - 1 < bye->second.lastSeq)
+    {
+        bye->second.since = NowMs();
+        bye->second.why = why;
+        return;
+    }
+    Departed(who, why);
+}
+
+void LanTransport::Departed(const std::string& who, const char* why)
+{
+    mLeaving.erase(who);
+    mLinks.erase(who);
+    if (!mMembers.count(who))
+        return;
     mMembers.erase(who);
     fprintf(stderr, "gta2: lan: %s left (%s)\n", who.c_str(), why);
     if (onPeerLeft)
@@ -434,6 +551,18 @@ void LanTransport::Handle(Peer& p, int type, const std::string& payload)
         if (!p.outgoing)
             SendPeers(p);
         p.joined = true;
+        if (mUdp >= 0 && h["udp"].Int() > 0 && h["udp"].Int() < 65536)
+        {
+            sockaddr_in a;
+            const std::string ip = p.address.substr(0, p.address.rfind(':'));
+            if (SplitAddress(ip + ":" + std::to_string(h["udp"].Int()), &a))
+            {
+                std::unique_ptr<UdpLink>& link = mLinks[id];
+                if (!link)
+                    link = std::make_unique<UdpLink>();
+                link->addr = a;
+            }
+        }
         if (!mMembers.count(id))
         {
             mMembers.insert(id);
@@ -482,6 +611,10 @@ void LanTransport::Handle(Peer& p, int type, const std::string& payload)
                 ping.ok(NowMs() - ping.start);
         }
     }
+    else if (type == kBye)
+    {
+        mLeaving[p.id] = {static_cast<uint32_t>(strtoul(payload.c_str(), nullptr, 10)), NowMs(), "left"};
+    }
     else if (type == kPeers)
     {
         Json list;
@@ -503,10 +636,130 @@ void LanTransport::Send(const std::string& to, const Message& m)
     if (to == "@server")
         return; // the game server's (the live score): there is none here
     const std::string payload = m.binary ? std::string(m.bytes.begin(), m.bytes.end()) : m.json.Dump();
+    const double now = NowMs();
     for (const auto& p : mPeers)
     {
-        if (!p->dead && p->joined && (to.empty() || p->id == to))
+        if (p->dead || !p->joined || (!to.empty() && p->id != to))
+            continue;
+        auto link = m.binary ? mLinks.find(p->id) : mLinks.end();
+        if (link != mLinks.end())
+        {
+            UdpLink& l = *link->second;
+            l.unacked.push_back({l.nextSeq++, payload, now, 0});
+            SendUdp(p->id, now);
+        }
+        else
+        {
             SendFrame(*p, m.binary ? kBinary : kText, payload);
+        }
+    }
+}
+
+void LanTransport::SendUdp(const std::string& id, double now)
+{
+    auto it = mLinks.find(id);
+    if (it == mLinks.end() || mUdp < 0)
+        return;
+    UdpLink& l = *it->second;
+    std::string d = "G2";
+    d += static_cast<char>(1);
+    d += static_cast<char>(mId.size());
+    d += mId;
+    Put32(d, l.expected - 1);
+    const size_t countAt = d.size();
+    d += static_cast<char>(0);
+    int count = 0;
+    for (UdpLink::Out& o : l.unacked)
+    {
+        if (count == kMaxPerDatagram || d.size() + 6 + o.bytes.size() > kMaxDatagram)
+            break;
+        Put32(d, o.seq);
+        d += static_cast<char>(o.bytes.size() >> 8);
+        d += static_cast<char>(o.bytes.size());
+        d += o.bytes;
+        if (o.sends++ == 1)
+            ++l.resent;
+        ++count;
+    }
+    d[countAt] = static_cast<char>(count);
+    l.lastSend = now;
+    l.ackDue = false;
+    if (!Lose())
+        sendto(mUdp, d.data(), d.size(), 0, reinterpret_cast<const sockaddr*>(&l.addr), sizeof(l.addr));
+}
+
+void LanTransport::PollUdp(double now)
+{
+    for (int n = 0; mUdp >= 0 && n < 256; ++n)
+    {
+        unsigned char buf[2048];
+        sockaddr_in from = {};
+        socklen_t len = sizeof(from);
+        const ssize_t got = recvfrom(mUdp, buf, sizeof(buf), 0, reinterpret_cast<sockaddr*>(&from), &len);
+        if (got <= 0)
+            break;
+        const size_t size = static_cast<size_t>(got);
+        if (size < 4 || buf[0] != 'G' || buf[1] != '2' || buf[2] != 1 || size < 4u + buf[3] + 5)
+            continue;
+        const std::string id(reinterpret_cast<const char*>(buf + 4), buf[3]);
+        auto it = mLinks.find(id);
+        if (it == mLinks.end() || it->second->addr.sin_addr.s_addr != from.sin_addr.s_addr)
+            continue; // not a player of this room, or not from where it said it is
+        UdpLink& l = *it->second;
+        size_t at = 4u + buf[3];
+        const uint32_t ack = Get32(buf + at);
+        const int count = buf[at + 4];
+        at += 5;
+        // acknowledged: gone from the queue (the round trip from those sent once)
+        while (!l.unacked.empty() && static_cast<int32_t>(ack - l.unacked.front().seq) >= 0)
+        {
+            const UdpLink::Out& o = l.unacked.front();
+            if (o.sends == 1)
+                l.rtt = l.rtt == 0 ? now - o.firstSent : l.rtt * 0.875 + (now - o.firstSent) * 0.125;
+            l.unacked.pop_front();
+        }
+        const bool deliver = mMembers.count(id) != 0;
+        for (int i = 0; i < count && at + 6 <= size; ++i)
+        {
+            const uint32_t seq = Get32(buf + at);
+            const size_t n2 = (static_cast<size_t>(buf[at + 4]) << 8) | buf[at + 5];
+            at += 6;
+            if (at + n2 > size)
+                break;
+            if (seq == l.expected)
+            {
+                ++l.expected;
+                if (deliver && onMessage)
+                    onMessage(id, Message::Of(Bytes(buf + at, buf + at + n2)));
+            }
+            l.ackDue = true;
+            at += n2;
+        }
+    }
+    for (auto& [id, link] : mLinks)
+    {
+        UdpLink& l = *link;
+        if ((!l.unacked.empty() && now - l.lastSend >= kResendMs) || (l.ackDue && now - l.lastSend >= kAckMs))
+            SendUdp(id, now);
+    }
+    // the players who said bye: gone once their last game messages are in (or it took too long)
+    std::vector<std::string> gone;
+    for (const auto& entry : mLeaving)
+    {
+        const std::string& id = entry.first;
+        const Leaving& leaving = entry.second;
+        auto link = mLinks.find(id);
+        const bool connected = std::any_of(mPeers.begin(), mPeers.end(),
+                                           [&id](const std::unique_ptr<Peer>& p) { return !p->dead && p->id == id; });
+        if (connected)
+            continue; // still on TCP: Drop decides
+        if (link == mLinks.end() || link->second->expected - 1 >= leaving.lastSeq || now - leaving.since > kLeaveWaitMs)
+            gone.push_back(id);
+    }
+    for (const std::string& id : gone)
+    {
+        const std::string why = mLeaving[id].why;
+        Departed(id, why.c_str());
     }
 }
 
@@ -529,6 +782,28 @@ void LanTransport::Ping(const std::string& id, std::function<void(double)> ok, s
 
 void LanTransport::Leave()
 {
+    // the others hear how many game messages to wait for, and those not acknowledged yet go
+    // again for up to half a second (no message is delivered meanwhile: this player is leaving)
+    if (mUdp >= 0 && !mLinks.empty())
+    {
+        for (auto& p : mPeers)
+        {
+            auto link = p->dead || !p->joined ? mLinks.end() : mLinks.find(p->id);
+            if (link != mLinks.end())
+                SendFrame(*p, kBye, std::to_string(link->second->nextSeq - 1));
+        }
+        const double until = NowMs() + 500;
+        auto pending = [this] {
+            return std::any_of(mLinks.begin(), mLinks.end(), [](const auto& l) { return !l.second->unacked.empty(); });
+        };
+        mMembers.clear(); // nothing delivered from here on
+        while (pending() && NowMs() < until)
+        {
+            PollUdp(NowMs());
+            pollfd f = {mUdp, POLLIN, 0};
+            poll(&f, 1, 10);
+        }
+    }
     for (auto& p : mPeers)
     {
         if (!p->dead && p->fd >= 0)
@@ -544,6 +819,11 @@ void LanTransport::Leave()
     if (mListen >= 0)
         close(mListen);
     mListen = -1;
+    if (mUdp >= 0)
+        close(mUdp);
+    mUdp = -1;
+    mLinks.clear();
+    mLeaving.clear();
     mJoined = false;
 }
 
@@ -615,7 +895,7 @@ void LanTransport::Poll()
                 SendFrame(p, kHello, Hello().Dump());
                 p.helloSent = true;
             }
-            if (!p.out.empty() && (ev & POLLOUT))
+            if (!p.out.empty() && (ev & POLLOUT) && now >= p.holdUntil)
             {
                 const ssize_t w = send(p.fd, p.out.data(), p.out.size(), MSG_NOSIGNAL);
                 if (w > 0)
@@ -671,6 +951,7 @@ void LanTransport::Poll()
     }
     mPeers.erase(std::remove_if(mPeers.begin(), mPeers.end(), [](const std::unique_ptr<Peer>& p) { return p->dead; }),
                  mPeers.end());
+    PollUdp(now);
     // unanswered pings
     for (auto it = mPings.begin(); it != mPings.end();)
     {

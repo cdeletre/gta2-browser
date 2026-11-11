@@ -41,6 +41,7 @@ extern "C" void gta2_js_present(const void* cmdData, int cmdCount, const void* v
 extern "C" const int32_t* gta2_port_coop_players(); // port/platform/coop_web.cpp
 extern "C" bool Gta2Native_PadAPressed();           // input_sdl.cpp
 extern "C" const int32_t* gta2_dev_state();          // port/platform/dev_hooks.cpp: player
+extern "C" int gta2_port_player_colour(int slot); // port/platform/coop_web.cpp: 0xRRGGBB, or -1
 extern "C" s32 gGta2PortDrawnCam[2]; // port_interpolation.cpp: the camera's x, y as last drawn
 
 namespace gta2net
@@ -53,6 +54,17 @@ constexpr size_t kChatLines = 4;
 // Player colours by slot, as web/shell.js PLAYER_COLOURS (#4fc3ff, #ff6b6b, ...), as ABGR.
 const uint32_t kColours[6] = {0xffffc34f, 0xff6b6bff, 0xff81e07e, 0xffff92c7, 0xff4da9ff, 0xffd97aff};
 const uint32_t kWhite = 0xffffffff, kGrey = 0xffa0a0a0, kYellow = 0xff30d0ff;
+
+// A player's colour: the game's own (their arrow and their score in $, from the style), or the
+// browser's colour for their slot until the game has one.
+uint32_t ColourOf(int slot)
+{
+    const int rgb = gta2_port_player_colour(slot);
+    if (rgb < 0)
+        return kColours[slot % 6];
+    // the overlay takes 0xAABBGGRR
+    return 0xff000000u | ((rgb & 0xff) << 16) | (rgb & 0xff00) | ((rgb >> 16) & 0xff);
+}
 
 struct ChatLine
 {
@@ -148,7 +160,7 @@ std::vector<Row> Standings(std::string* title)
             continue;
         if (o[0])
         {
-            players.push_back({NameOf(s) + (s == me ? " (you)" : ""), o[7], o[8], o[11], kColours[s], s == me});
+            players.push_back({NameOf(s) + (s == me ? " (you)" : ""), o[7], o[8], o[11], ColourOf(s), s == me});
         }
         else if (last[s].seen)
         {
@@ -386,7 +398,7 @@ void DrawWaypoints(int dw, int dh)
             sy = cy + dy * k;
             label += " " + std::to_string(static_cast<int>(lround(hypot(w.x - px0, w.y - py0))));
         }
-        const uint32_t colour = kColours[slot % 6];
+        const uint32_t colour = ColourOf(slot);
         Gta2Native_OverlayRect(static_cast<float>(sx) - size / 2 - px, static_cast<float>(sy) - size / 2 - px, size + 2 * px,
                                size + 2 * px, 0xff000000);
         Gta2Native_OverlayRect(static_cast<float>(sx) - size / 2, static_cast<float>(sy) - size / 2, size, size, colour);
@@ -424,7 +436,7 @@ void DrawChat(int dw, int dh)
         const int first = std::max(10, kCols - static_cast<int>(name.size()));
         Gta2Native_OverlayRect(x0 - 2 * px, y - 2 * px, (std::min<int>(kCols, static_cast<int>(name.size() + text.size())) + 1) * 6 * px,
                                lineH, 0x90000000);
-        Gta2Native_OverlayTextExact(x0, y, px, l.slot >= 0 ? kColours[l.slot % 6] : kGrey, name.c_str());
+        Gta2Native_OverlayTextExact(x0, y, px, l.slot >= 0 ? ColourOf(l.slot) : kGrey, name.c_str());
         Gta2Native_OverlayTextExact(x0 + name.size() * 6 * px, y, px, kWhite, text.substr(0, first).c_str());
         y += lineH;
         if (static_cast<int>(text.size()) > first)
@@ -544,6 +556,20 @@ extern "C" void Gta2Net_HudDraw(int dw, int dh)
     }
     DrawWaypoints(dw, dh);
     DrawChat(dw, dh);
+    if (const uint32_t waiting = CoopWaitingFor())
+    {
+        // held up more than half a second (a slower console loading, a Wi-Fi drop): say for whom
+        std::string t;
+        for (int s = 0; s < 6; ++s)
+            if (waiting & (1u << s))
+                t += (t.empty() ? "Waiting for " : ", ") + NameOf(s);
+        t += "...";
+        const float px = PixelSize(dw, dh, 30, 14);
+        const float w = static_cast<float>(t.size()) * 6 * px;
+        const float x = (dw - w) / 2, y = dh * 0.30f;
+        Gta2Native_OverlayRect(x - 6 * px, y - 4 * px, w + 12 * px, 15 * px, 0xd0000000);
+        Gta2Native_OverlayTextExact(x, y, px, kWhite, t.c_str());
+    }
     if (!CoopWinner().empty())
     {
         // the browser's banner: who won, until the match ends

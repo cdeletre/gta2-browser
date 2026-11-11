@@ -4,6 +4,8 @@
 // runs shares a checksum of the game every 90 ticks and compares it with the others'.
 // Multiplayer build only (gta2-online).
 #include "coop_native.h"
+#include "net_delay.h"
+#include "net_stats.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -189,7 +191,10 @@ void SetupCoop(Lobby* lobby, const Json& match)
     // depends on each player's window and camera, so it is off in co-op.
     gta2_port_set_activation_margin(0);
 
+    NetStatsStart(lobby, match);
+    NetDelayStart(lobby, match);
     lobby->onGameMessage = [](int slot, const Bytes& bytes) {
+        NetStatsGameMessage(slot, bytes);
         gta2_port_net_receive(slot, bytes.data(), static_cast<int>(bytes.size()));
     };
     lobby->onPlayerLeft = [](int slot) {
@@ -384,6 +389,11 @@ void CoopWaypointLine(int slot, bool set, double x, double y)
 {
     if (HudWaypoint)
         HudWaypoint(slot, set, x, y);
+}
+
+uint32_t CoopWaitingFor()
+{
+    return gLastWaiting;
 }
 
 const std::string& CoopWinner()

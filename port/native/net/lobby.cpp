@@ -1,6 +1,8 @@
 // See lobby.h. Each function says which CoopLobby method (web/net.js) it follows.
 #include "lobby.h"
 
+#include <stdlib.h>
+
 #include <ctype.h>
 #include <math.h>
 #include <stdio.h>
@@ -253,6 +255,12 @@ void Lobby::OnMessage(const std::string& from, const Message& m)
     {
         if (onSync)
             onSync(fromSlot, data["tick"].Int(), data["h"].ToText());
+    }
+    else if (kind == "margin" && fromSlot >= 0 && data["held"].IsNumber() && data["min"].IsNumber())
+    {
+        if (onMargin)
+            onMargin(fromSlot, data["held"].Int(), data["min"].Int(), data["avg"].Int(data["min"].Int() * 10),
+                     data["d"].Int(0));
     }
     else if (kind == "wp" && fromSlot >= 0)
     {
@@ -549,6 +557,19 @@ void Lobby::MeasurePings()
     }
 }
 
+void Lobby::PingSlot(int slot, std::function<void(double)> ok, std::function<void()> fail)
+{
+    for (const auto& [id, s] : mSlots)
+    {
+        if (s == slot && id != mT->Id() && !mGone.count(id))
+        {
+            mT->Ping(id, std::move(ok), std::move(fail));
+            return;
+        }
+    }
+    fail();
+}
+
 // start()
 void Lobby::Start()
 {
@@ -566,7 +587,9 @@ void Lobby::Start()
     snprintf(stamp, sizeof(stamp), "%lx", static_cast<long>(time(nullptr)));
     match.Set("id", RandomId() + stamp);
     match.Set("players", mPlayers);
-    match.Set("delay", InputDelayFor(slowest));
+    // GTA2_NET_START_DELAY=n (tests): the match starts with that delay, whatever the pings say
+    const char* forced = getenv("GTA2_NET_START_DELAY");
+    match.Set("delay", forced ? std::min(8, std::max(1, atoi(forced))) : InputDelayFor(slowest));
     match.Set("crews", mSettings["mode"].Str() == "wars" ? Crews() : Json::Array());
     Json msg = Json::Object();
     msg.Set("lobby", "start");
@@ -704,6 +727,33 @@ void Lobby::ShareSync(int tick, const std::string& h)
         if (id != mT->Id())
             mT->Send(id, Message::Of(msg));
     }
+}
+
+void Lobby::ShareMargin(int slot, int heldMs, int minMargin, int avgMargin10, int delay)
+{
+    for (const auto& [id, s] : mSlots)
+    {
+        if (s == slot && id != mT->Id() && !mGone.count(id))
+        {
+            Json msg = Json::Object();
+            msg.Set("lobby", "margin");
+            msg.Set("held", heldMs);
+            msg.Set("min", minMargin);
+            msg.Set("avg", avgMargin10);
+            msg.Set("d", delay);
+            mT->Send(id, Message::Of(msg));
+        }
+    }
+}
+
+bool Lobby::LinkInfo(int slot, LinkStats* out) const
+{
+    for (const auto& [id, s] : mSlots)
+    {
+        if (s == slot && id != mT->Id())
+            return mT->LinkInfo(id, out);
+    }
+    return false;
 }
 
 void Lobby::ShareWaypoint(bool set, double x, double y)

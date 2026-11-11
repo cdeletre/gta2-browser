@@ -16,6 +16,8 @@ void CoopStatus(int* lastSyncTick, bool* drifted);
 const Json& CoopMatch();
 int CoopMySlot();
 // Gang Wars with a points target: the crew that reached it first ("" until one does).
+// The players this game has been waiting for, more than half a second (bits by slot), or 0.
+uint32_t CoopWaitingFor();
 const std::string& CoopWinner();
 // True once the match should end (6 s after a Gang Wars win, as the browser ends it).
 bool CoopEndRequested();

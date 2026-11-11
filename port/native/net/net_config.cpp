@@ -5,7 +5,8 @@
 //   server = Main            online: the server connected last, by its name
 //   names = ..., name = ...    the lobby's lists and what was picked last
 //   ...
-//   [lan]                      lan: pin = 0000 (the room PIN typed last)
+//   [lan]                      lan: pin = 0000 (the room PIN typed last), udp = 1 (the game
+//                              messages over UDP; 0: over TCP, as before)
 //   [server]                   online: one section per server, in the lobby's order
 //   name = Main
 //   url = wss://gta2.example.com
@@ -194,9 +195,11 @@ NetConfig LoadNetConfig(const std::string& confDir, NetKind kind)
                 continue; // (net.ini's, for gta2-lan)
             if (key == "pin" && digits)
                 c.lanPin = value;
+            else if (key == "udp" && (value == "0" || value == "1"))
+                c.lanUdp = value == "1";
             else
-                fprintf(stderr, "gta2: net: %s line %d: [lan] %s skipped (pin = 4 digits)\n", shown.c_str(), number,
-                        key.c_str());
+                fprintf(stderr, "gta2: net: %s line %d: [lan] %s skipped (pin = 4 digits, udp = 0 or 1)\n", shown.c_str(),
+                        number, key.c_str());
             continue;
         }
         if (section == kServer && lan)
@@ -411,7 +414,9 @@ void SaveNetConfig(const NetConfig& c)
     {
         out << "\n# the room PIN typed last (4 digits): a host's room asks it of every player\n"
                "[lan]\n"
-            << "pin = " << c.lanPin << "\n";
+            << "pin = " << c.lanPin << "\n"
+            << "# the game messages over UDP (1), or over TCP as the rest (0: slower when Wi-Fi loses packets)\n"
+            << "udp = " << (c.lanUdp ? 1 : 0) << "\n";
         return;
     }
     out << "\n"
