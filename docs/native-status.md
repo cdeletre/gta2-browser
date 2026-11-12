@@ -738,7 +738,14 @@ et « Écarts par rapport à l'original » ci-dessous).
   attendent surtout la CubeXX : son travail moyen ne monte pas (13,4 ms par tick contre 14,6),
   mais ses images de 50 ms ou plus passent de 1,8 % à 10,3 % des fenêtres de 5 s (jusqu'à 84 ms).
   La R36S elle-même tient (7,2 ms par tick, aucune image de 50 ms) ; les « quelques lags » qu'on
-  y sent sont ces attentes. Pas proposé dans gta2-online : les navigateurs ne le connaissent pas.
+  y sent sont ces attentes. Même option, 5 consoles sans la CubeXX (Air X, TSP S, RP Mini,
+  RG353VS, R36S ; ~5 min, joueurs le long des routes) : circulation 32-55, synchronisées, jeu
+  retenu 0,12-0,20 %, aucune image de 50 ms ou plus, un seul arrêt de 100 ms ou plus (101 ms,
+  RG353VS) ; propriétaire : « quelques lags tout au début sur la R36S, après c'était fluide »
+  (rien dans ses stats : délai 2 ticks pendant les 16 premières secondes, puis 1). Les à-coups
+  de la partie à 6 venaient donc de la CubeXX (son Wi-Fi, que le propriétaire trouve mauvais,
+  ou son rendu : ses à-coups sont des arrêts de sa boucle de jeu, pas des pertes ; non tranché).
+  Pas proposé dans gta2-online : les navigateurs ne le connaissent pas.
 
 - **`rand()` de la bibliothèque C** (`platform/rand_native.cpp`, 9 novembre) : le natif
   remplace celui de la glibc par celui d'Emscripten (musl), que le build web a. Les nombres
