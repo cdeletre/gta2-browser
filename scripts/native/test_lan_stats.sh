@@ -12,7 +12,7 @@ NAMES=(a b c d e f)
 for n in "${NAMES[@]:0:$PLAYERS}"; do mkdir -p "$OUT/$n"; done
 common=(env LD_LIBRARY_PATH=/usr/local/lib SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=offscreen
         GTA2_DATA_DIR="$PWD/game" GTA2_LAN_LOOPBACK=1 GTA2_NET_ROOM=stats GTA2_SOAK=1 GTA2_SOAK_AIDS=0
-        GTA2_NET_STATS=${GTA2_NET_STATS:-5} GTA2_STATUS_SECONDS=1000)
+        GTA2_NET_STATS=${GTA2_NET_STATS:-5} GTA2_STATUS_SECONDS=${GTA2_STATUS_SECONDS:-1000})
 "${common[@]}" GTA2_NET_HOST=1 GTA2_NET_PLAYERS=$PLAYERS GTA2_NET_NAME=Host GTA2_SAVE_DIR="$OUT/a" GTA2_CONF_DIR="$OUT/a" \
     GTA2_SOAK_SEED=1 timeout "$SECS" "$BIN" > "$OUT/a.log" 2>&1 &
 for ((i = 1; i < PLAYERS; i++)); do

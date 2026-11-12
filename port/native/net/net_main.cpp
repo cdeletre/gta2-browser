@@ -8,8 +8,9 @@
 //   GTA2_NET_HOST=1                  this player creates the room and starts the match...
 //   GTA2_NET_PLAYERS=n               ...once n players are in it (default 2)
 //   GTA2_NET_MODE=roam|wars|ffa, GTA2_NET_DISTRICT=downtown|residential|industrial,
-//   GTA2_NET_FRIENDLY_FIRE=1, GTA2_NET_MINUTES=m, GTA2_NET_KILLS=n, GTA2_NET_POINTS=n
-//                                    the host's settings (points: Gang Wars' target)
+//   GTA2_NET_FRIENDLY_FIRE=1, GTA2_NET_MINUTES=m, GTA2_NET_KILLS=n, GTA2_NET_POINTS=n,
+//   GTA2_NET_TRAFFIC=more            the host's settings (points: Gang Wars' target; traffic:
+//                                    gta2-lan's More traffic)
 //   GTA2_NET_CREW=name, GTA2_NET_SIDE=gang code   this player's Gang Wars crew and gang
 //   GTA2_NET_WAIT=s                  how long to wait in the lobby (default 300)
 // gta2-online reads conf/online.ini, gta2-lan conf/lan.ini, which these override:
@@ -191,6 +192,8 @@ std::string ProblemText(const std::string& problem)
         return "Gang Wars has room for three crews.";
     if (problem.compare(0, 12, "waitingGang:") == 0)
         return "Waiting for " + problem.substr(12) + " to pick a gang.";
+    if (problem.compare(0, 11, "oldTraffic:") == 0)
+        return "More traffic: " + problem.substr(11) + " needs a newer gta2-lan.";
     return problem;
 }
 
@@ -298,6 +301,8 @@ int AutoLobby(const NetConfig& config)
         s.Set("minutes", atoi(Env("GTA2_NET_MINUTES", "0").c_str()));
         s.Set("killLimit", atoi(Env("GTA2_NET_KILLS", "10").c_str()));
         s.Set("pointsTarget", atoi(Env("GTA2_NET_POINTS", "0").c_str()));
+        if (!Env("GTA2_NET_TRAFFIC", "").empty())
+            s.Set("traffic", Env("GTA2_NET_TRAFFIC", ""));
         gLobby->SetSettings(s);
     }
     const std::string crew = Env("GTA2_NET_CREW", "");

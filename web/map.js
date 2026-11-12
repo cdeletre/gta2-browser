@@ -1160,8 +1160,11 @@ export class Gta2Map {
   /** Co-op: the mode's standings (Tab in the game; always on the map screen). */
   drawScoreboard(ctx, x, y, align) {
     const { title, columns, rows } = this.coop.standings();
-    const xs = [0, 190, 245, 310];
-    const width = 420, lh = 23, height = 58 + rows.length * lh + 8;
+    // then the round trip to each player (Ping: orange above 130 ms, red above 200) and this
+    // player's input delay
+    const xs = [0, 190, 245, 310, 410];
+    const delayLine = this.coop.inputDelay ? this.coop.inputDelay() : '';
+    const width = 490, lh = 23, height = 58 + rows.length * lh + 8 + (delayLine ? lh : 0);
     const left = align === 'right' ? x - width : align === 'center' ? x - width / 2 : x;
     ctx.save();
     ctx.fillStyle = 'rgba(8,9,12,.9)';
@@ -1174,7 +1177,7 @@ export class Gta2Map {
     ctx.fillText(title, left + 14, y + 17);
     ctx.font = '12px system-ui, sans-serif';
     ctx.fillStyle = '#9a978f';
-    columns.forEach((c, i) => ctx.fillText(c, left + 14 + xs[i], y + 42));
+    [...columns, this.coop.pingColumn ? this.coop.pingColumn() : ''].forEach((c, i) => ctx.fillText(c, left + 14 + xs[i], y + 42));
     rows.forEach((r, i) => {
       const ry = y + 58 + i * lh + lh / 2;
       ctx.fillStyle = r.colour || '#eee';
@@ -1184,7 +1187,17 @@ export class Gta2Map {
         ctx.fillStyle = c === 0 && r.colour ? r.colour : '#eee';
         ctx.fillText(String(cell), left + 14 + xs[c] + (c === 0 ? 10 : 0), ry);
       });
+      if (r.ping) {
+        ctx.font = '14px system-ui, sans-serif';
+        ctx.fillStyle = r.ping.colour || '#eee';
+        ctx.fillText(r.ping.text, left + 14 + xs[4], ry);
+      }
     });
+    if (delayLine) {
+      ctx.font = '12px system-ui, sans-serif';
+      ctx.fillStyle = '#9a978f';
+      ctx.fillText(delayLine, left + 14, y + 58 + rows.length * lh + lh / 2 + 4);
+    }
     ctx.restore();
   }
 

@@ -80,6 +80,9 @@ registerDict({
     'shell.colKills': 'Kills',
     'shell.colDeaths': 'Deaths',
     'shell.colPoints': 'Points',
+    'shell.colPing': 'Ping',
+    'shell.inputDelay': 'Input delay: {ticks} ticks ({ms} ms)',
+    'shell.inputDelayOne': 'Input delay: 1 tick ({ms} ms)',
     'shell.ffaLeadOne': 'Free-for-all: {name} leads with 1 kill',
     'shell.ffaLeadMany': 'Free-for-all: {name} leads with {kills} kills',
     'shell.ffaWonOne': 'Free-for-all: {name} won with 1 kill',
@@ -194,6 +197,9 @@ registerDict({
     'shell.colKills': 'Asesinatos',
     'shell.colDeaths': 'Muertes',
     'shell.colPoints': 'Puntos',
+    'shell.colPing': 'Ping',
+    'shell.inputDelay': 'Retardo de entrada: {ticks} ticks ({ms} ms)',
+    'shell.inputDelayOne': 'Retardo de entrada: 1 tick ({ms} ms)',
     'shell.ffaLeadOne': 'Todos contra todos: {name} lidera con 1 asesinato',
     'shell.ffaLeadMany': 'Todos contra todos: {name} lidera con {kills} asesinatos',
     'shell.ffaWonOne': 'Todos contra todos: {name} ganó con 1 asesinato',
@@ -309,6 +315,9 @@ registerDict({
     'shell.colKills': 'Meurtres',
     'shell.colDeaths': 'Morts',
     'shell.colPoints': 'Points',
+    'shell.colPing': 'Ping',
+    'shell.inputDelay': "Délai d'entrée : {ticks} ticks ({ms} ms)",
+    'shell.inputDelayOne': "Délai d'entrée : 1 tick ({ms} ms)",
     'shell.ffaLeadOne': 'Chacun pour soi : {name} mène avec 1 meurtre',
     'shell.ffaLeadMany': 'Chacun pour soi : {name} mène avec {kills} meurtres',
     'shell.ffaWonOne': 'Chacun pour soi : {name} a gagné avec 1 meurtre',
@@ -1111,8 +1120,31 @@ function playerColour(Module) {
  * everyone's position and stats (from the local game, which simulates them
  * all) and their shared waypoints (lobby messages, outside the game).
  */
-function coopView(Module, { lobby, players, mySlot, mode = 'roam', crews = [] }) {
+function coopView(Module, { lobby, players, mySlot, delay = 1, mode = 'roam', crews = [] }) {
   const waypoints = new Map(); // slot -> {x, y}
+  // the round trip to each other player (the scoreboard's Ping column): a ping every 2.5 s,
+  // the median of the last three shown (one late answer does not)
+  const pings = new Map(); // slot -> [ms...]
+  const pinging = new Set();
+  const pingAll = () => {
+    if (!lobby.t || !lobby.t.ping) return;
+    players.forEach((p, slot) => {
+      if (slot === mySlot || pinging.has(slot) || lobby.gone?.has(p.id)) return;
+      pinging.add(slot);
+      lobby.t.ping(p.id).then((ms) => {
+        const last = [...(pings.get(slot) || []), ms].slice(-3);
+        pings.set(slot, last);
+      }, () => {}).finally(() => pinging.delete(slot));
+    });
+  };
+  pingAll();
+  setInterval(pingAll, 2500);
+  const pingOf = (slot) => {
+    const v = [...(pings.get(slot) || [])].sort((a, b) => a - b);
+    if (!v.length) return null;
+    const ms = Math.round(v[Math.floor(v.length / 2)]);
+    return { text: `${ms} ms`, colour: ms > 200 ? '#ff4848' : ms > 130 ? '#ff9830' : null };
+  };
   lobby.onWaypoint = (slot, wp) => { if (wp) waypoints.set(slot, wp); else waypoints.delete(slot); };
   const read = Module.cwrap('gta2_port_coop_players', 'number', []);
   const crewOf = (slot) => (mode === 'wars' ? crews.findIndex((c) => c.members.includes(players[slot].id)) : -1);
@@ -1148,7 +1180,10 @@ function coopView(Module, { lobby, players, mySlot, mode = 'roam', crews = [] })
     /** The scoreboard and the end-of-match results: {title, endTitle, columns, rows: [{cells, colour, strong}]}. */
     standings() {
       const ps = view.players().filter((p) => p.inGame);
-      const row = (p) => ({ cells: [p.me ? t('shell.you', { name: p.name }) : p.name, p.kills, p.deaths, money(p.points)], colour: p.colour, strong: p.me });
+      const row = (p) => ({
+        cells: [p.me ? t('shell.you', { name: p.name }) : p.name, p.kills, p.deaths, money(p.points)], colour: p.colour, strong: p.me,
+        ping: p.me ? null : pingOf(p.slot),
+      });
       if (mode === 'wars') {
         const totals = crews.map((c, i) => {
           const members = ps.filter((p) => p.crew === i);
@@ -1191,6 +1226,9 @@ function coopView(Module, { lobby, players, mySlot, mode = 'roam', crews = [] })
       }));
     },
     shareWaypoint: (wp) => lobby.shareWaypoint(wp),
+    /** This player's input delay (fixed in the browser: the host's choice), for the scoreboard. */
+    inputDelay: () => t(delay === 1 ? 'shell.inputDelayOne' : 'shell.inputDelay', { ticks: delay, ms: Math.round((delay * 1000) / 30) }),
+    pingColumn: () => t('shell.colPing'),
   };
   return view;
 }

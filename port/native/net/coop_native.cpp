@@ -20,6 +20,7 @@
 extern "C" {
 void gta2_port_net_configure(int count, int me, int delay);
 void gta2_port_set_friendly_fire(int on);
+extern int32_t gGta2PortTrafficCap; // native patch 0019 (Car_BC.cpp): the traffic cars' limit
 void gta2_port_net_set_rules(int type, int limit, int minutes);
 void gta2_port_set_ride_together(int policy);
 void gta2_port_set_player_team(int slot, int team, const char* side);
@@ -168,6 +169,11 @@ void SetupCoop(Lobby* lobby, const Json& match)
                             mode == "roam" ? 0 : match["minutes"].Int(0));
     // riding together: anyone in free roam, your crew in Gang Wars, nobody in free-for-all
     gta2_port_set_ride_together(mode == "roam" ? 1 : mode == "wars" ? 2 : 0);
+    // the LAN lobby's More traffic: 16 traffic cars a player, at most 64 (the original: 16 for
+    // the whole game, the first players' cameras served first); every machine reads it here
+    gGta2PortTrafficCap = match["traffic"].Str() == "more" ? std::min(64, 16 * count) : 16;
+    if (gGta2PortTrafficCap != 16)
+        fprintf(stderr, "gta2: co-op: more traffic, %d cars at most\n", gGta2PortTrafficCap);
     for (int i = 0; i < count; ++i)
     {
         const int crew = mode == "wars" ? CrewOf(match, players[static_cast<size_t>(i)]["id"].Str()) : -1;

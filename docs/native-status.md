@@ -712,6 +712,41 @@ et « Écarts par rapport à l'original » ci-dessous).
 
 ## Écarts par rapport à l'original (natif seulement)
 
+- **More traffic** (gta2-lan, patch natif 0019, 11 novembre ; choix de l'hôte, désactivé par
+  défaut) : l'original permet 16 voitures de circulation pour toute la partie, servies caméra
+  par caméra dans l'ordre des joueurs, si bien qu'à 4 joueurs et plus certains n'en voient
+  presque pas. Avec « Traffic: More », la limite passe à 16 par joueur, au plus 64 (prudence :
+  pools fixes, CPU des petites consoles). Au-delà de 16, une voiture n'apparaît que si le pool
+  de voitures (306 places, jamais vérifié par le moteur) garde la place de ce qui peut encore en
+  créer à sa propre limite (police, barrages, missions, pompiers, ambulances) plus 48, et s'il
+  reste 48 places de piétons. Le générateur de circulation amène aussi la police de patrouille
+  (un modèle de police parmi la circulation) : une limite toujours atteinte arrête les deux.
+  Première version (11 novembre) : la réserve comptait les voitures garées jusqu'à 200, ce qui
+  bloquait la circulation à exactement 32 ; vu sur 6 consoles (30,2-30,3 ticks/s, synchronisées,
+  plus de voitures partout, mais peu ou pas de police). Les voitures garées viennent avec la
+  carte (une voiture qui devient garée était déjà dans le pool) : la réserve ne les compte plus.
+  Vu dans le conteneur ensuite, 6 joueurs, 7 min chacun, 27 contrôles « ok » par machine, aucun
+  plantage : Normal, circulation 13,8 en moyenne (16 au plus) ; More, 29,1 en moyenne, de 3 à
+  64, plus bloquée. Piétons 29-31 en moyenne (au plus 38). Travail par tick 9,2 → 9,7 ms (le
+  conteneur fait tourner 6 jeux, 18 ticks/s : à mesurer sur console). Police : le jeu aléatoire
+  du test n'a presque pas d'avis de recherche (0,6-0,7 voiture de police en moyenne dans les
+  deux), le retour de la police avec un niveau de recherche reste à voir sur console.
+  Sur 6 consoles ensuite (Air X, TSP S, RG353VS, CubeXX, RP Mini, R36S ; 18 min, 18 contrôles
+  « ok » chacune) : circulation 13 → 64 en 4 min puis 54-64 ; police 1 à 6 voitures ;
+  propriétaire : « la police, pompiers et ambulances sont bien présents ». Jeu retenu 0,40-0,54 %
+  (CubeXX 0,98 %), comme sans l'option (partie longue : 0,45-0,48 %, CubeXX 0,84 %). Les autres
+  attendent surtout la CubeXX : son travail moyen ne monte pas (13,4 ms par tick contre 14,6),
+  mais ses images de 50 ms ou plus passent de 1,8 % à 10,3 % des fenêtres de 5 s (jusqu'à 84 ms).
+  La R36S elle-même tient (7,2 ms par tick, aucune image de 50 ms) ; les « quelques lags » qu'on
+  y sent sont ces attentes. Même option, 5 consoles sans la CubeXX (Air X, TSP S, RP Mini,
+  RG353VS, R36S ; ~5 min, joueurs le long des routes) : circulation 32-55, synchronisées, jeu
+  retenu 0,12-0,20 %, aucune image de 50 ms ou plus, un seul arrêt de 100 ms ou plus (101 ms,
+  RG353VS) ; propriétaire : « quelques lags tout au début sur la R36S, après c'était fluide »
+  (rien dans ses stats : délai 2 ticks pendant les 16 premières secondes, puis 1). Les à-coups
+  de la partie à 6 venaient donc de la CubeXX (son Wi-Fi, que le propriétaire trouve mauvais,
+  ou son rendu : ses à-coups sont des arrêts de sa boucle de jeu, pas des pertes ; non tranché).
+  Pas proposé dans gta2-online : les navigateurs ne le connaissent pas.
+
 - **`rand()` de la bibliothèque C** (`platform/rand_native.cpp`, 9 novembre) : le natif
   remplace celui de la glibc par celui d'Emscripten (musl), que le build web a. Les nombres
   aléatoires « du monde » du moteur (`gRng_6F6784` : où naissent les passants, etc.) viennent
@@ -1342,6 +1377,22 @@ puis Nina ; la R36S, dernière, seule).
 Comparé à l'essai C en UDP (4 consoles, 0,65 % retenu, 31 arrêts/min) : moins d'attente avec un
 joueur de plus. L'option 1 est validée pour le LAN. Reste : les arrêts de la CubeXX (son rendu,
 pas le réseau), et gta2-online depuis un partage 4G.
+
+### gta2-online en 4G, et le ping au tableau des scores (observé, 11 novembre)
+
+Partie de 7 min 30 via le serveur : Air X, CubeXX et un navigateur en Wi-Fi local, TSP S en partage
+4G. Aller-retour vers la TSP 50-65 ms (au plus 85-117), une retransmission TCP en tout ; délai 3
+ticks toute la partie (la marge des entrées de la TSP tombait parfois à 0, donc pas de descente) ;
+jeu retenu 0,00-0,05 %, aucun arrêt de 100 ms ou plus, aucune désynchronisation. Propriétaire :
+« vraiment fluide ». Vu aussi : moins de voitures autour de l'Air X ; c'est le moteur d'origine, qui
+plafonne le trafic à 16 voitures pour toute la partie (`Car_14::SpawnTrafficCar_582480`), réparties
+caméra par caméra, dans l'ordre des joueurs (les compteurs étaient les mêmes sur les 3 consoles).
+
+Tableau des scores (natif et navigateur) : une colonne Ping, l'aller-retour vers chaque joueur
+(médiane des 3 derniers pings, un toutes les 2,5 s ; orange au-dessus de 130 ms, rouge au-dessus
+de 200), et une ligne « Input delay: n ticks (ms) » (adaptatif sur console, celui de l'hôte dans un
+navigateur). Pas sur le classement final. Vu : partie LAN à 3 dans le conteneur (2 et 6 ms), et
+console + Chromium sans écran via le serveur de test (51 ms, « 1 tick (33 ms) », synchronisée).
 
 ## Reste à faire
 

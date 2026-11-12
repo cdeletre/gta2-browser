@@ -6,7 +6,8 @@
 //   this console's work per main-loop iteration (the game and its drawing), without the
 //   buffer swap (vsync: idle time, not work);
 //   per player: how many ticks before it is needed their input for a tick arrives (the
-//   margin; 0: just in time or waited for), and the round trip measured during the match.
+//   margin; 0: just in time or waited for), and the round trip measured during the match
+//   (a ping every 2.5 s, whether the stats show or not: the scoreboard's Ping column).
 // Multiplayer builds only (gta2-online, gta2-lan).
 #pragma once
 
@@ -22,6 +23,9 @@ class Lobby;
 void NetStatsStart(Lobby* lobby, const Json& match);
 // A game message from a slot, as it arrives (before the core sees it).
 void NetStatsGameMessage(int slot, const Bytes& bytes);
+// The round trip to a player, in ms (the median of the last three pings, one every 2.5 s);
+// false for this player or before the first answer.
+bool NetStatsPing(int slot, int* ms);
 
 } // namespace gta2net
 

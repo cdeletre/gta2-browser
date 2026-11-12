@@ -197,8 +197,10 @@ NetConfig LoadNetConfig(const std::string& confDir, NetKind kind)
                 c.lanPin = value;
             else if (key == "udp" && (value == "0" || value == "1"))
                 c.lanUdp = value == "1";
+            else if (key == "traffic" && (value == "0" || value == "1"))
+                c.lanTraffic = value == "1";
             else
-                fprintf(stderr, "gta2: net: %s line %d: [lan] %s skipped (pin = 4 digits, udp = 0 or 1)\n", shown.c_str(),
+                fprintf(stderr, "gta2: net: %s line %d: [lan] %s skipped (pin = 4 digits, udp and traffic = 0 or 1)\n", shown.c_str(),
                         number, key.c_str());
             continue;
         }
@@ -416,7 +418,9 @@ void SaveNetConfig(const NetConfig& c)
                "[lan]\n"
             << "pin = " << c.lanPin << "\n"
             << "# the game messages over UDP (1), or over TCP as the rest (0: slower when Wi-Fi loses packets)\n"
-            << "udp = " << (c.lanUdp ? 1 : 0) << "\n";
+            << "udp = " << (c.lanUdp ? 1 : 0) << "\n"
+            << "# hosting: More traffic in the room (1: 16 traffic cars a player, at most 64; 0: the original's 16)\n"
+            << "traffic = " << (c.lanTraffic ? 1 : 0) << "\n";
         return;
     }
     out << "\n"

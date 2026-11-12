@@ -87,6 +87,7 @@ Lobby::Lobby(Transport* transport, const std::string& name, bool host) : mT(tran
         Json me = Json::Object();
         me.Set("id", mT->Id());
         me.Set("name", name);
+        me.Set("traffic", true); // knows the More traffic setting (see below)
         mPlayers.Push(me);
     }
     mSettings = Json::Object();
@@ -110,6 +111,9 @@ Lobby::Lobby(Transport* transport, const std::string& name, bool host) : mT(tran
             hello.Set("lobby", "hello");
             hello.Set("name", mName);
             hello.Set("v", kCoopVersion);
+            // this game knows the LAN lobby's More traffic (native patch 0019): an older one
+            // would play the match with 16 cars and drift, so the host does not start it then
+            hello.Set("traffic", true);
             mT->Send(id, Message::Of(hello));
         }
     };
@@ -197,6 +201,7 @@ void Lobby::OnMessage(const std::string& from, const Message& m)
             p.Set("id", from);
             p.Set("name", FirstCodePoints(data["name"].Truthy() ? data["name"].ToText() : "Player", 16));
             p.Set("crew", "");
+            p.Set("traffic", data["traffic"].Truthy());
             mPlayers.Push(p);
         }
         BroadcastRoster();
@@ -454,6 +459,17 @@ std::string Lobby::StartProblem() const
 {
     if (mPlayers.size() < 2)
         return "waitingPlayer";
+    if (mSettings["traffic"].Str() == "more")
+    {
+        std::string old;
+        for (const Json& p : mPlayers.Items())
+        {
+            if (!p["traffic"].Truthy())
+                old += (old.empty() ? "" : ", ") + p["name"].Str();
+        }
+        if (!old.empty())
+            return "oldTraffic:" + old;
+    }
     if (mSettings["mode"].Str() != "wars")
         return "";
     for (const Json& p : mPlayers.Items())

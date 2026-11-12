@@ -32,6 +32,8 @@ struct Peer
     double waitMs = 0;  // time this console was held up with this player's input missing
     double rttLast = -1, rttSum = 0, rttMax = 0;
     int rttN = 0, rttFail = 0;
+    double recent[3] = {0, 0, 0}; // the last three round trips, for the scoreboard
+    int recentN = 0;
     bool pingOut = false;
     uint32_t retransStart = 0; // TCP retransmits when the window began
     bool linkKnown = false;
@@ -42,6 +44,8 @@ int gMe = -1;
 int gCount = 0;
 Peer gPeers[kMaxPlayers];
 double gPeriodMs = 5000;
+constexpr double kPingMs = 2500; // a ping to each player this often (the scoreboard; the stats)
+double gPingAt = -1;
 
 double gMatchStart = -1;
 double gWindowStart = -1;
@@ -104,6 +108,7 @@ void PingAll()
                 q.rttSum += ms;
                 q.rttMax = std::max(q.rttMax, ms);
                 ++q.rttN;
+                q.recent[q.recentN++ % 3] = ms;
             },
             [s] {
                 gPeers[s].pingOut = false;
@@ -188,6 +193,7 @@ void NetStatsStart(Lobby* lobby, const Json& match)
         gPeers[s].name = players[static_cast<size_t>(s)]["name"].Str();
     }
     gMatchStart = -1;
+    gPingAt = -1;
     if (gPeriodMs > 0)
         fprintf(stderr, "gta2: net stats: every %.0f s; margin min/avg/max in ticks, rtt avg/max; input delay %d ticks\n",
                 gPeriodMs / 1000.0, match["delay"].Int(1));
@@ -217,6 +223,18 @@ void NetStatsGameMessage(int slot, const Bytes& bytes)
         if (late > 0)
             NetDelayHeld(slot, late);
     }
+}
+
+bool NetStatsPing(int slot, int* ms)
+{
+    if (slot < 0 || slot >= gCount || slot == gMe || gPeers[slot].recentN == 0)
+        return false;
+    const Peer& p = gPeers[slot];
+    const int n = std::min(p.recentN, 3);
+    double v[3] = {p.recent[0], p.recent[1], p.recent[2]};
+    std::sort(v, v + n);
+    *ms = static_cast<int>(v[n / 2] + 0.5); // the median: one late answer does not show
+    return true;
 }
 
 } // namespace gta2net
@@ -293,6 +311,10 @@ extern "C" void Gta2Net_AfterSlice(double startMs, double endMs)
     {
         Report(endMs, frame);
         ResetWindow(endMs, frame);
+    }
+    if (gPingAt < 0 || endMs - gPingAt >= kPingMs)
+    {
+        gPingAt = endMs;
         PingAll();
     }
 }

@@ -1,0 +1,122 @@
+From 64ad09208585e2ba0afab1222a7d406b05fde2fe Mon Sep 17 00:00:00 2001
+From: GTA2 port <port@localhost>
+Date: Wed, 11 Nov 2026 16:12:46 -0500
+Subject: [PATCH] native: the traffic cars' limit, 16 unless the LAN host chose
+ more
+
+The original allows 16 traffic cars for the whole game, shared by every player's camera in
+player order (Car_14::GenerateTraffic_583670): with 4 players or more, some see none. Under
+GTA2_PORT_NATIVE the four checks of that limit (Car_6C::CanAlloc_446870, CanAllocateOfType_446930,
+Car_14::MakeTrafficForCurrCamera_5832C0, SpawnTrafficCar_582480) read gGta2PortTrafficCap: 16, as
+the original, unless the LAN lobby's More traffic set it (16 a player, at most 64). Above 16, a
+traffic car only while the car pool keeps room for every other kind of car at its limit (plus
+16), and the ped pool 48 free: Allocate() does not check for a full pool. Every machine of a
+match has the same limit, from the match settings.
+---
+ Source/Car_BC.cpp | 56 +++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 56 insertions(+)
+
+diff --git a/Source/Car_BC.cpp b/Source/Car_BC.cpp
+index 2bc1bb83..231ca3f9 100644
+--- a/Source/Car_BC.cpp
++++ b/Source/Car_BC.cpp
+@@ -45,6 +45,46 @@
+ #include "text_0x14.hpp"
+ #include "winmain.hpp"
+ 
++#if defined(GTA2_PORT_NATIVE)
++// Native, the LAN lobby's "More traffic" (port/native/net/coop_native.cpp sets it before the
++// match): the traffic cars' limit, the original's 16 for the whole game unless the host chose
++// more (16 a player, at most 64). Above 16, a traffic car only while the car pool keeps room for
++// what can still add cars at its own limit (police, roadblocks, missions, fire engines,
++// ambulances) and 48 more (parked cars come with the map; a car that becomes parked was
++// already in the pool), and the ped pool keeps 48 free (a traffic car has a driver): nothing
++// checks for a full pool, Allocate() takes a null free list. The traffic generator also brings
++// the police (a police model among the traffic): a limit always reached stops both. Every
++// machine of a match has the same limit and the same pools.
++extern "C" {
++s32 gGta2PortTrafficCap = 16;
++}
++
++template <typename P> static s32 Gta2Port_FreeSlots(P& pool)
++{
++    s32 n = 0;
++    for (auto* p = pool.field_0_pStart; p; p = p->mpNext)
++        ++n;
++    return n;
++}
++
++// No traffic car now: `limit` is the original's limit at that check (16, or 15).
++static bool Gta2Port_TrafficFull(s32 limit)
++{
++    Car_6C* c = gCar_6C_677930;
++    const s32 n = c->field_28_recycled_cars + c->field_40_proto_recycled_cars;
++    if (n < limit)
++        return false;
++    if (gGta2PortTrafficCap <= 16 || n >= gGta2PortTrafficCap - (16 - limit))
++        return true;
++    auto room = [](s32 max, s32 now) { return now < max ? max - now : 0; };
++    const s32 others = room(6, c->field_34_unit_cars) + room(12, c->field_38_roadblock_cars) + room(12, c->field_48) +
++        room(24, c->field_3C_mission_cars) + room(2, c->field_30_firefighter_cars) + room(2, c->field_2C_paramedic_cars);
++    // + 48: the cars no limit counts (the players', trains, trailers...) and a margin
++    return Gta2Port_FreeSlots(gCar_BC_Pool_67792C->field_0_pool) <= others + 48 ||
++        Gta2Port_FreeSlots(gPedPool_6787B8->field_0_pool) < 48;
++}
++#endif
++
+ // TODO: Its in FrontEnd by seems crazy to include the whole file just for this
+ EXTERN_GLOBAL(bool, gCheatMiniCars_67D6C8);
+ 
+@@ -1638,7 +1678,11 @@ bool Car_6C::CanAlloc_446870(s32 type)
+         case 9:
+             return this->field_44_parked_cars < 200;
+         case 1:
++#if defined(GTA2_PORT_NATIVE)
++            return !Gta2Port_TrafficFull(15);
++#else
+             return gCar_6C_677930->field_28_recycled_cars + gCar_6C_677930->field_40_proto_recycled_cars < 15;
++#endif
+         case 8:
+             return this->field_3C_mission_cars < 23;
+         default:
+@@ -1664,7 +1708,11 @@ bool Car_6C::CanAllocateOfType_446930(s32 type)
+         case car_kind::parked_car_9:
+             return this->field_44_parked_cars < 200;
+         case car_kind::recycled_1:
++#if defined(GTA2_PORT_NATIVE)
++            return !Gta2Port_TrafficFull(16);
++#else
+             return gCar_6C_677930->field_28_recycled_cars + gCar_6C_677930->field_40_proto_recycled_cars < 16;
++#endif
+         case car_kind::mission_car_8:
+             return this->field_3C_mission_cars < 24;
+         default:
+@@ -7213,8 +7261,12 @@ void Car_14::MakeTrafficForCurrCamera_5832C0()
+     Fix16 w;
+ 
+     Fix16 wanted_related;
++#if defined(GTA2_PORT_NATIVE)
++    if ((!bLimit_recycling_67D4CA || gCar_6C_677930->field_28_recycled_cars < 2) && !Gta2Port_TrafficFull(16))
++#else
+     if ((!bLimit_recycling_67D4CA || gCar_6C_677930->field_28_recycled_cars < 2) &&
+         gCar_6C_677930->field_28_recycled_cars + gCar_6C_677930->field_40_proto_recycled_cars != 16)
++#endif
+     {
+         s32 angleFace = Ang16::GetAngleFace_4F78F0(field_0_cam->ComputeTargetFacingAngle_4358D0());
+ 
+@@ -7431,8 +7483,12 @@ char_type Car_14::SpawnTrafficCar_582480(s32 a2, s32 arrow_direction, s32 a4)
+     s32 found_z;
+     Fix16 ground_z;
+ 
++#if defined(GTA2_PORT_NATIVE)
++    if (Gta2Port_TrafficFull(16) || arrow_direction == a4 || gCar_6C_677930->field_54 > 0)
++#else
+     if (gCar_6C_677930->field_28_recycled_cars + gCar_6C_677930->field_40_proto_recycled_cars == 16 || arrow_direction == a4 ||
+         gCar_6C_677930->field_54 > 0)
++#endif
+     {
+         return 0;
+     }
+-- 
+2.54.0
+

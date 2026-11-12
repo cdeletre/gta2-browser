@@ -2,7 +2,9 @@
 // (render/gles_renderer.cpp's overlay, through platform/options_native.cpp's hooks):
 //   - the scoreboard while Select is held (Tab on a keyboard), the browser's columns and
 //     order (web/shell.js coopView): player, kills, deaths, points; free-for-all by kills,
-//     free roam by points, Gang Wars by crew; with the four quick messages as a legend;
+//     free roam by points, Gang Wars by crew; then the round trip to each player (Ping: orange
+//     above 130 ms, red above 200) and this player's input delay; with the four quick messages
+//     as a legend;
 //   - chat lines, the last four for 9 s, the sender's name in the player's colour
 //     (Options: Chat messages on/off);
 //   - the quick messages: Select + up, down, left, right (conf/online.ini or lan.ini: chat_up...);
@@ -31,7 +33,9 @@
 #include "map_0x370.hpp"
 
 #include "coop_native.h"
+#include "net_delay.h"
 #include "net_session.h"
+#include "net_stats.h"
 
 extern "C" void Gta2Native_OverlayRect(float x, float y, float w, float h, uint32_t rgba);
 extern "C" void Gta2Native_OverlayText(float x, float y, float px, uint32_t rgba, const char* text);
@@ -54,6 +58,8 @@ constexpr size_t kChatLines = 4;
 // Player colours by slot, as web/shell.js PLAYER_COLOURS (#4fc3ff, #ff6b6b, ...), as ABGR.
 const uint32_t kColours[6] = {0xffffc34f, 0xff6b6bff, 0xff81e07e, 0xffff92c7, 0xff4da9ff, 0xffd97aff};
 const uint32_t kWhite = 0xffffffff, kGrey = 0xffa0a0a0, kYellow = 0xff30d0ff;
+const uint32_t kOrange = 0xff3098ff, kRed = 0xff4848ff; // the Ping column: slow, too slow
+constexpr int kPingSlow = 130, kPingBad = 200;           // ms (as web/map.js)
 
 // A player's colour: the game's own (their arrow and their score in $, from the style), or the
 // browser's colour for their slot until the game has one.
@@ -119,6 +125,7 @@ struct Row
     int kills, deaths, points;
     uint32_t colour;
     bool strong;
+    int slot = -1; // a player's (their Ping); -1: a crew's line, or a player who left
 };
 
 // Each player's standings as last seen in the match (their slot is freed when they leave).
@@ -160,7 +167,7 @@ std::vector<Row> Standings(std::string* title)
             continue;
         if (o[0])
         {
-            players.push_back({NameOf(s) + (s == me ? " (you)" : ""), o[7], o[8], o[11], ColourOf(s), s == me});
+            players.push_back({NameOf(s) + (s == me ? " (you)" : ""), o[7], o[8], o[11], ColourOf(s), s == me, s});
         }
         else if (last[s].seen)
         {
@@ -199,7 +206,7 @@ std::vector<Row> Standings(std::string* title)
         for (const Team& t : teams)
         {
             const Json& c = crews[t.crew];
-            rows.push_back({c["name"].Str() + " - " + c["gang"].Str(), t.kills, -1, t.points, kYellow, true});
+            rows.push_back({c["name"].Str() + " - " + c["gang"].Str(), t.kills, -1, t.points, kYellow, true, -1});
             std::vector<size_t> members;
             for (const Json& m : c["members"].Items())
                 for (size_t i = 0; i < slots.size(); ++i)
@@ -251,8 +258,8 @@ void DrawScoreboard(int dw, int dh, bool final)
 {
     std::string title;
     const std::vector<Row> rows = Standings(&title);
-    constexpr int kCols = 44;
-    const int lines = static_cast<int>(rows.size()) + (final ? 5 : 9);
+    constexpr int kCols = 52;
+    const int lines = static_cast<int>(rows.size()) + (final ? 5 : 10);
     const float px = PixelSize(dw, dh, kCols, std::max(lines, 14));
     const float cell = 6 * px;
     const float lineH = 12 * px;
@@ -265,14 +272,16 @@ void DrawScoreboard(int dw, int dh, bool final)
     const std::string head = final ? "Match over: " + title : title;
     Gta2Native_OverlayText(x0, y, px, kYellow, head.substr(0, kCols).c_str());
     y += 1.5f * lineH;
-    // columns: name, kills, deaths, points (right-aligned)
+    // columns: name, kills, deaths, points, ping (right-aligned; no ping on the final standings)
     auto right = [&](float colEnd, uint32_t colour, const std::string& t) {
         Gta2Native_OverlayText(x0 + colEnd * cell - static_cast<float>(t.size()) * cell, y, px, colour, t.c_str());
     };
     Gta2Native_OverlayText(x0, y, px, kGrey, "Player");
     right(28, kGrey, "Kills");
     right(35, kGrey, "Deaths");
-    right(kCols, kGrey, "Points");
+    right(44, kGrey, "Points");
+    if (!final)
+        right(kCols, kGrey, "Ping");
     y += lineH;
     for (const Row& r : rows)
     {
@@ -282,7 +291,10 @@ void DrawScoreboard(int dw, int dh, bool final)
         right(28, kWhite, std::to_string(r.kills));
         if (r.deaths >= 0)
             right(35, kWhite, std::to_string(r.deaths));
-        right(kCols, kWhite, Money(r.points));
+        right(44, kWhite, Money(r.points));
+        int ms;
+        if (!final && r.slot >= 0 && r.slot != CoopMySlot() && NetStatsPing(r.slot, &ms))
+            right(kCols, ms > kPingBad ? kRed : ms > kPingSlow ? kOrange : kWhite, std::to_string(ms) + " ms");
         y += lineH;
     }
     y += lineH;
@@ -290,6 +302,15 @@ void DrawScoreboard(int dw, int dh, bool final)
     {
         Gta2Native_OverlayText(x0, y, px, kGrey, "A: back to the lobby");
         return;
+    }
+    // this player's input delay (adaptive: net_delay.cpp), what the round trips cost in lag
+    {
+        const int d = NetDelayNow();
+        char buf[64];
+        snprintf(buf, sizeof(buf), "Input delay: %d %s (%d ms)", d, d == 1 ? "tick" : "ticks",
+                 static_cast<int>(d * 1000.0 / 30 + 0.5));
+        Gta2Native_OverlayText(x0, y, px, kGrey, buf);
+        y += 1.5f * lineH;
     }
     // the quick messages' legend
     const NetConfig* c = gConfig;
