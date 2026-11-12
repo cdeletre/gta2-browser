@@ -217,6 +217,10 @@ void Enter(bool host, const LanGame* lanGame = nullptr, const std::string& joinA
     }
 #endif
     SaveNetConfig(*gS.config);
+#if defined(GTA2_NET_LAN)
+    if (host)
+        SetSetting("traffic", gS.config->lanTraffic ? "more" : "normal"); // the host's last choice
+#endif
     gLobby->onStart = [](const Json& m) { gS.match = m; };
     gLobby->onOtherHost = [](const std::string&) { gS.otherHost = true; };
     gS.otherHost = false;
@@ -636,6 +640,20 @@ void BuildItems()
         it.push_back({"Time limit", [m] { return kMinutes[m] ? std::to_string(kMinutes[m]) + " min" : std::string("None"); },
                       hostOnly([m](int d) { SetSetting("minutes", kMinutes[Wrap(m + d, 8)]); }), nullptr});
     }
+#if defined(GTA2_NET_LAN)
+    // More traffic (native patch 0019): 16 traffic cars a player instead of 16 for the whole game
+    // (gta2-lan only: browsers do not know it, a match with one would drift)
+    {
+        const bool more = s["traffic"].Str() == "more";
+        it.push_back({"Traffic", [more] { return std::string(more ? "More" : "Normal"); },
+                      hostOnly([more](int) {
+                          gS.config->lanTraffic = !more;
+                          SaveNetConfig(*gS.config);
+                          SetSetting("traffic", more ? "normal" : "more");
+                      }),
+                      nullptr});
+    }
+#endif
     if (mode == "ffa")
     {
         const int k = IndexOf(kKills, s["killLimit"].Int(10));
