@@ -20,6 +20,7 @@ get_controls
 
 GAMEDIR=/$directory/ports/gta2/
 CONFDIR="$GAMEDIR/conf/"
+BINARY="gta2.${DEVICE_ARCH}"
 
 mkdir -p "$GAMEDIR/conf"
 mkdir -p "$GAMEDIR/saves"
@@ -55,9 +56,9 @@ if [ ! -d "$GAMEDIR/gamedata/data" ]; then
     cd "$GAMEDIR"
 fi
 
-$GPTOKEYB "gta2.${DEVICE_ARCH}" &
+$GPTOKEYB "${BINARY}" &
 
-pm_platform_helper "$GAMEDIR/gta2.${DEVICE_ARCH}"
-./gta2.${DEVICE_ARCH}
+pm_platform_helper "$GAMEDIR/${BINARY}"
+./${BINARY}
 
 pm_finish
