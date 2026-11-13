@@ -22,6 +22,11 @@ GAMEDIR=/$directory/ports/gta2/
 CONFDIR="$GAMEDIR/conf/"
 BINARY="gta2.${DEVICE_ARCH}"
 
+# Patcher config
+export PATCHER_FILE="$GAMEDIR/tools/install_gta2"
+export PATCHER_GAME="$(basename "${0%.*}")" # This gets the current script filename without the extension
+export PATCHER_TIME="1 to 5 minutes"
+
 mkdir -p "$GAMEDIR/conf"
 mkdir -p "$GAMEDIR/saves"
 
@@ -32,33 +37,16 @@ cd $GAMEDIR
 export SDL_GAMECONTROLLERCONFIG="$sdl_controllerconfig"
 
 if [ ! -d "$GAMEDIR/gamedata/data" ]; then
-    [ ! -f "$GAMEDIR/gamedata/GTA2INSTALLER.exe" ] && echo "GTA2INSTALLER.exe not found" && exit 1
-
-    export PATH="$GAMEDIR/tools:$PATH"
-
-    cd "$GAMEDIR/gamedata"
-
-    $ESUDO chmod u+x "$GAMEDIR/tools/iss_extract" "$GAMEDIR/tools/unshield"
-
-    $ESUDO iss_extract x "GTA2INSTALLER.exe" data1.cab data1.hdr data2.cab
-    [ $? -ne 0 ] && echo "Error extracting GTA2INSTALLER.exe" && exit 1
-
-    $ESUDO rm -f GTA2INSTALLER.exe
-
-    LD_LIBRARY_PATH="$GAMEDIR/tools:$LD_LIBRARY_PATH" unshield x data1.cab
-    [ $? -ne 0 ] && echo "Error extracting CAB files" && exit 1
-
-    $ESUDO rm -f data1.cab data1.hdr data2.cab
-    $ESUDO rm -rf _*
-    $ESUDO mv App_Executables/data .
-    $ESUDO rm -rf App_Executables
-
-    cd "$GAMEDIR"
+  if [ -f "$controlfolder/utils/patcher.txt" ]; then
+    source "$controlfolder/utils/patcher.txt"
+  else
+    pm_message "This port requires the latest version of PortMaster."
+  fi
 fi
 
+[ -d "$GAMEDIR/gamedata/data" ] || { echo "No game data in gamedata/: see patchlog.txt"; pm_finish; exit 1; }
 $GPTOKEYB "${BINARY}" &
 
 pm_platform_helper "$GAMEDIR/${BINARY}"
 ./${BINARY}
-
 pm_finish

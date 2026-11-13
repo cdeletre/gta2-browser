@@ -15,7 +15,7 @@
     ],
     "desc": "Grand Theft Auto 2 is a 1999 action-adventure game developed by DMA Design and published by Rockstar Games. It is the sequel to 1997's Grand Theft Auto, and the second main entry in the Grand Theft Auto series",
     "desc_md": null,
-    "inst": "Install the port and copy you GTA2INSTALLER.exe into gta2/gamedata folder.",
+    "inst": "Install the port and copy your GTA2INSTALLER.exe into gta2/gamedata folder.",
     "inst_md": null,
     "genres": [
       "action",

@@ -1,0 +1,41 @@
+#!/bin/bash
+
+# PortMaster patcher
+#   unpacks GTA2INSTALLER.exe into gamedata/data
+#   runs from the port's folder
+#   Author: Kdog
+
+GAMEDIR="${PWD}"
+GAMEDATA="${GAMEDIR}/gamedata"
+TOOLDIR="${GAMEDIR}/tools"
+LOGFILE="${GAMEDIR}/patchlog.txt"
+
+exec > >(tee "${LOGFILE}") 2>&1
+
+export PATH="$GAMEDIR/tools:$PATH"
+export LD_LIBRARY_PATH="$GAMEDIR/tools:$LD_LIBRARY_PATH"
+
+fail() { echo "Error: $*"; exit 1; }
+
+chmod u+x "${TOOLDIR}/iss_extract" "${TOOLDIR}/unshield" || fail "cannot make the tools executable"
+
+# Look for the EXE file that contains the CAB files
+PATH_EXE=$(find "${GAMEDIR}" -maxdepth 2 -type f -iname "gta*2*.exe" -print -quit)
+[ -f "${PATH_EXE}" ] || fail "GTA2INSTALLER.exe not found in gta2/gamedata"
+echo "Found ${PATH_EXE##*/}"
+
+cd "${GAMEDATA}" || fail "no gamedata folder"
+
+echo "Extracting ${PATH_EXE##*/} (1/2)"
+iss_extract x "${PATH_EXE}" data1.cab data1.hdr data2.cab || fail "cannot extract ${PATH_EXE##*/}"
+
+echo "Extracting the CAB files (2/2)"
+unshield x data1.cab || fail "cannot extract the CAB files"
+[ -d App_Executables/data ] || fail "no data folder in the installer"
+
+echo "Tidying gamedata"
+mv App_Executables/data . || fail "cannot move the data folder"
+rm -rf App_Executables _* data1.cab data1.hdr data2.cab
+rm -f "${PATH_EXE}"
+
+cd "${GAMEDIR}"
