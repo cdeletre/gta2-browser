@@ -22,3 +22,9 @@ build/
 
 # GTA2 demo files (user-provided game data, never committed)
 /data-demo/
+
+# PortMaster zip files and binaries
+/packaging/portmaster/*.zip
+/packaging/portmaster/gta2/gta2.aarch64
+/packaging/portmaster/gta2/gta2-lan.aarch64
+/packaging/portmaster/gta2/gta2-online.aarch64
