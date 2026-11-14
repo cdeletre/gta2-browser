@@ -1510,13 +1510,16 @@ const serverConfig = await fetch('config.json', { cache: 'no-store' })
 // both show the landing page; the game files come from the server, or from the Internet Archive.
 const onServer = !!(serverConfig && serverConfig.server);
 const onSite = onServer || !!(serverConfig && serverConfig.static);
+// our game server with the game files (an older server does not say: it has them); without
+// them, the Internet Archive, as on a static site
+const filesFromServer = onServer && serverConfig.gameFiles !== false;
 if (onServer) document.body.classList.add('on-server');
 if (onSite) document.body.classList.add('on-site');
 if (initStats(serverConfig)) $('stats-faq').hidden = false; // anonymous play counts (the public site)
 if (onSite && !pageParams.has('coop')) {
   wireServerHome();
 } else if (pageParams.has('coop')) {
-  if (onServer) serverGameFiles(); // start the one-time download while the lobby fills
+  if (filesFromServer) serverGameFiles(); // start the one-time download while the lobby fills
   wireCoopLobby();
 } else if (pageParams.has('devdata')) {
   Error.stackTraceLimit = 200;
@@ -1542,9 +1545,9 @@ function serverGameFiles() {
       job.fromCache = true;
       return fileCache.load();
     }
-    show(onServer ? t('shell.fromServer') : t('shell.connectingArchive'), 0);
-    // a static site: the freeware installer from the Internet Archive, unpacked in this browser
-    const files = onServer ? await collectDevFiles(show) : await downloadFreeware(freewareProgress(show));
+    show(filesFromServer ? t('shell.fromServer') : t('shell.connectingArchive'), 0);
+    // otherwise: the freeware installer from the Internet Archive, unpacked in this browser
+    const files = filesFromServer ? await collectDevFiles(show) : await downloadFreeware(freewareProgress(show));
     if (!onServer) count('download/gta2');
     show(t('shell.ready'), 1);
     return files;
@@ -1585,9 +1588,10 @@ function needsCaching() {
 async function wireServerHome() {
   $('picker').hidden = true;
   count('/', { event: false });
-  // On a static site the 360 MB download only starts when the player presses Play (or hosts/joins).
-  const cached = !onServer && !!(await fileCache.info());
-  const files = onServer || cached ? serverGameFiles() : null;
+  // From the Internet Archive (a static site, or our server without the game files) the 360 MB
+  // download only starts when the player presses Play (or hosts/joins).
+  const cached = !filesFromServer && !!(await fileCache.info());
+  const files = filesFromServer || cached ? serverGameFiles() : null;
   let starting = false;
   if (onServer) savedCrews().then(showLeaderboard);
   else { $('crews').remove(); document.querySelector('#topnav a[href="#crews"]').remove(); } // saved crews live on our game server

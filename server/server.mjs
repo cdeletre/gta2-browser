@@ -3,7 +3,7 @@
 // One process serves, behind a password:
 //   /                 the built game (build/port/release)
 //   /gamedata/...     the GTA2 game files, so a new player installs with one click
-//   /config.json      tells the page it is on this server
+//   /config.json      tells the page it is on this server, and whether it has the game files
 //   /api/crews        saved Gang Wars crews: the leaderboard (GET)
 //   /api/match        a finished Gang Wars match, for the crews' stats and reputation (POST)
 //   /relay            WebSocket: co-op rooms; every message goes through the server
@@ -105,6 +105,7 @@ async function gameManifest() {
   const files = [];
   const walk = async (dir) => {
     for (const entry of await readdir(dir, { withFileTypes: true })) {
+      if (entry.name.startsWith('.')) continue; // .gitkeep, .DS_Store: not the game's
       const path = join(dir, entry.name);
       if (entry.isDirectory()) await walk(path);
       else if (entry.isFile() && !SKIP.test(entry.name)) files.push([relative(GAME_ROOT, path).split(sep).join('/'), (await stat(path)).size]);
@@ -157,8 +158,11 @@ const server = createServer(async (req, res) => {
       return res.end(JSON.stringify(gamesNow()));
     }
     if (url.pathname === '/config.json') {
+      // gameFiles false (no game files under GAME_ROOT, as in the relay image or with none
+      // mounted): browsers get the freeware release from the Internet Archive themselves
+      const gameFiles = await gameManifest().then((m) => JSON.parse(m).files.length > 0, () => false);
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
-      return res.end(JSON.stringify({ server: true, relay: '/relay', invite: PASSWORD ? INVITE : null }));
+      return res.end(JSON.stringify({ server: true, relay: '/relay', invite: PASSWORD ? INVITE : null, gameFiles }));
     }
     if (url.pathname === '/gamedata/manifest.json') {
       let body;
