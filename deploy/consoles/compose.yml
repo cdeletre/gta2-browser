@@ -1,0 +1,58 @@
+# The game server for the consoles (GTA 2 Online) behind HTTPS: the relay image and Caddy.
+# Settings in .env next to this file (cp .env.example .env, chmod 600 .env). README.md here.
+#   docker compose up -d        start (and after changing .env)
+#   ./ca.sh                     the authority the clients must trust (internal certificates)
+#   docker compose logs relay   the invite link
+name: gta2-consoles
+
+services:
+  relay:
+    image: ghcr.io/cdeletre/gta2-server:${GTA2_IMAGE:-relay}
+    restart: unless-stopped
+    environment:
+      GTA2_PASSWORD: ${GTA2_PASSWORD:?set GTA2_PASSWORD in .env}
+      PUBLIC_URL: ${GTA2_PUBLIC_URL:-https://${GTA2_HOST:?set GTA2_HOST in .env}:${GTA2_HTTPS_PORT:-443}}
+    volumes:
+      - db:/srv/db # saved crews; a named volume gets the image's owner, no chmod 777
+    # no published port: only Caddy reaches it, so the password never travels in clear
+    networks: [gta2]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8790/login"]
+      interval: 30s
+      timeout: 5s
+      start_period: 5s
+    mem_limit: 256m
+    logging: &logs
+      driver: json-file
+      options: { max-size: 10m, max-file: "3" }
+
+  caddy:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    depends_on:
+      relay: { condition: service_healthy }
+    ports:
+      - "${GTA2_HTTPS_PORT:-443}:${GTA2_HTTPS_PORT:-443}"
+      - "${GTA2_HTTP_PORT:-80}:80" # redirects to HTTPS; Let's Encrypt's checks; /ca.crt if shared
+    environment:
+      GTA2_HOST: ${GTA2_HOST}
+      GTA2_HTTPS_PORT: ${GTA2_HTTPS_PORT:-443}
+      GTA2_TLS: ${GTA2_TLS:-internal}
+      GTA2_SHARE_CA: ${GTA2_SHARE_CA:-no}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Keep it: it holds the internal authority (root.crt). A new volume means a new authority,
+      # and every console and browser has to trust it again.
+      - caddy-data:/data
+      - caddy-config:/config
+    networks: [gta2]
+    mem_limit: 128m
+    logging: *logs
+
+networks:
+  gta2: {}
+
+volumes:
+  db: {}
+  caddy-data: {}
+  caddy-config: {}

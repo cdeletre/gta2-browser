@@ -149,7 +149,7 @@ docker run -d --name gta2 -p 8790:8790 \
 Every setting and our own deploy are in [deploy/README.md](deploy/README.md).
 
 **For the PortMaster consoles** (`GTA 2 Online`): the consoles need this server, not a static
-site. [deploy/consoles.md](deploy/consoles.md) has two ready-made images built from
+site. [deploy/consoles/](deploy/consoles/README.md) has two ready-made images built from
 `native-multiplayer` (`relay`, and `web` with the browser game of the same version) and the
 console's settings.
 

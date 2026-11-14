@@ -2,8 +2,8 @@
 # them to this repository owner's GHCR, for amd64 and arm64 (a VPS or a Raspberry Pi):
 #   ghcr.io/<owner>/gta2-server:relay   the relay only (enough for consoles)
 #   ghcr.io/<owner>/gta2-server:web     the relay plus the browser game of the same commit
-# and the same two with -<short commit> for a fixed version. deploy/consoles.md says how to run them.
-# A first push makes the package private: make it public in the package's settings on GitHub.
+# and the same two with -<short commit> for a fixed version. deploy/consoles/README.md says how to run them.
+# The package is public with the repository (checked: pulls need no account).
 # server-image.yml is upstream's (main, ghcr.io/m1stermo); this one leaves it alone.
 name: server-images-native
 

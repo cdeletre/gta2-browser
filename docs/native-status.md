@@ -1401,11 +1401,25 @@ et `web` (le même avec le jeu navigateur compilé depuis le même commit, pour 
 consoles aient la même version multijoueur ; le site de M1sterMo/gta2 vient de `main`, que les
 consoles refusent). Aucun fichier du jeu dans les images. Le workflow
 `server-images-native.yml` les pousse sur `ghcr.io/<propriétaire>/gta2-server` (amd64 et arm64)
-depuis `native-multiplayer`. Doc : `deploy/consoles.md`. Observé sur le Mac (arm64) : les deux
+depuis `native-multiplayer`. Doc : `deploy/consoles/README.md`. Observé sur le Mac (arm64) : les deux
 images se construisent ; le `gta2.wasm` de `web` est identique octet pour octet à celui du serveur
 en ligne ; login, `/config.json`, `/games.json` et le site répondent ; une partie gta2-online à 2
 dans le conteneur via le relais de l'image, 1 750 ticks, aucune désynchronisation. Pas encore vu :
-le workflow sur GitHub (rien de poussé), ni l'image sur un Raspberry Pi.
+l'image sur un Raspberry Pi. Le workflow a tourné sur GitHub après le push (4 min 40, succès) ;
+les deux images se téléchargent sans compte (le paquet est public d'emblée, le dépôt l'étant).
+Propriétaire : `:relay` sur le MacBook, partie à 2 consoles en `ws://` (13 novembre).
+
+`deploy/consoles/` : `compose.yml` (le relais, sans port publié, et Caddy devant), `Caddyfile`
+(`tls internal` par défaut, ou un e-mail pour Let's Encrypt ; `default_sni` pour l'accès par IP),
+`.env.example` (mot de passe, hôte, ports, image) et `ca.sh` (exporte l'autorité de Caddy en
+`gta2-ca.pem` avec son empreinte). Observé sur le Mac, accès par IP sur 8443 : sans l'autorité,
+curl et gta2-online refusent (« not correctly signed by the trusted CA ») ; avec `ca_file`,
+gta2-online passe en TLS 1.3 et une partie à 2 tient 1 450 ticks sans désynchronisation ; la
+redirection HTTP, `/ca.crt` (identique à `ca.sh`), le port 8790 fermé, le lien d'invitation en
+`https://`, et l'image `web` derrière Caddy (site, `gta2.wasm`) ; l'autorité est la même après
+recréation des conteneurs (volume gardé). Le certificat du serveur change toutes les 12 h : sur
+console, `ca_file` et pas `tls_fingerprint`. Pas encore vu : Let's Encrypt, une vraie console,
+un navigateur avec l'autorité installée.
 
 ## Reste à faire
 

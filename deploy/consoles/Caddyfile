@@ -1,0 +1,35 @@
+# HTTPS in front of the relay (compose.yml). Everything comes from .env:
+#   GTA2_HOST        the address the players use: an IP or a name
+#   GTA2_HTTPS_PORT  the HTTPS port (443 by default)
+#   GTA2_TLS         internal: certificates from Caddy's own authority (README.md, "Trust the
+#                    authority"); an e-mail address: Let's Encrypt, for a public name
+#   GTA2_SHARE_CA    yes: the authority's certificate at http://<host>/ca.crt
+{
+	https_port {$GTA2_HTTPS_PORT:443}
+	# the authority goes to the clients by hand (ca.sh), not into this container's system
+	skip_install_trust
+	# browsers send no server name when they connect by IP
+	default_sni {$GTA2_HOST}
+}
+
+{$GTA2_HOST}:{$GTA2_HTTPS_PORT:443} {
+	tls {$GTA2_TLS:internal}
+	# the relay's WebSocket (/relay) goes through as is, with no idle timeout
+	reverse_proxy relay:8790
+}
+
+http://{$GTA2_HOST} {
+	@ca {
+		path /ca.crt
+		expression `{env.GTA2_SHARE_CA} == "yes"`
+	}
+	handle @ca {
+		root * /data/caddy/pki/authorities/local
+		rewrite * /root.crt
+		header Content-Type application/x-x509-ca-cert
+		file_server
+	}
+	handle {
+		redir https://{host}:{$GTA2_HTTPS_PORT:443}{uri} permanent
+	}
+}

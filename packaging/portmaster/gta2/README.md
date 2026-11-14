@@ -23,7 +23,7 @@ The settings are in `ports/gta2/conf/`: `registry.txt` holds the game's own opti
 `lan.ini` and `online.ini` hold the multiplayer settings: your name, the rooms, the four quick
 messages, and for `GTA 2 Online` the game servers (address, password). To run a game server for
 your group (a ready-made Docker image, on a VPS, a home server or a Raspberry Pi), see
-[deploy/consoles.md](<FORK_URL>/blob/native-multiplayer/deploy/consoles.md).
+[deploy/consoles/README.md](<FORK_URL>/blob/native-multiplayer/deploy/consoles/README.md).
 
 **What differs from the PC game:**
 - The view fills the screen whatever its shape. On a 4:3 screen it is the original 640x480 view,
