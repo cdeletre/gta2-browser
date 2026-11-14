@@ -1394,6 +1394,19 @@ de 200), et une ligne « Input delay: n ticks (ms) » (adaptatif sur console, ce
 navigateur). Pas sur le classement final. Vu : partie LAN à 3 dans le conteneur (2 et 6 ms), et
 console + Chromium sans écran via le serveur de test (51 ms, « 1 tick (33 ms) », synchronisée).
 
+### Un serveur pour les consoles, en image Docker (13 novembre)
+
+`docker/server.Dockerfile`, deux cibles : `relay` (le serveur Node seul, assez pour gta2-online)
+et `web` (le même avec le jeu navigateur compilé depuis le même commit, pour que navigateurs et
+consoles aient la même version multijoueur ; le site de M1sterMo/gta2 vient de `main`, que les
+consoles refusent). Aucun fichier du jeu dans les images. Le workflow
+`server-images-native.yml` les pousse sur `ghcr.io/<propriétaire>/gta2-server` (amd64 et arm64)
+depuis `native-multiplayer`. Doc : `deploy/consoles.md`. Observé sur le Mac (arm64) : les deux
+images se construisent ; le `gta2.wasm` de `web` est identique octet pour octet à celui du serveur
+en ligne ; login, `/config.json`, `/games.json` et le site répondent ; une partie gta2-online à 2
+dans le conteneur via le relais de l'image, 1 750 ticks, aucune désynchronisation. Pas encore vu :
+le workflow sur GitHub (rien de poussé), ni l'image sur un Raspberry Pi.
+
 ## Reste à faire
 
 Points 1 à 5 : le jalon 1. Les points 3 et 4 ne le bloquent pas dans le conteneur (montage
