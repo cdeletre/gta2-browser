@@ -8,12 +8,22 @@ native Linux binary with SDL2 and OpenGL ES 2.0, from the code of the
 [GTA2 browser port](https://github.com/M1sterMo/gta2). Source of this port: <FORK_URL>.
 
 **Game files:** you need the freeware PC installer of GTA2. Copy `GTA2INSTALLER.exe` into
-`ports/gta2/gamedata/`. On the first launch the game files are extracted from it (this takes a while),
-then the installer is deleted.
+`ports/gta2/gamedata/`. On the first launch, PortMaster's patcher extracts the game files from it and
+shows its progress on screen (1 to 5 minutes). The installer is deleted once everything is extracted;
+if something fails, it stays, and `ports/gta2/patchlog.txt` tells why.
+
+**Three launchers:** `GTA 2` is the single-player game. `GTA 2 LAN` plays with other consoles on the
+same network, with no server. `GTA 2 Online` plays through a GTA2 game server, with consoles and web
+browsers. Multiplayer is for 2 to 6 players: free roam, Gang Wars or free-for-all, in any of the
+three districts.
 
 **Saves and settings:** the game's profiles, church saves and high scores are in `ports/gta2/saves/`.
 The settings are in `ports/gta2/conf/`: `registry.txt` holds the game's own options, and
 `controls.ini` is the controller layout (it is written with comments on the first launch).
+`lan.ini` and `online.ini` hold the multiplayer settings: your name, the rooms, the four quick
+messages, and for `GTA 2 Online` the game servers (address, password). To run a game server for
+your group (a ready-made Docker image, on a VPS, a home server or a Raspberry Pi), see
+[deploy/consoles.md](<FORK_URL>/blob/native-multiplayer/deploy/consoles.md).
 
 **What differs from the PC game:**
 - The view fills the screen whatever its shape. On a 4:3 screen it is the original 640x480 view,
@@ -22,7 +32,8 @@ The settings are in `ports/gta2/conf/`: `registry.txt` holds the game's own opti
 - The intro movies are not played.
 - Options opens a simple settings screen of the port, instead of the original's separate GTA2
   Manager program (see below).
-- Select changes the car radio station (F1 on a PC keyboard).
+- Select changes the car radio station (F1 on a PC keyboard). In a multiplayer match, a short press
+  does that, and holding Select gives the multiplayer controls (see below).
 
 **Options:** from the main menu (Options), or during a game: press Start (the quit prompt), then
 Select. The game is paused while the screen is open. Up/down choose a line, left/right change it,
@@ -38,12 +49,13 @@ SURE?"). B or Start resumes play. The quit prompt alone does not pause the game.
 (it is saved as `face_buttons` in `conf/controls.ini`). The default, `auto`, follows PortMaster's
 controller mapping; on some systems (TrimUI Smart Pro S with REG Linux) `nintendo` is needed.
 
-**Logs:** the game writes its log to `ports/gta2/log.txt`, with a status line every 60 seconds.
+**Logs:** the game writes its log to `ports/gta2/log.txt` (each launch replaces it), with a status
+line every 60 seconds; in a match, a network line every 5 seconds too.
 To help with a bug report, add `export GTA2_LOG_INPUT=1` to the launch script (it logs the controller
 mapping and every button press) and send the log. After a crash, the log ends with a crash report: please include it.
 
-Tested on: MANGMI Air X (ROCKNIX), R36S (AmberELEC), RG CubeXX, RG34XX-H and RG40XX-H (muOS), RG353VS (dArkOS and
-ROCKNIX), G350 (dArkOS), TrimUI Smart Pro S (REG Linux).
+Tested on: MANGMI Air X (ROCKNIX), Retroid Pocket Mini (ROCKNIX), R36S (AmberELEC), RG CubeXX, RG34XX-H and
+RG40XX-H (muOS), RG353VS (dArkOS and ROCKNIX), G350 (dArkOS), TrimUI Smart Pro S (REG Linux).
 
 ## Controls
 
@@ -64,6 +76,28 @@ ROCKNIX), G350 (dArkOS), TrimUI Smart Pro S (REG Linux).
 
 The layout follows the PlayStation version (cross = A, square = B, triangle = Y, circle = X). Every button
 can be changed in `conf/controls.ini`.
+
+### In a multiplayer match
+
+| Button | Action |
+|--|--|
+| Select (short press) | Next radio station (in a car) |
+| Select (hold) | Scoreboard: kills, deaths, points, each player's ping, your input delay |
+| Select + D-pad | Send a quick message (up: "Follow me!", down: "Wait for me!", left: "Help!", right: "Nice one!"; change them in `conf/lan.ini` or `conf/online.ini`) |
+| Select + L1 / R1 | Set your waypoint where you stand / clear it |
+
+The other players' waypoints and chat show on screen; Options can hide them.
+
+### In the multiplayer lobby
+
+| Button | Action |
+|--|--|
+| D-pad up / down | Choose a line |
+| D-pad left / right | Change it (mode, district, time limit, traffic...) |
+| A | Act on the line: join, host, start the match, type a name or an address |
+| B | Back |
+
+Names, rooms, addresses and passwords are typed on an on-screen keyboard. In `GTA 2 LAN`, the host can set Traffic to More: 16 traffic cars a player (at most 64) instead of the original's 16 for the whole match, so that every player sees traffic and police.
 
 ## Compile
 
