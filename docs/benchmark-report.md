@@ -125,8 +125,8 @@ distance** setting (−/= keys) to see more of the city, without pop-in.
   import.
 - **Game files kept after the first pick**, and loaded automatically on the owner's
   machine.
-- **One-click freeware download (private testing).** The browser fetches Rockstar's
-  2004 freeware installer from the Internet Archive and verifies it by SHA-1. It is
+- **One-click installer download (private testing).** The browser fetches Rockstar's
+  2004 Rockstar Classics installer from the Internet Archive and verifies it by SHA-1. It is
   unpacked in a worker by `unshield` compiled to WebAssembly.
   - **All 332 unpacked files matched the reference installation byte for byte.**
   - The port's host never handles game files.

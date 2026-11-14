@@ -481,7 +481,7 @@
         "D06"
       ],
       "research_policy": "Implement locked decisions; source inspection and prescribed validation only. Escalate one contradictory fact, not broad research.",
-      "status_note": "Folder picker plus core-file check, browser copy, freeware download verified by SHA-1 (332/332 files exact). No full profile check for a picked folder."
+      "status_note": "Folder picker plus core-file check, browser copy, installer download verified by SHA-1 (332/332 files exact). No full profile check for a picked folder."
     },
     {
       "id": "T08",

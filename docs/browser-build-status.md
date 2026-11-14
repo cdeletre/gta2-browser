@@ -187,9 +187,9 @@ corner or brake. Modern is the default; `?camera=classic` draws the original cam
   - A completion marker is written last, so a partial copy is never used.
   - **Forget game files** deletes the copy.
   - Like saves, the copy is per site and per browser.
-- **Freeware download (for private testing, D19).** The start page offers
+- **Installer download (for private testing, D19).** The start page offers
   "Download GTA2 (free, 362 MB)". The player's browser:
-  1. fetches Rockstar's 2004 freeware installer from the Internet Archive, using its
+  1. fetches Rockstar's 2004 Rockstar Classics installer from the Internet Archive, using its
      CORS-enabled `/cors/` address;
   2. checks the installer's SHA-1;
   3. cuts the three InstallShield cabinets out at their recorded offsets;
@@ -220,7 +220,7 @@ corner or brake. Modern is the default; `?camera=classic` draws the original cam
   - Not yet verified there: whether the sandbox allows WebAssembly and module workers.
 - **Hosting.** The port itself can be hosted, because it contains no game assets. Every
   player must still supply their own GTA2 files once per browser. Bundling the files on
-  a server would redistribute Rockstar's assets, which the freeware licence does not
+  a server would redistribute Rockstar's assets, which Rockstar's terms do not
   allow (see AGENTS.md).
 
 ## Smooth drawing at the display's rate (D04, patch 0015)
@@ -379,7 +379,7 @@ the camera sit part-way between the last two updates (`Source/port_interpolation
 ## Languages (PR #5 by LuisIntralix, merged 2026-10-24)
 
 **What it covers:** English, Spanish and French, for the page and for the game's own text.
-- **Spanish:** the freeware ships Rockstar's own `s.gxt`, so Spanish is the complete official translation.
+- **Spanish:** the 2004 release ships Rockstar's own `s.gxt`, so Spanish is the complete official translation.
 - **French:** `data/f.gxt` is generated in the browser from the player's `e.gxt` plus the PR's translation table (`web/gxt-translations.js`, 205 keys). Mission briefs stay in English.
 - **Switching:** a change applies live (`gta2_port_set_language`).
 
@@ -555,7 +555,7 @@ Not tried yet: Firefox and Safari.
     empty slot.
 - **Static mode.** The site's `config.json` is `{"static": true}`. In that mode:
   - the same landing page and lobby run as on the game server;
-  - Play downloads the 2004 freeware installer from the Internet Archive
+  - Play downloads the 2004 Rockstar Classics installer from the Internet Archive
     (`archive.org/cors/…`, 346 MB), unpacks it in the browser and keeps it in IndexedDB;
   - co-op uses the peer-to-peer transport (WebRTC through public trackers);
   - saved crews and the leaderboard are server-only, so they are hidden.

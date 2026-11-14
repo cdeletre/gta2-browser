@@ -1546,7 +1546,7 @@ function serverGameFiles() {
       return fileCache.load();
     }
     show(filesFromServer ? t('shell.fromServer') : t('shell.connectingArchive'), 0);
-    // otherwise: the freeware installer from the Internet Archive, unpacked in this browser
+    // otherwise: the 2004 installer from the Internet Archive, unpacked in this browser
     const files = filesFromServer ? await collectDevFiles(show) : await downloadFreeware(freewareProgress(show));
     if (!onServer) count('download/gta2');
     show(t('shell.ready'), 1);

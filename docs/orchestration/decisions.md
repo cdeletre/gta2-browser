@@ -571,9 +571,9 @@ hidden until found.
 The user wanted a hosted copy to fetch the game files for players automatically.
 
 - **Rejected: serving the game files from our own server.** It redistributes Rockstar's
-  files, which the freeware release does not allow (README, AGENTS.md).
+  files, which Rockstar's terms do not allow (README, AGENTS.md).
 - **Chosen, for private testing only (user: "it will not be distributed"):**
-  - a one-click download of Rockstar's own freeware installer, from the Internet
+  - a one-click download of Rockstar's own 2004 installer, from the Internet
     Archive straight into the player's browser;
   - it is verified by SHA-1, then unpacked and kept in the browser.
   - The port's host never handles game files. This mirrors how other GTA2 projects
@@ -655,11 +655,11 @@ The owner decided (14 October 2026):
   - A stable connection for every player.
   - Later: up to 12 players, player-formed gangs with saved reputation, and
     gang-vs-gang play.
-- **The server hosts the freeware game files** so that installing is seamless:
+- **The server hosts the game files** so that installing is seamless:
   - open the link;
   - the game downloads once and is kept in the browser;
   - play.
-- **Accepted risk.** GTA2 is freeware. The owner reports that Rockstar staff said this
+- **Accepted risk.** GTA2 is Rockstar's copyrighted game. The owner reports that Rockstar staff said this
   is fine and accepts the risk.
 - **Scope of the exception.** Small private use only, behind a password. Game files
   still never go into the repo, the GitHub export or any public page (AGENTS.md).

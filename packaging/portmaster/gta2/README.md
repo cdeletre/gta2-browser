@@ -1,13 +1,13 @@
 ## Notes
 
 Thanks to [DMA Design and Rockstar Games](https://www.rockstargames.com/) for creating Grand Theft Auto 2,
-and for releasing it as freeware. This port would not exist without the
+and for making it available again in 2004 as part of Rockstar Classics. This port would not exist without the
 [GTA2 reverse engineering project (gta2_re)](https://github.com/CriminalRETeam/gta2_re) by the
 CriminalRETeam: a decompilation of the original game, function by function. It is built here as a
 native Linux binary with SDL2 and OpenGL ES 2.0, from the code of the
 [GTA2 browser port](https://github.com/M1sterMo/gta2). Source of this port: <FORK_URL>.
 
-**Game files:** you need the freeware PC installer of GTA2. Copy `GTA2INSTALLER.exe` into
+**Game files:** you need GTA2's PC installer from the 2004 Rockstar Classics release. Copy `GTA2INSTALLER.exe` into
 `ports/gta2/gamedata/`. On the first launch, PortMaster's patcher extracts the game files from it and
 shows its progress on screen (1 to 5 minutes). The installer is deleted once everything is extracted;
 if something fails, it stays, and `ports/gta2/patchlog.txt` tells why.

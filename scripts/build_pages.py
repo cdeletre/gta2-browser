@@ -3,7 +3,7 @@
 
 The site is the release build of the browser port with no game files: in
 static mode (config.json {"static": true}) the landing page's Play button
-downloads the 2004 freeware installer from the Internet Archive into the
+downloads the 2004 Rockstar Classics installer from the Internet Archive into the
 player's browser, unpacks it there and keeps it. Co-op uses the peer-to-peer
 transport (WebRTC through public trackers); saved crews need the game server.
 
@@ -37,7 +37,7 @@ README = """# GTA2 in your browser
 
 ### ▶ [Play now](https://m1stermo.github.io/gta2/)
 
-- The first time you press Play, the page downloads the official 2004 freeware release of GTA2
+- The first time you press Play, the page downloads Rockstar's 2004 *Rockstar Classics* release of GTA2
   from the [Internet Archive](https://archive.org/details/gta2_rockstar-classics) (346 MB). It
   unpacks it in your browser and keeps it for next time.
 - Widescreen, a calmer camera, a full map with waypoints, and smooth motion on high-refresh

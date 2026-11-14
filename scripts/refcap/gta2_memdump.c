@@ -1,5 +1,5 @@
 /* Dumps a running program's memory image under Wine, for reading the original
- * game's unpacked code and initialised data (the freeware gta2.exe is
+ * game's unpacked code and initialised data (the Rockstar Classics gta2.exe is
  * TAC-packed on disk). Local analysis only; the dump stays in research/.
  *
  * Usage: gta2_memdump.exe <window-title> <start-hex> <end-hex> <out-file>

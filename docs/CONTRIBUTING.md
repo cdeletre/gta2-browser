@@ -30,7 +30,7 @@ the pull request. "Old saves are lost" isn't acceptable.
 ## Other rules
 
 - **No game files.** GTA2 belongs to Rockstar Games and Take-Two Interactive. Never commit game
-  data, screenshots of it or text copied from it. Players download the freeware themselves.
+  data, screenshots of it or text copied from it. Players get the game themselves.
 - **Engine changes go in `port/patches`,** one patch per change, on top of the current series.
 - **Co-op must stay in step.** Every player simulates the same game. Anything that affects the
   simulation has to give the same result on every machine.

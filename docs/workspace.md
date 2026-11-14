@@ -1,7 +1,7 @@
 # GTA2 Project
 
 Workspace for a project built around **Grand Theft Auto 2** (DMA Design / Rockstar
-North, 1999) using the **official Rockstar Classics freeware release for Windows**
+North, 1999) using the **official Rockstar Classics release for Windows**
 (December 2004).
 
 ## Layout
@@ -37,8 +37,7 @@ Validate the static plan with `python3 scripts/validate_gta2_plan.py`.
 ## Provenance of the game binary
 
 - **Source:** Internet Archive item [`gta2_rockstar-classics`](https://archive.org/details/gta2_rockstar-classics)
-  — "Grand Theft Auto 2 (Rockstar Freeware)", uploaded by the uploader as the
-  original distribution downloaded from Rockstar's *Rockstar Classics* page
+  — uploaded as the original distribution downloaded from Rockstar's *Rockstar Classics* page
   (archived copy of that page: [web.archive.org](https://web.archive.org/web/20120119105457/http://www.rockstargames.com/classics/?id=3)).
 - **File:** `downloads/GTA2INSTALLER.exe`
 - **Size:** 362,331,961 bytes
@@ -66,9 +65,9 @@ updated by Rockstar for Windows XP with DirectX 8.1+). On modern systems:
 
 ## Legal note
 
-GTA2 was distributed free of charge by Rockstar Games under the Rockstar
-Classics label, but it remains copyrighted by Rockstar Games / Take-Two
-Interactive. The freeware release may not be redistributed; keep this copy for
+GTA2 was distributed by Rockstar Games under the Rockstar Classics label,
+and it remains copyrighted by Rockstar Games / Take-Two
+Interactive. This release may not be redistributed; keep this copy for
 personal/project use only.
 
 ## Publishing

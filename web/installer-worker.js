@@ -1,4 +1,4 @@
-// Unpacks the GTA2 freeware installer inside the browser (module worker).
+// Unpacks the GTA2 installer (Rockstar Classics, 2004) inside the browser (module worker).
 //
 // Input: the downloaded GTA2INSTALLER.exe (Rockstar Classics, December 2004)
 // as an ArrayBuffer. It is checked against the known SHA-1, the InstallShield

@@ -159,7 +159,7 @@ const server = createServer(async (req, res) => {
     }
     if (url.pathname === '/config.json') {
       // gameFiles false (no game files under GAME_ROOT, as in the relay image or with none
-      // mounted): browsers get the freeware release from the Internet Archive themselves
+      // mounted): browsers get the 2004 release from the Internet Archive themselves
       const gameFiles = await gameManifest().then((m) => JSON.parse(m).files.length > 0, () => false);
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
       return res.end(JSON.stringify({ server: true, relay: '/relay', invite: PASSWORD ? INVITE : null, gameFiles }));

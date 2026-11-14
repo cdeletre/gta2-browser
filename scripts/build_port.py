@@ -198,7 +198,7 @@ def main(argv=None):
                 shutil.copy2(f, out / f.name)
             elif f.is_dir():
                 shutil.copytree(f, out / f.name, dirs_exist_ok=True)
-    # unshield (WebAssembly) for unpacking the freeware installer in the browser
+    # unshield (WebAssembly) for unpacking the GTA2 installer in the browser
     unshield = ROOT / 'build/unshield'
     if not (unshield / 'unshield.wasm').exists():
         subprocess.run(['sh', str(ROOT / 'scripts/build_unshield_wasm.sh')], check=True)

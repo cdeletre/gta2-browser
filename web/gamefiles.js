@@ -83,7 +83,7 @@ function openDb() {
   return promisify(req);
 }
 
-// Rockstar's December 2004 freeware release, as archived by the Internet
+// Rockstar's December 2004 Rockstar Classics release, as archived by the Internet
 // Archive (item gta2_rockstar-classics; README.md "Provenance"). The /cors/
 // address serves it with CORS headers, so the player's browser can fetch it
 // directly; this site never stores or serves game files. For private testing.
@@ -91,7 +91,7 @@ const INSTALLER_URL = 'https://archive.org/cors/gta2_rockstar-classics/GTA2INSTA
 const INSTALLER_SIZE = 362331961;
 
 /**
- * Downloads the freeware installer into this browser and unpacks it in a
+ * Downloads the Rockstar Classics installer into this browser and unpacks it in a
  * worker (web/installer-worker.js).
  * @param {(stage: string, done: number, total: number) => void} onProgress
  * @returns {Promise<Map<string, Blob>>} game files keyed by lower-case relative path
@@ -105,7 +105,7 @@ export async function downloadFreeware(onProgress) {
 }
 
 /**
- * Checks and unpacks the freeware installer (GTA2INSTALLER.exe) the player
+ * Checks and unpacks the Rockstar Classics installer (GTA2INSTALLER.exe) the player
  * downloaded themselves, then picked as a file.
  * @param {File} file
  */

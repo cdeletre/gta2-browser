@@ -8,7 +8,7 @@ Bring friends: co-op, Gang Wars and free-for-all, browser to browser.
 
 ![Downtown at 16:9 with the radar minimap and a gang-job waypoint](docs/screenshots/downtown-widescreen-radar.png)
 
-The first time you press Play, the page downloads the official 2004 freeware release of GTA2
+The first time you press Play, the page downloads Rockstar's 2004 *Rockstar Classics* release of GTA2
 from the [Internet Archive](https://archive.org/details/gta2_rockstar-classics). That's about
 346 MB, roughly half a minute on a fast connection. The page unpacks it right in the browser and
 keeps it, so every visit after that starts instantly. Saves stay in your browser too, with
@@ -153,7 +153,7 @@ site. [deploy/selfhost/](deploy/selfhost/README.md) has two ready-made images bu
 `native-multiplayer` (`relay`, and `web` with the browser game of the same version) and the
 console's settings.
 
-> GTA2 is freeware but not freely redistributable. Keep a server that hosts game files
+> GTA2 belongs to Rockstar Games / Take-Two Interactive and may not be redistributed. Keep a server that hosts game files
 > private, behind its password, for people you know. Don't put the game files in a repo or
 > on a public page.
 
@@ -175,7 +175,7 @@ has a list of ideas with pointers to where each one starts in the code.
 
 - **GTA2** is © Rockstar Games / Take-Two Interactive. This is an unofficial, non-commercial fan
   project, not affiliated with either. **This repository contains no game files.** Players get
-  the official freeware release from the Internet Archive, or use their own copy.
+  Rockstar's 2004 Rockstar Classics release from the Internet Archive, or use their own copy.
 - **The engine** comes from the [`gta2_re`](https://github.com/CriminalRETeam/gta2_re)
   decompilation by the CriminalRETeam contributors, applied here as patches. Their terms apply
   to those patches.

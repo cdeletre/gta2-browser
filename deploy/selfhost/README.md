@@ -28,11 +28,11 @@ Browsers and consoles only play together when the browser game comes from this b
 built from upstream `main`, which the consoles don't accept.
 
 Neither image holds game files. Consoles never need them from the server (the package unpacks
-the game on the console). Browsers get the freeware release from the Internet Archive themselves
+the game on the console). Browsers get Rockstar's 2004 release from the Internet Archive themselves
 (346 MB, once, kept in the browser), unless the server has the game files ("Serve the game files",
 below).
 
-> GTA2 is freeware but not freely redistributable. A server with the game files stays private,
+> GTA2 belongs to Rockstar Games / Take-Two Interactive and may not be redistributed. A server with the game files stays private,
 > behind its password, for people you know.
 
 ## Run it with HTTPS (recommended)
