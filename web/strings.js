@@ -141,7 +141,7 @@ const UI = {
     'ui.help.q5': 'It runs slowly or looks wrong',
     'ui.help.a5': 'Turn on the FPS counter in Options. Close other heavy tabs, and try another browser if it stays low. "Motion: Original 30 fps" and "Screen shape: 4:3 original" are the lightest settings.',
     'ui.help.q6': 'Is it legal?',
-    'ui.help.a6': 'GTA2 was released as freeware by Rockstar Games in 2004. This is an unofficial, non-commercial fan project, not affiliated with Rockstar Games or Take-Two Interactive. GTA2 is © Rockstar Games.',
+    'ui.help.a6': 'GTA2 is © Rockstar Games / Take-Two Interactive. The page gets Rockstar’s 2004 Rockstar Classics release from the Internet Archive; no game files are hosted here. This is an unofficial, non-commercial fan project, not affiliated with Rockstar Games or Take-Two Interactive.',
     'ui.help.q7': 'Which languages are there?',
     'ui.help.a7': "English, Spanish and French, for this page and for the game itself: menus, HUD and status messages. Mission briefs are only translated when your game files include the game's own Spanish or French texts; otherwise they stay in English.",
     'ui.help.q8': 'Do you track me?',
@@ -176,8 +176,8 @@ const UI = {
     'ui.coop.crewPlaceholder': 'Crew name, e.g. Hexen',
     'ui.coop.start': 'Start',
 
-    'ui.freeware.lead': 'No GTA2 installed? Rockstar released it free in 2004. Download that release from the Internet Archive straight into this browser (346 MB); it is unpacked here and kept for next time.',
-    'ui.freeware.download': 'Download GTA2 (free, 346 MB)',
+    'ui.freeware.lead': 'No GTA2 installed? Download Rockstar’s 2004 Rockstar Classics release from the Internet Archive straight into this browser (346 MB); it is unpacked here and kept for next time.',
+    'ui.freeware.download': 'Download GTA2 (346 MB)',
     'ui.freeware.pick': 'Or download <code>GTA2INSTALLER.exe</code> from the <a href="https://archive.org/details/gta2_rockstar-classics" target="_blank" rel="noopener">Internet Archive</a> yourself and choose it here:',
     'ui.freeware.choose': 'Choose GTA2INSTALLER.exe',
 
@@ -259,7 +259,7 @@ const UI = {
     'ui.help.q5': 'Va lento o se ve mal',
     'ui.help.a5': 'Activa el contador de FPS en Opciones. Cierra otras pestañas pesadas y prueba otro navegador si sigue bajo. «Movimiento: 30 fps original» y «Formato de pantalla: 4:3 original» son los ajustes más ligeros.',
     'ui.help.q6': '¿Es legal?',
-    'ui.help.a6': 'Rockstar Games publicó GTA2 como freeware en 2004. Este es un proyecto de fans, no oficial y sin ánimo de lucro, no afiliado a Rockstar Games ni a Take-Two Interactive. GTA2 es © Rockstar Games.',
+    'ui.help.a6': 'GTA2 es © Rockstar Games / Take-Two Interactive. La página obtiene la edición Rockstar Classics de 2004 del Internet Archive; aquí no se aloja ningún archivo del juego. Este es un proyecto de fans, no oficial y sin ánimo de lucro, no afiliado a Rockstar Games ni a Take-Two Interactive.',
     'ui.help.q7': '¿Qué idiomas hay?',
     'ui.help.a7': 'Inglés, español y francés, para esta página y para el juego: menús, HUD y mensajes de estado. Los resúmenes de las misiones solo se traducen si tus archivos de juego incluyen los textos propios en español o francés del juego; si no, siguen en inglés.',
     'ui.help.q8': '¿Me rastreáis?',
@@ -294,8 +294,8 @@ const UI = {
     'ui.coop.crewPlaceholder': 'Nombre del clan, p. ej. Hexen',
     'ui.coop.start': 'Empezar',
 
-    'ui.freeware.lead': '¿No tienes GTA2 instalado? Rockstar lo publicó gratis en 2004. Descarga esa edición del Internet Archive directamente a este navegador (346 MB); se descomprime aquí y se guarda para la próxima vez.',
-    'ui.freeware.download': 'Descargar GTA2 (gratis, 346 MB)',
+    'ui.freeware.lead': '¿No tienes GTA2 instalado? Descarga la edición Rockstar Classics de 2004 del Internet Archive directamente a este navegador (346 MB); se descomprime aquí y se guarda para la próxima vez.',
+    'ui.freeware.download': 'Descargar GTA2 (346 MB)',
     'ui.freeware.pick': 'O descarga <code>GTA2INSTALLER.exe</code> del <a href="https://archive.org/details/gta2_rockstar-classics" target="_blank" rel="noopener">Internet Archive</a> tú mismo y elígelo aquí:',
     'ui.freeware.choose': 'Elegir GTA2INSTALLER.exe',
 
@@ -377,7 +377,7 @@ const UI = {
     'ui.help.q5': 'Ça rame ou ça s’affiche mal',
     'ui.help.a5': "Activez le compteur FPS dans Options. Fermez les autres onglets lourds et essayez un autre navigateur si le taux reste bas. « Mouvement : 30 fps d'origine » et « Format d'écran : 4:3 d'origine » sont les réglages les plus légers.",
     'ui.help.q6': 'Est-ce légal ?',
-    'ui.help.a6': 'GTA2 a été publié en freeware par Rockstar Games en 2004. C’est un projet de fans non officiel et non commercial, sans affiliation avec Rockstar Games ni Take-Two Interactive. GTA2 est © Rockstar Games.',
+    'ui.help.a6': 'GTA2 est © Rockstar Games / Take-Two Interactive. La page récupère l’édition Rockstar Classics de 2004 depuis l’Internet Archive ; aucun fichier du jeu n’est hébergé ici. C’est un projet de fans non officiel et non commercial, sans affiliation avec Rockstar Games ni Take-Two Interactive.',
     'ui.help.q7': 'Quelles langues sont disponibles ?',
     'ui.help.a7': "L'anglais, l'espagnol et le français, pour cette page et pour le jeu lui-même : menus, HUD et messages d'état. Les briefings des missions ne sont traduits que si vos fichiers de jeu incluent les textes espagnols ou français d'origine du jeu ; sinon, ils restent en anglais.",
     'ui.help.q8': 'Est-ce que vous me pistez ?',
@@ -412,8 +412,8 @@ const UI = {
     'ui.coop.crewPlaceholder': "Nom de l'équipe, ex. Hexen",
     'ui.coop.start': 'Démarrer',
 
-    'ui.freeware.lead': "Pas de GTA2 installé ? Rockstar l'a publié gratuitement en 2004. Téléchargez cette édition depuis l'Internet Archive directement dans ce navigateur (346 Mo) ; elle est décompressée ici et gardée pour la prochaine fois.",
-    'ui.freeware.download': 'Télécharger GTA2 (gratuit, 346 Mo)',
+    'ui.freeware.lead': "Pas de GTA2 installé ? Téléchargez l'édition Rockstar Classics de 2004 depuis l'Internet Archive directement dans ce navigateur (346 Mo) ; elle est décompressée ici et gardée pour la prochaine fois.",
+    'ui.freeware.download': 'Télécharger GTA2 (346 Mo)',
     'ui.freeware.pick': 'Ou téléchargez vous-même <code>GTA2INSTALLER.exe</code> depuis <a href="https://archive.org/details/gta2_rockstar-classics" target="_blank" rel="noopener">Internet Archive</a> et choisissez-le ici :',
     'ui.freeware.choose': 'Choisir GTA2INSTALLER.exe',
 

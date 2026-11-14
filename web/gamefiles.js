@@ -11,7 +11,7 @@ import { lang, registerDict, t } from './strings.js';
 // sends back; the worker has no access to the language, so they are translated here.
 registerDict({
   en: {
-    'ui.files.notInstaller': 'That is not the GTA2 freeware installer: GTA2INSTALLER.exe is {size} bytes.',
+    'ui.files.notInstaller': 'That is not the GTA2 installer (Rockstar Classics, 2004): GTA2INSTALLER.exe is {size} bytes.',
     'ui.files.workerFailed': 'The unpacking worker failed.',
     'ui.files.txAborted': 'transaction aborted',
     'ui.files.downloadFailed': 'The download failed (HTTP {status})',
@@ -20,12 +20,12 @@ registerDict({
     'ui.files.stalled': 'The Internet Archive sent nothing for {n} seconds',
     'ui.files.unreachable': 'The Internet Archive could not be reached ({err})',
     'ui.files.badSize': 'The installer has the wrong size ({n} bytes).',
-    'ui.files.checksum': 'The installer does not match the GTA2 freeware release (checksum mismatch).',
+    'ui.files.checksum': 'The installer does not match the 2004 Rockstar Classics release of GTA2 (checksum mismatch).',
     'ui.files.unpackFailed': 'Unpacking failed (unshield {rc}): {log}',
     'ui.files.noFiles': 'Unpacking produced no game files: {log}',
   },
   es: {
-    'ui.files.notInstaller': 'Ese no es el instalador freeware de GTA2: GTA2INSTALLER.exe ocupa {size} bytes.',
+    'ui.files.notInstaller': 'Ese no es el instalador de GTA2 (Rockstar Classics, 2004): GTA2INSTALLER.exe ocupa {size} bytes.',
     'ui.files.workerFailed': 'El proceso de descompresión falló.',
     'ui.files.txAborted': 'transacción cancelada',
     'ui.files.downloadFailed': 'La descarga falló (HTTP {status})',
@@ -34,12 +34,12 @@ registerDict({
     'ui.files.stalled': 'El Internet Archive no envió nada durante {n} segundos',
     'ui.files.unreachable': 'No se pudo contactar con el Internet Archive ({err})',
     'ui.files.badSize': 'El instalador tiene un tamaño incorrecto ({n} bytes).',
-    'ui.files.checksum': 'El instalador no coincide con la edición freeware de GTA2 (la suma de comprobación no coincide).',
+    'ui.files.checksum': 'El instalador no coincide con la edición Rockstar Classics de 2004 de GTA2 (la suma de comprobación no coincide).',
     'ui.files.unpackFailed': 'La descompresión falló (unshield {rc}): {log}',
     'ui.files.noFiles': 'La descompresión no produjo archivos de juego: {log}',
   },
   fr: {
-    'ui.files.notInstaller': 'Ce n’est pas l’installateur freeware de GTA2 : GTA2INSTALLER.exe fait {size} octets.',
+    'ui.files.notInstaller': 'Ce n’est pas l’installateur de GTA2 (Rockstar Classics, 2004) : GTA2INSTALLER.exe fait {size} octets.',
     'ui.files.workerFailed': 'Le processus de décompression a échoué.',
     'ui.files.txAborted': 'transaction interrompue',
     'ui.files.downloadFailed': 'Le téléchargement a échoué (HTTP {status})',
@@ -48,7 +48,7 @@ registerDict({
     'ui.files.stalled': 'Internet Archive n’a rien envoyé pendant {n} secondes',
     'ui.files.unreachable': 'Impossible de joindre Internet Archive ({err})',
     'ui.files.badSize': 'L’installateur a une taille incorrecte ({n} octets).',
-    'ui.files.checksum': 'L’installateur ne correspond pas à l’édition freeware de GTA2 (somme de contrôle différente).',
+    'ui.files.checksum': 'L’installateur ne correspond pas à l’édition Rockstar Classics de 2004 de GTA2 (somme de contrôle différente).',
     'ui.files.unpackFailed': 'La décompression a échoué (unshield {rc}) : {log}',
     'ui.files.noFiles': 'La décompression n’a produit aucun fichier de jeu : {log}',
   },

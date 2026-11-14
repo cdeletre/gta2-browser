@@ -188,7 +188,7 @@ corner or brake. Modern is the default; `?camera=classic` draws the original cam
   - **Forget game files** deletes the copy.
   - Like saves, the copy is per site and per browser.
 - **Installer download (for private testing, D19).** The start page offers
-  "Download GTA2 (free, 362 MB)". The player's browser:
+  "Download GTA2 (346 MB)". The player's browser:
   1. fetches Rockstar's 2004 Rockstar Classics installer from the Internet Archive, using its
      CORS-enabled `/cors/` address;
   2. checks the installer's SHA-1;
