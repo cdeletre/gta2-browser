@@ -461,7 +461,7 @@ game's time limit stops at 60 minutes.
   - the shared Caddy forwards one site to it;
   - no ports are published.
 
-  Details are in [deploy/README.md](../deploy/README.md) (`scripts/deploy_server.sh`).
+  Details are in [deploy/legacy/README.md](../deploy/legacy/README.md) (`scripts/deploy_server.sh`).
 - **What players see.**
   - An invite link logs them in.
   - The page offers **Play** and **Play with friends**, and the game downloads in the

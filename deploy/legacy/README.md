@@ -24,7 +24,7 @@ The droplet also runs another production app (SkipTheBA), so this project follow
 the droplet's rules (`/opt/HOSTING.md` on the server).
 
 **Everything lives in `/opt/gta2/`:**
-- `compose.yml` (from `deploy/compose.yml`): project name `gta2`, container
+- `compose.yml` (from `deploy/legacy/compose.yml`): project name `gta2`, container
   `gta2-app` on the external `edge` network, 256 MB memory limit,
   `restart: unless-stopped`, log rotation, no published ports;
 - `.env`, chmod 600: `GTA2_PASSWORD`, `PUBLIC_URL`;

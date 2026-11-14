@@ -13,7 +13,7 @@
 # Neither holds any game file. The game's data/ folder can be mounted on /srv/game (read-only)
 # for browsers to download it from the server; without it they get the freeware release from the
 # Internet Archive themselves. Consoles never download it: the PortMaster package unpacks it.
-# How to run it: deploy/consoles/README.md. docker/server.Dockerfile.dockerignore keeps the build
+# How to run it: deploy/selfhost/README.md. docker/server.Dockerfile.dockerignore keeps the build
 # context to what the build reads (never game/, build/ or research/).
 
 ARG NODE_IMAGE=node:22-alpine

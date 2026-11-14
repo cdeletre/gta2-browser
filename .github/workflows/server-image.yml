@@ -1,5 +1,5 @@
 # Builds the game server image (server/) and pushes it to GHCR, so the droplet
-# only pulls it (it has too little RAM to build). D21, deploy/README.md.
+# only pulls it (it has too little RAM to build). D21, deploy/legacy/README.md.
 name: server-image
 
 on:

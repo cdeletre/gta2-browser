@@ -146,10 +146,10 @@ docker run -d --name gta2 -p 8790:8790 \
 - Put HTTPS in front of it (Caddy or nginx).
 - The invite link is in `docker logs gta2`.
 
-Every setting and our own deploy are in [deploy/README.md](deploy/README.md).
+Every setting and our own deploy are in [deploy/legacy/README.md](deploy/legacy/README.md).
 
 **For the PortMaster consoles** (`GTA 2 Online`): the consoles need this server, not a static
-site. [deploy/consoles/](deploy/consoles/README.md) has two ready-made images built from
+site. [deploy/selfhost/](deploy/selfhost/README.md) has two ready-made images built from
 `native-multiplayer` (`relay`, and `web` with the browser game of the same version) and the
 console's settings.
 

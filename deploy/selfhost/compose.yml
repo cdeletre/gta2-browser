@@ -1,9 +1,11 @@
-# The game server for the consoles (GTA 2 Online) behind HTTPS: the relay image and Caddy.
-# Settings in .env next to this file (cp .env.example .env, chmod 600 .env). README.md here.
+# A GTA2 game server of your own, behind HTTPS: the relay image (consoles' GTA 2 Online, and
+# browsers with the web image) and Caddy. Settings in .env next to this file
+# (cp .env.example .env, chmod 600 .env). README.md here.
 #   docker compose up -d        start (and after changing .env)
 #   ./ca.sh                     the authority the clients must trust (internal certificates)
 #   docker compose logs relay   the invite link
-name: gta2-consoles
+# The game files for browsers: compose.override.disabled.yml (README.md).
+name: gta2-selfhost
 
 services:
   relay:
@@ -13,7 +15,9 @@ services:
       GTA2_PASSWORD: ${GTA2_PASSWORD:?set GTA2_PASSWORD in .env}
       PUBLIC_URL: ${GTA2_PUBLIC_URL:-https://${GTA2_HOST:?set GTA2_HOST in .env}:${GTA2_HTTPS_PORT:-443}}
     volumes:
-      - db:/srv/db # saved crews; a named volume gets the image's owner, no chmod 777
+      # saved crews (crews.json). On Linux, the server's user (uid 1000) must own it:
+      # sudo chown 1000:1000 db
+      - ./db:/srv/db
     # no published port: only Caddy reaches it, so the password never travels in clear
     networks: [gta2]
     healthcheck:
@@ -53,6 +57,5 @@ networks:
   gta2: {}
 
 volumes:
-  db: {}
   caddy-data: {}
   caddy-config: {}

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Deploys the GTA2 game server (D21) to the shared droplet, following its
-# hosting rules (deploy/README.md): everything under /opt/gta2, the image is
+# hosting rules (deploy/legacy/README.md): everything under /opt/gta2, the image is
 # pulled from GHCR (built in CI), the shared Caddy gets one sites file.
 #
 #   DOMAIN=gta2.example.com GTA2_PASSWORD='...' scripts/deploy_server.sh user@host   # first time
@@ -54,7 +54,7 @@ if [ -d build/port/release/old ]; then
 fi
 rsync -az --delete --exclude /old/ --exclude /old-local/ --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r build/port/release/ "$target:/opt/gta2/data/web/"
 rsync -az --delete --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r --exclude '*.exe' --exclude '*.dll' --exclude '*.bik' game/ "$target:/opt/gta2/data/game/"
-rsync -az deploy/compose.yml "$target:/opt/gta2/compose.yml"
+rsync -az deploy/legacy/compose.yml "$target:/opt/gta2/compose.yml"
 # also here: macOS's own rsync (openrsync) ignores --chmod, and the container must read every file
 ssh "$target" 'chmod -R u=rwX,go=rX /opt/gta2/data/web /opt/gta2/data/game'
 

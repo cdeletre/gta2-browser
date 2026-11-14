@@ -1,7 +1,7 @@
-# A game server for the consoles
+# Host your own GTA2 game server
 
-`GTA 2 Online`, the PortMaster package's online launcher, plays through a GTA2 game server: the
-small Node server in `server/`. It relays the matches (every player connects to it, so it works
+For the PortMaster consoles (`GTA 2 Online`, the package's online launcher) and, with the `web`
+image, for browsers too. The server is the small Node server in `server/`. It relays the matches (every player connects to it, so it works
 on every network), keeps out strangers with a password, and shows the games on `/games`.
 Anyone can run one for their group, on any always-on machine the players can reach: a VPS, a home
 server or NAS, a Raspberry Pi (3 or newer, 64-bit OS).
@@ -28,8 +28,9 @@ Browsers and consoles only play together when the browser game comes from this b
 built from upstream `main`, which the consoles don't accept.
 
 Neither image holds game files. Consoles never need them from the server (the package unpacks
-the game on the console). For browsers, mount the game's folder on `/srv/game`; without it, each
-browser gets the freeware release from the Internet Archive itself.
+the game on the console). Browsers get the freeware release from the Internet Archive themselves
+(346 MB, once, kept in the browser), unless the server has the game files ("Serve the game files",
+below).
 
 > GTA2 is freeware but not freely redistributable. A server with the game files stays private,
 > behind its password, for people you know.
@@ -41,6 +42,7 @@ You need Docker with Compose. Copy the folder to the server, then:
 
 ```sh
 cp .env.example .env && chmod 600 .env   # then fill in GTA2_PASSWORD and GTA2_HOST
+sudo chown 1000:1000 db                  # Linux only: the server's user writes the crews there
 docker compose up -d
 ./ca.sh                                  # internal certificates: the authority to trust
 docker compose logs relay                # the invite link
@@ -60,8 +62,30 @@ What `.env` sets (`.env.example` explains each one):
 | `GTA2_PUBLIC_URL` | `https://<host>:<port>` | The invite link's address, when behind another proxy. |
 
 The server is reached only through Caddy: its own port (8790) is not published, so the
-password never travels in clear. Saved crews and Caddy's certificates live in Docker volumes;
-`docker compose down` keeps them (`down -v` would delete them, and with them the authority).
+password never travels in clear.
+
+What it keeps:
+- `db/`: the saved crews (`crews.json`): Gang Wars results reported by browsers, a match of a
+  minute or more. Consoles don't report them yet, so with consoles only it stays empty. On
+  Linux, the server runs as uid 1000 and must own it (`sudo chown 1000:1000 db`); otherwise the
+  log says `crews: could not save`.
+- Caddy's certificates and its authority, in the Docker volume `gta2-selfhost_caddy-data`.
+  `docker compose down` keeps it; `down -v` deletes it, and a new authority would have to be
+  trusted again everywhere.
+
+### Serve the game files (browsers)
+
+With `GTA2_IMAGE=web`, browsers can get the game from your server instead of the Internet
+Archive:
+
+1. Copy the contents of the game's `data/` folder into `gamedata/` (`gamedata/Audio`,
+   `gamedata/wil.gmp`...). Executables, DLLs and movies are never served.
+2. Rename `compose.override.disabled.yml` to `compose.override.yml`. Docker Compose reads it on
+   its own; it mounts `gamedata/` in the server, read-only.
+3. `docker compose up -d`.
+
+The page asks the server (`/config.json`, `gameFiles`) and falls back to the Internet Archive when
+`gamedata/` is empty or not mounted. A browser that already has the game keeps its copy.
 
 ### Certificates
 
@@ -97,8 +121,8 @@ so keep this to a network you trust. Behind a proxy of your own (nginx): pass th
 upgrade on (`proxy_http_version 1.1`, `Upgrade` and `Connection` headers) and raise
 `proxy_read_timeout`.
 
-For browsers to download the game from your server, add `-v "$PWD/game:/srv/game:ro"` (or the
-same line under the relay's `volumes:` in `compose.yml`), `game/` holding the game's `data/`.
+For browsers to get the game from your server (the `web` image), add
+`-v "$PWD/gamedata:/srv/game/data:ro"`, `gamedata/` holding the contents of the game's `data/`.
 
 ## On the consoles
 

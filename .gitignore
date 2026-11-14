@@ -28,6 +28,18 @@ build/
 /packaging/portmaster/gta2/gta2.aarch64
 /packaging/portmaster/gta2/gta2-lan.aarch64
 /packaging/portmaster/gta2/gta2-online.aarch64
-# deploy/consoles: the settings (password) and the exported authority
-/deploy/consoles/.env
-/deploy/consoles/gta2-ca.pem
+# deploy/selfhost: what a running server keeps next to compose.yml (never committed)
+# the settings, with the password
+/deploy/selfhost/.env
+# the exported authority (ca.sh)
+/deploy/selfhost/gta2-ca.pem
+# saved crews: players' and crews' names (the folder itself is kept by its .gitkeep)
+/deploy/selfhost/db/*
+!/deploy/selfhost/db/.gitkeep
+# the game files, mounted for browsers (the folder itself is kept by its .gitkeep)
+/deploy/selfhost/gamedata/*
+!/deploy/selfhost/gamedata/.gitkeep
+# local changes (compose.override.disabled.yml is the template)
+/deploy/selfhost/compose.override.yml
+# deploy/legacy: the droplet's folders, should they ever appear here
+/deploy/legacy/data/

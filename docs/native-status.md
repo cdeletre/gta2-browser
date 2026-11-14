@@ -1401,7 +1401,7 @@ et `web` (le même avec le jeu navigateur compilé depuis le même commit, pour 
 consoles aient la même version multijoueur ; le site de M1sterMo/gta2 vient de `main`, que les
 consoles refusent). Aucun fichier du jeu dans les images. Le workflow
 `server-images-native.yml` les pousse sur `ghcr.io/<propriétaire>/gta2-server` (amd64 et arm64)
-depuis `native-multiplayer`. Doc : `deploy/consoles/README.md`. Observé sur le Mac (arm64) : les deux
+depuis `native-multiplayer`. Doc : `deploy/selfhost/README.md`. Observé sur le Mac (arm64) : les deux
 images se construisent ; le `gta2.wasm` de `web` est identique octet pour octet à celui du serveur
 en ligne ; login, `/config.json`, `/games.json` et le site répondent ; une partie gta2-online à 2
 dans le conteneur via le relais de l'image, 1 750 ticks, aucune désynchronisation. Pas encore vu :
@@ -1409,7 +1409,7 @@ l'image sur un Raspberry Pi. Le workflow a tourné sur GitHub après le push (4 
 les deux images se téléchargent sans compte (le paquet est public d'emblée, le dépôt l'étant).
 Propriétaire : `:relay` sur le MacBook, partie à 2 consoles en `ws://` (13 novembre).
 
-`deploy/consoles/` : `compose.yml` (le relais, sans port publié, et Caddy devant), `Caddyfile`
+`deploy/selfhost/` : `compose.yml` (le relais, sans port publié, et Caddy devant), `Caddyfile`
 (`tls internal` par défaut, ou un e-mail pour Let's Encrypt ; `default_sni` pour l'accès par IP),
 `.env.example` (mot de passe, hôte, ports, image) et `ca.sh` (exporte l'autorité de Caddy en
 `gta2-ca.pem` avec son empreinte). Observé sur le Mac, accès par IP sur 8443 : sans l'autorité,
@@ -1420,6 +1420,17 @@ redirection HTTP, `/ca.crt` (identique à `ca.sh`), le port 8790 fermé, le lien
 recréation des conteneurs (volume gardé). Le certificat du serveur change toutes les 12 h : sur
 console, `ca_file` et pas `tls_fingerprint`. Pas encore vu : Let's Encrypt, une vraie console,
 un navigateur avec l'autorité installée.
+
+Ensuite (14 novembre) : le dossier devient `deploy/selfhost/` (il sert aussi les navigateurs), le
+projet Compose `gta2-selfhost` ; l'ancien déploiement du droplet va dans `deploy/legacy/`. Les
+crews dans `db/` (dossier du dépôt, contenu ignoré ; uid 1000 sous Linux), les fichiers du jeu
+dans `gamedata/` via `compose.override.disabled.yml` à renommer. Constaté : un serveur sans fichiers
+du jeu cassait les navigateurs (la page prenait toujours le serveur, liste vide) ; `/config.json`
+dit maintenant `gameFiles`, la page revient à l'Internet Archive sans eux (un serveur plus ancien,
+qui ne le dit pas, est supposé les avoir), et le serveur ignore les fichiers cachés (`.gitkeep`,
+`.DS_Store`). Vu dans Chromium (image `web` locale) : sans fichiers, rien avant Play, puis
+archive.org ; avec `game/data` monté, le serveur. Propriétaire : partie navigateur Gang Wars,
+`crews.json` écrit. Les consoles n'envoient pas encore les résultats Gang Wars.
 
 ## Reste à faire
 
