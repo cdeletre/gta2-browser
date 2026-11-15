@@ -1,0 +1,32 @@
+# A GTA2 game server of your own WITHOUT HTTPS: the relay image alone, its port 8790 published.
+# For a network you trust (home, a VPN): the password and the matches cross it in clear.
+# Anywhere else, use ../selfhost (Caddy in front, HTTPS). Settings in .env next to this file
+# (cp .env.example .env, chmod 600 .env). README.md here.
+#   docker compose up -d        start (and after changing .env)
+#   docker compose logs relay   the invite link
+# The game files for browsers: compose.override.disabled.yml (README.md).
+name: gta2-selfhost-unsecure
+
+services:
+  relay:
+    image: ghcr.io/cdeletre/gta2-server:${GTA2_IMAGE:-relay}
+    restart: unless-stopped
+    environment:
+      GTA2_PASSWORD: ${GTA2_PASSWORD:?set GTA2_PASSWORD in .env}
+      PUBLIC_URL: ${GTA2_PUBLIC_URL:-http://${GTA2_HOST:?set GTA2_HOST in .env}:${GTA2_PORT:-8790}}
+    ports:
+      # GTA2_BIND: 0.0.0.0 for every interface, or one address (the LAN's, the VPN's)
+      - "${GTA2_BIND:-0.0.0.0}:${GTA2_PORT:-8790}:8790"
+    volumes:
+      # saved crews (crews.json). On Linux, the server's user (uid 1000) must own it:
+      # sudo chown 1000:1000 db
+      - ./db:/srv/db
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8790/login"]
+      interval: 30s
+      timeout: 5s
+      start_period: 5s
+    mem_limit: 256m
+    logging:
+      driver: json-file
+      options: { max-size: 10m, max-file: "3" }

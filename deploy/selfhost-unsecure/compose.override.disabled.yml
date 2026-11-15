@@ -1,0 +1,9 @@
+# The game files for browsers (GTA2_IMAGE=web), served from gamedata/ instead of each browser
+# downloading the 2004 release from the Internet Archive. To use it: put the game's data/
+# folder's contents in gamedata/ (gamedata/Audio, gamedata/wil.gmp...), rename this file to
+# compose.override.yml (Docker Compose reads it on its own), then docker compose up -d.
+# GTA2 is not freely redistributable: keep such a server behind its password, for people you know.
+services:
+  relay:
+    volumes:
+      - ./gamedata:/srv/game/data:ro

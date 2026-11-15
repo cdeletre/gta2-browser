@@ -41,5 +41,12 @@ build/
 !/deploy/selfhost/gamedata/.gitkeep
 # local changes (compose.override.disabled.yml is the template)
 /deploy/selfhost/compose.override.yml
+# deploy/selfhost-unsecure: the same, without Caddy
+/deploy/selfhost-unsecure/.env
+/deploy/selfhost-unsecure/db/*
+!/deploy/selfhost-unsecure/db/.gitkeep
+/deploy/selfhost-unsecure/gamedata/*
+!/deploy/selfhost-unsecure/gamedata/.gitkeep
+/deploy/selfhost-unsecure/compose.override.yml
 # deploy/legacy: the droplet's folders, should they ever appear here
 /deploy/legacy/data/

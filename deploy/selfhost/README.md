@@ -110,19 +110,18 @@ The page asks the server (`/config.json`, `gameFiles`) and falls back to the Int
 
 ## Run it without HTTPS (home network only)
 
+[../selfhost-unsecure](../selfhost-unsecure/README.md) is the same without Caddy: the relay's
+port 8790 published, the same `.env` settings (`GTA2_PORT` in place of the HTTPS ones) and the
+same game-files override. Consoles connect to `ws://<the machine's IP>:8790`. The password
+crosses the network in clear, so keep this to a network you trust.
+
+Or in one command:
+
 ```sh
 docker run -d --name gta2 --restart unless-stopped -p 8790:8790 \
   -e GTA2_PASSWORD='pick-one' -v gta2-db:/srv/db \
   ghcr.io/cdeletre/gta2-server:relay
 ```
-
-Consoles connect to `ws://<the machine's IP>:8790`. The password crosses the network in clear,
-so keep this to a network you trust. Behind a proxy of your own (nginx): pass the WebSocket
-upgrade on (`proxy_http_version 1.1`, `Upgrade` and `Connection` headers) and raise
-`proxy_read_timeout`.
-
-For browsers to get the game from your server (the `web` image), add
-`-v "$PWD/gamedata:/srv/game/data:ro"`, `gamedata/` holding the contents of the game's `data/`.
 
 ## On the consoles
 
