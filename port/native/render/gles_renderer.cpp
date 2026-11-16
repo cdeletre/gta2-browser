@@ -58,6 +58,7 @@
 extern "C" void Gta2Native_DrawableSize(int* w, int* h); // window_sdl.cpp
 extern "C" void Gta2Native_EndFrame();                    // window_sdl.cpp: screenshot, swap
 extern "C" void Gta2Native_OptionsDraw(int dw, int dh);   // platform/options_native.cpp
+extern "C" void Gta2Native_RadarDraw(int dw, int dh);     // platform/radar_native.cpp
 
 namespace
 {
@@ -169,6 +170,14 @@ struct Renderer
     GLuint fontTex = 0;                                         // overlay_font.h glyphs
     unsigned char glyphIndex[128] = {};                         // character -> glyph
     std::vector<FrameVertex> overlay;                           // the port's own screens
+    // The overlay's draws: each from its texture, the vertices from first to the next one's
+    struct OverlayDraw
+    {
+        GLuint tex;
+        size_t first;
+    };
+    std::vector<OverlayDraw> overlayDraws;
+    std::unordered_map<int, GLuint> overlayImages; // the port's own images (the radar's map, sprites) by id
 };
 Renderer gR;
 
@@ -284,9 +293,26 @@ void Init()
     gR.ready = true;
 }
 
+// The overlay's next vertices come from tex (the font's, or one of the port's images).
+void OverlayUse(GLuint tex)
+{
+    if (gR.overlayDraws.empty() || gR.overlayDraws.back().tex != tex)
+    {
+        if (!gR.overlayDraws.empty() && gR.overlayDraws.back().first == gR.overlay.size())
+        {
+            gR.overlayDraws.back().tex = tex; // nothing drawn from the previous one
+        }
+        else
+        {
+            gR.overlayDraws.push_back({tex, gR.overlay.size()});
+        }
+    }
+}
+
 // Overlay quads, in drawable pixels (top left origin), font texture coordinates.
 void OverlayQuad(float x, float y, float w, float h, float u0, float v0, float u1, float v1, uint32_t rgba)
 {
+    OverlayUse(gR.fontTex);
     const FrameVertex a{x, y, 1, u0, v0, rgba}, b{x + w, y, 1, u1, v0, rgba};
     const FrameVertex c{x, y + h, 1, u0, v1, rgba}, d{x + w, y + h, 1, u1, v1, rgba};
     gR.overlay.insert(gR.overlay.end(), {a, b, c, b, d, c});
@@ -295,6 +321,8 @@ void OverlayQuad(float x, float y, float w, float h, float u0, float v0, float u
 void DrawOverlay(int dw, int dh)
 {
     gR.overlay.clear();
+    gR.overlayDraws.clear();
+    Gta2Native_RadarDraw(dw, dh); // under the port's screens
     Gta2Native_OptionsDraw(dw, dh);
     if (gR.overlay.empty())
     {
@@ -309,9 +337,17 @@ void DrawOverlay(int dw, int dh)
     glVertexAttribPointer(kUv, 2, GL_FLOAT, GL_FALSE, sizeof(FrameVertex), reinterpret_cast<const void*>(12));
     glVertexAttribPointer(kColour, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(FrameVertex), reinterpret_cast<const void*>(20));
     glUniform4f(gR.uView, 2.0f / dw, -2.0f / dh, -1.0f, 1.0f);
-    glBindTexture(GL_TEXTURE_2D, gR.fontTex);
     SetBlend(kBlendAlpha);
-    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(gR.overlay.size()));
+    for (size_t i = 0; i < gR.overlayDraws.size(); ++i)
+    {
+        const size_t first = gR.overlayDraws[i].first;
+        const size_t end = i + 1 < gR.overlayDraws.size() ? gR.overlayDraws[i + 1].first : gR.overlay.size();
+        if (end > first)
+        {
+            glBindTexture(GL_TEXTURE_2D, gR.overlayDraws[i].tex);
+            glDrawArrays(GL_TRIANGLES, static_cast<GLint>(first), static_cast<GLsizei>(end - first));
+        }
+    }
 }
 
 void SetBlend(int mode)
@@ -718,6 +754,82 @@ void Gta2Native_OverlayText(float x, float y, float px, uint32_t rgba, const cha
 void Gta2Native_OverlayTextExact(float x, float y, float px, uint32_t rgba, const char* text)
 {
     OverlayTextCase(x, y, px, rgba, text, true);
+}
+
+// The port's own images for the overlay (platform/radar_native.cpp: the radar's map and the
+// game's HUD sprites), by id, in the textures' format (16-bit unless GTA2_TEXTURE_BITS=32).
+// A new image, or a new size, starts transparent; rgba (w x h RGBA8) may be null.
+void Gta2Native_OverlayImage(int id, int w, int h, const uint8_t* rgba, bool linear)
+{
+    Init();
+    GLuint& tex = gR.overlayImages[id];
+    if (!tex)
+    {
+        glGenTextures(1, &tex);
+    }
+    glBindTexture(GL_TEXTURE_2D, tex);
+    SetParams();
+    if (linear)
+    {
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    }
+    std::vector<uint8_t> zero;
+    if (!rgba)
+    {
+        zero.assign(static_cast<size_t>(w) * h * 4, 0);
+        rgba = zero.data();
+    }
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, gR.texType, Pack(rgba, w, h));
+}
+
+// Rows y .. y + rows - 1 of an image, w wide (the image's width).
+void Gta2Native_OverlayImageRows(int id, int w, int y, int rows, const uint8_t* rgba)
+{
+    const auto it = gR.overlayImages.find(id);
+    if (it == gR.overlayImages.end())
+    {
+        return;
+    }
+    glBindTexture(GL_TEXTURE_2D, it->second);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, y, w, rows, GL_RGBA, gR.texType, Pack(rgba, w, rows));
+}
+
+void Gta2Native_OverlayFreeImage(int id)
+{
+    const auto it = gR.overlayImages.find(id);
+    if (it != gR.overlayImages.end())
+    {
+        glDeleteTextures(1, &it->second);
+        gR.overlayImages.erase(it);
+    }
+}
+
+// A triangle of the overlay: xyuv holds x, y (drawable pixels), u, v for each corner. From
+// image id (Gta2Native_OverlayImage), or with id 0 a plain colour.
+void Gta2Native_OverlayTriangle(int id, const float* xyuv, uint32_t rgba)
+{
+    if (id == 0)
+    {
+        const int i = gR.glyphIndex[0x7f];
+        const float u = ((i % 16) * 8 + 2.5f) / 128.0f, v = ((i / 16) * 8 + 3.5f) / 64.0f; // inside the block
+        OverlayUse(gR.fontTex);
+        for (int k = 0; k < 3; ++k)
+        {
+            gR.overlay.push_back({xyuv[k * 4], xyuv[k * 4 + 1], 1, u, v, rgba});
+        }
+        return;
+    }
+    const auto it = gR.overlayImages.find(id);
+    if (it == gR.overlayImages.end())
+    {
+        return;
+    }
+    OverlayUse(it->second);
+    for (int k = 0; k < 3; ++k)
+    {
+        gR.overlay.push_back({xyuv[k * 4], xyuv[k * 4 + 1], 1, xyuv[k * 4 + 2], xyuv[k * 4 + 3], rgba});
+    }
 }
 
 // The status line (main.cpp): GPU textures alive, atlas pages, and the pixels they hold in MB.

@@ -712,6 +712,10 @@ et « Écarts par rapport à l'original » ci-dessous).
 
 ## Écarts par rapport à l'original (natif seulement)
 
+- **Radar** (15 novembre, `radar_native.cpp`, Options : Radar, allumé par défaut) : affichage
+  seulement. Radar allumé, les flèches de gangs et de mission sont sur le bord du radar au lieu
+  d'autour du joueur, comme dans le navigateur. Voir « Le radar » plus bas.
+
 - **More traffic** (gta2-lan, patch natif 0019, 11 novembre ; choix de l'hôte, désactivé par
   défaut) : l'original permet 16 voitures de circulation pour toute la partie, servies caméra
   par caméra dans l'ordre des joueurs, si bien qu'à 4 joueurs et plus certains n'en voient
@@ -1431,6 +1435,37 @@ qui ne le dit pas, est supposé les avoir), et le serveur ignore les fichiers ca
 `.DS_Store`). Vu dans Chromium (image `web` locale) : sans fichiers, rien avant Play, puis
 archive.org ; avec `game/data` monté, le serveur. Propriétaire : partie navigateur Gang Wars,
 `crews.json` écrit. Les consoles n'envoient pas encore les résultats Gang Wars.
+
+### Le radar (branche `native-multiplayer-experimental`, 15 novembre)
+
+Pas dans l'original : un radar rond, nord en haut, en bas à droite, comme celui du navigateur
+(`web/map.js` `drawMinimap`), dans les trois binaires. Idée venue du mod Windows
+`r3538987/gta2-radar-11.44` (un plugin ASI pour `gta2.exe` 11.44, sans licence) : rien n'en est
+repris, ni code ni images. `port/native/platform/radar_native.cpp` dessine avec l'overlay
+(`render/gles_renderer.cpp` : images du port et triangles en plus du texte, une passe par
+texture), à partir des lectures de `port/platform/map_web.cpp`, déjà compilé en natif :
+- la carte du district, construite depuis les fichiers `.gmp`/`.sty` du joueur
+  (`gta2_port_map_render_rows`), 3 ms par image au plus, les rangées les plus proches du joueur
+  d'abord ; 8 pixels par bloc (2048², 8 Mo en 16 bits) dès que le radar affiche plus de 6 pixels
+  par bloc, sinon 4 ;
+- dans son rayon (9 blocs) : armes, bonus, jetons, frenzies, garages, broyeurs, églises ;
+- les flèches de gangs et de mission du jeu (`gta2_port_map_arrows`, la décision de visibilité
+  du jeu) : dedans, le logo du gang ou un anneau qui pulse ; dehors, la flèche du jeu sur le
+  bord. Radar allumé, le jeu ne dessine plus ses flèches autour du joueur (`gta2_port_set_hud_arrows`,
+  comme le navigateur) ;
+- gta2-online et gta2-lan : les autres joueurs (ennemis à moins de 24 blocs seulement, en Gang
+  Wars et free-for-all) et les waypoints (`Gta2Net_RadarMarks`, `net/hud_net.cpp`).
+
+Options : « Radar » On/Off, à chaud, dans le registre (`screen\port_radar`, `conf/registry.txt`),
+allumé par défaut. Lecture seule vis-à-vis du jeu : rien ne change dans la simulation ni dans
+le lockstep. Pas encore là (le navigateur les a) : la découverte de la carte, l'écran de carte.
+
+Observé dans le conteneur (llvmpipe, Downtown, départ à l'église) : radar en 640×480,
+1280×720 et 720×720, église, armes et flèches de gangs sur le bord ; carte construite en 1,5 à
+1,6 s ; 90 s de soak sous ASan + UBSan : aucune erreur dans le nouveau code (les rapports
+UBSan du moteur sont les mêmes radar éteint), seule la fuite connue de l'audio SDL à la sortie ;
+« Radar » éteint dans le registre : pas de radar. Pas encore vu : une console, une partie en
+réseau avec le radar, le changement depuis l'écran Options.
 
 ## Reste à faire
 

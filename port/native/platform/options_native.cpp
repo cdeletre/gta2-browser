@@ -10,8 +10,9 @@
 //   text speed               option\text_speed, 1..5        when a game starts (Hud_2B00)
 //   exploding scores         screen\exploding_on            at once (Init_FrameRateLight...)
 //   lighting                 screen\lighting                at once (same)
-// plus the port's own controller setting:
+// plus the port's own settings:
 //   face buttons             controls.ini face_buttons      at once (input_sdl.cpp)
+//   radar                    screen\port_radar             at once (radar_native.cpp)
 //
 // It opens from the main menu's Options, and in the city from the pause (Start, then Select:
 // input_sdl.cpp) or F8 (the original's GTA2 Manager key). The original's quit prompt does
@@ -43,6 +44,8 @@ extern "C" void Gta2Native_OverlayText(float x, float y, float px, uint32_t rgba
 extern "C" bool Gta2Native_IsPlaying();          // status_native.cpp
 extern "C" int Gta2Native_FaceButtons();          // input_sdl.cpp: 0 auto, 1 nintendo, 2 xbox
 extern "C" void Gta2Native_SetFaceButtons(int mode); // input_sdl.cpp, also writes controls.ini
+extern "C" bool Gta2Native_RadarOn();               // radar_native.cpp
+extern "C" void Gta2Native_SetRadar(bool on);       // radar_native.cpp, also writes the registry
 // gta2-online's lobby screen (net/lobby_screen.cpp) takes this screen's inputs and drawing while
 // it is up, before the game starts. Weak: the solo binary has no lobby, and these stay null.
 extern "C" bool Gta2Net_LobbyActive() __attribute__((weak));
@@ -71,13 +74,14 @@ enum Line
     kExploding,
     kLighting,
     kFaceButtons,
+    kRadar,
     kChat,      // gta2-online only
     kWaypoints, // gta2-online only
     kBack,
     kLineCount
 };
 const char* const kLabels[kLineCount] = {"Music and radio", "Sound effects", "Text speed",    "Exploding scores",
-                                         "Lighting",        "Face buttons",  "Chat messages", "Waypoints",
+                                         "Lighting",        "Face buttons",  "Radar",         "Chat messages", "Waypoints",
                                          "Back"};
 
 // The lines this binary shows: the multiplayer ones in gta2-online only.
@@ -141,6 +145,7 @@ void Value(int line, char* out, size_t size)
         case kExploding: snprintf(out, size, "%s", bExplodingScoresOff_67D4FB ? "Off" : "On"); break;
         case kLighting: snprintf(out, size, "%s", Lighting() ? "On" : "Off"); break;
         case kFaceButtons: snprintf(out, size, "%s", kFaces[std::clamp(Gta2Native_FaceButtons(), 0, 2)]); break;
+        case kRadar: snprintf(out, size, "%s", Gta2Native_RadarOn() ? "On" : "Off"); break;
         case kChat: snprintf(out, size, "%s", Gta2Net_ShowChat && Gta2Net_ShowChat() ? "On" : "Off"); break;
         case kWaypoints: snprintf(out, size, "%s", Gta2Net_ShowWaypoints && Gta2Net_ShowWaypoints() ? "On" : "Off"); break;
         default: out[0] = 0; break;
@@ -185,6 +190,9 @@ void Change(int line, int dir)
             break;
         case kFaceButtons:
             Gta2Native_SetFaceButtons((Gta2Native_FaceButtons() + (dir > 0 ? 1 : 2)) % 3);
+            break;
+        case kRadar:
+            Gta2Native_SetRadar(!Gta2Native_RadarOn());
             break;
         case kChat:
             if (Gta2Net_SetShowChat)

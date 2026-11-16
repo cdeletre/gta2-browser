@@ -538,6 +538,61 @@ extern "C" void Gta2Net_Waypoint(bool set)
     }
 }
 
+// platform/radar_native.cpp: what the radar shows of the match, [kind (0 a player, 1 their
+// waypoint, 2 this player's), x, y (Fix16 raw), rotation (Ang16), colour] each. As the browser's
+// radar (web/map.js otherPlayers): allies always; in Gang Wars and free-for-all, enemies only
+// within 24 blocks. The other players' waypoints follow Options: Waypoints.
+extern "C" int Gta2Net_RadarMarks(int32_t* out, int max)
+{
+    const Json& match = CoopMatch();
+    if (match.IsNull() || gMatchOver)
+        return 0;
+    const int me = CoopMySlot();
+    const std::string mode = match["mode"].IsString() ? match["mode"].Str() : "roam";
+    auto crewOf = [&](int slot) {
+        const std::string& id = match["players"][slot]["id"].Str();
+        const Json& crews = match["crews"];
+        for (size_t c = 0; c < crews.size(); ++c)
+            for (const Json& m : crews[c]["members"].Items())
+                if (m.Str() == id)
+                    return static_cast<int>(c);
+        return -1;
+    };
+    const int myCrew = mode == "wars" && me >= 0 ? crewOf(me) : -1;
+    double x0 = 0, y0 = 0;
+    const bool here = PlayerAt(&x0, &y0);
+    int n = 0;
+    for (int slot = 0; slot < 6 && n < max; ++slot)
+    {
+        const Waypoint& w = gWaypoints[slot];
+        if (!w.set || (slot != me && gConfig && !gConfig->showWaypoints))
+            continue;
+        int32_t* o = out + n++ * 5;
+        o[0] = slot == me ? 2 : 1;
+        o[1] = static_cast<int32_t>(w.x * 16384);
+        o[2] = static_cast<int32_t>(w.y * 16384);
+        o[3] = 0;
+        o[4] = static_cast<int32_t>(ColourOf(slot));
+    }
+    const int32_t* v = gta2_port_coop_players();
+    for (int slot = 0; slot < 6 && n < max; ++slot)
+    {
+        const int32_t* p = v + slot * kFields;
+        if (slot == me || !p[0] || !p[1] || slot >= static_cast<int>(match["players"].size()))
+            continue;
+        const bool ally = mode == "roam" || (mode == "wars" && myCrew >= 0 && crewOf(slot) == myCrew);
+        if (!ally && here && hypot(p[2] / 16384.0 - x0, p[3] / 16384.0 - y0) > 24)
+            continue;
+        int32_t* o = out + n++ * 5;
+        o[0] = 0;
+        o[1] = p[2];
+        o[2] = p[3];
+        o[3] = p[4];
+        o[4] = static_cast<int32_t>(ColourOf(slot));
+    }
+    return n;
+}
+
 // platform/options_native.cpp, after the game's frame.
 extern "C" void Gta2Net_HudDraw(int dw, int dh)
 {
