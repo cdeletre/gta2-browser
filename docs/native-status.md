@@ -1523,8 +1523,9 @@ Observé dans le conteneur : gta2-lan à 2, jeu aléatoire et visée qui tourne
 (`GTA2_TEST_TWIN_AIM=1`), 100 s, ~2 850 ticks : « twin stick allowed », aucune désynchronisation ;
 même chose avec un invité qui ne l'annonce pas (`GTA2_TEST_NO_TWIN=1`, comme un navigateur) :
 « off (classic controls) » des deux côtés, aucune désynchronisation ; seul, le piéton suit la
-visée ; 90 s de jeu aléatoire sous ASan + UBSan avec la visée : aucun rapport nouveau. Pas encore
-vu : une manette réelle, les tourelles, une partie console + navigateur, les consoles.
+visée ; 90 s de jeu aléatoire sous ASan + UBSan avec la visée : aucun rapport nouveau. Propriétaire (16
+novembre) : vu entre consoles (TSP S, Air X, RG CubeXX), comme attendu. Pas encore vu : une partie
+console + navigateur.
 
 ## Reste à faire
 
