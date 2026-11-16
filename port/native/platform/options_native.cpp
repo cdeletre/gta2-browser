@@ -12,7 +12,7 @@
 //   lighting                 screen\lighting                at once (same)
 // plus the port's own settings:
 //   face buttons             controls.ini face_buttons      at once (input_sdl.cpp)
-//   radar                    screen\port_radar             at once (radar_native.cpp)
+//   radar: off, left, right  screen\port_radar             at once (radar_native.cpp)
 //
 // It opens from the main menu's Options, and in the city from the pause (Start, then Select:
 // input_sdl.cpp) or F8 (the original's GTA2 Manager key). The original's quit prompt does
@@ -44,8 +44,8 @@ extern "C" void Gta2Native_OverlayText(float x, float y, float px, uint32_t rgba
 extern "C" bool Gta2Native_IsPlaying();          // status_native.cpp
 extern "C" int Gta2Native_FaceButtons();          // input_sdl.cpp: 0 auto, 1 nintendo, 2 xbox
 extern "C" void Gta2Native_SetFaceButtons(int mode); // input_sdl.cpp, also writes controls.ini
-extern "C" bool Gta2Native_RadarOn();               // radar_native.cpp
-extern "C" void Gta2Native_SetRadar(bool on);       // radar_native.cpp, also writes the registry
+extern "C" int Gta2Native_RadarMode();              // radar_native.cpp: 0 off, 1 right, 2 left
+extern "C" void Gta2Native_SetRadarMode(int mode);  // radar_native.cpp, also writes the registry
 // gta2-online's lobby screen (net/lobby_screen.cpp) takes this screen's inputs and drawing while
 // it is up, before the game starts. Weak: the solo binary has no lobby, and these stay null.
 extern "C" bool Gta2Net_LobbyActive() __attribute__((weak));
@@ -145,7 +145,12 @@ void Value(int line, char* out, size_t size)
         case kExploding: snprintf(out, size, "%s", bExplodingScoresOff_67D4FB ? "Off" : "On"); break;
         case kLighting: snprintf(out, size, "%s", Lighting() ? "On" : "Off"); break;
         case kFaceButtons: snprintf(out, size, "%s", kFaces[std::clamp(Gta2Native_FaceButtons(), 0, 2)]); break;
-        case kRadar: snprintf(out, size, "%s", Gta2Native_RadarOn() ? "On" : "Off"); break;
+        case kRadar:
+        {
+            static const char* const kRadarModes[] = {"Off", "Right", "Left"};
+            snprintf(out, size, "%s", kRadarModes[std::clamp(Gta2Native_RadarMode(), 0, 2)]);
+            break;
+        }
         case kChat: snprintf(out, size, "%s", Gta2Net_ShowChat && Gta2Net_ShowChat() ? "On" : "Off"); break;
         case kWaypoints: snprintf(out, size, "%s", Gta2Net_ShowWaypoints && Gta2Net_ShowWaypoints() ? "On" : "Off"); break;
         default: out[0] = 0; break;
@@ -192,7 +197,14 @@ void Change(int line, int dir)
             Gta2Native_SetFaceButtons((Gta2Native_FaceButtons() + (dir > 0 ? 1 : 2)) % 3);
             break;
         case kRadar:
-            Gta2Native_SetRadar(!Gta2Native_RadarOn());
+        {
+            // shown in the order Off, Left, Right
+            static const int kOrder[] = {0, 2, 1};
+            int at = 0;
+            while (at < 2 && kOrder[at] != Gta2Native_RadarMode())
+                ++at;
+            Gta2Native_SetRadarMode(kOrder[(at + (dir > 0 ? 1 : 2)) % 3]);
+        }
             break;
         case kChat:
             if (Gta2Net_SetShowChat)

@@ -1,7 +1,14 @@
-// The radar (not in the original game): a round, north-up minimap in the bottom-right corner,
-// the native counterpart of the browser's (web/map.js drawMinimap), drawn over the game's frame
-// with the port's overlay (render/gles_renderer.cpp). Options: Radar On/Off (registry
-// screen\port_radar, conf/registry.txt; on by default, as in the browser).
+// The radar and the map screen (not in the original game), drawn over the game's frame with the
+// port's overlay (render/gles_renderer.cpp).
+//
+// The radar: a round, north-up minimap in a bottom corner, the native counterpart of the
+// browser's (web/map.js drawMinimap). Options: Radar Off, Left or Right (registry
+// screen\port_radar, conf/registry.txt: 0 off, 1 right, 2 left; right by default).
+//
+// The map screen: with the pause (Start: the game's quit prompt), the district's map over the
+// screen, a rectangle as the screen's shape, centred on the player, with the same markers; the
+// quit prompt moves to a band at the bottom edge, left uncovered (native patch 0020:
+// gGta2PortQuitAtBottom, gGta2PortQuitBandTop). Tokens are left off it (no discovery yet).
 //
 // What it shows, from port/platform/map_web.cpp (the same reads as the browser's map, all
 // read-only towards the game, so it changes nothing in a network game's simulation):
@@ -16,7 +23,7 @@
 //   - in gta2-online and gta2-lan, the other players, allies and enemies, at any distance, and
 //     the waypoints (net/hud_net.cpp, Gta2Net_RadarMarks; the browser shows enemies only close);
 //   - the player, an arrow in the middle, and the north on the rim.
-// Not here (the browser has them): discovery of the map, the full map screen.
+// Not here (the browser has them): discovery of the map, panning and zooming the map screen.
 #if !defined(GTA2_NATIVE_HEADLESS)
 #include <stdint.h>
 #include <stdio.h>
@@ -41,7 +48,11 @@ int gta2_port_sprite_rgba(int sprite_type, int sprite_idx, uint8_t* out, int max
 void gta2_port_set_hud_arrows(int show);
 void gta2_port_reg_set_dword(const char* path, const char* name, unsigned int value);
 unsigned int Gta2Native_RegistryDword(const char* path, const char* name, unsigned int fallback);
-bool Gta2Native_IsPlaying(); // status_native.cpp
+bool Gta2Native_IsPlaying();        // status_native.cpp
+bool Gta2Native_QuitPromptShown(); // status_native.cpp
+bool Gta2Native_OptionsOpen();     // options_native.cpp
+extern int32_t gGta2PortQuitAtBottom; // native patch 0020 (Hud.cpp)
+extern int32_t gGta2PortQuitBandTop;
 void Gta2Native_OverlayImage(int id, int w, int h, const uint8_t* rgba, bool linear); // render/gles_renderer.cpp
 void Gta2Native_OverlayImageRows(int id, int w, int y, int rows, const uint8_t* rgba);
 void Gta2Native_OverlayFreeImage(int id);
@@ -116,7 +127,7 @@ struct Mark
 struct Radar
 {
     bool loaded = false; // the setting read
-    bool on = true;
+    int mode = 1;        // 0 off, 1 bottom right, 2 bottom left
     int epoch = 0;       // the district the map was built for (gta2_port_map_state)
     int px = 0;          // map image pixels per block
     std::vector<bool> rowDone;
@@ -146,8 +157,8 @@ void Load()
         return;
     }
     gRadar.loaded = true;
-    gRadar.on = Gta2Native_RegistryDword(kScreen, "port_radar", 1) != 0;
-    gta2_port_set_hud_arrows(gRadar.on ? 0 : 1);
+    gRadar.mode = static_cast<int>(std::min(2u, Gta2Native_RegistryDword(kScreen, "port_radar", 1)));
+    gta2_port_set_hud_arrows(gRadar.mode ? 0 : 1);
 }
 
 // ---- drawing helpers (drawable pixels, top left origin) ----
@@ -211,6 +222,12 @@ void Arrow(float x, float y, double angle, float r, uint32_t rgba, float outline
         Tri(tx, ty, lx, ly, nx, ny, colour);
         Tri(tx, ty, nx, ny, rx, ry, colour);
     }
+}
+
+void Rect(float x0, float y0, float x1, float y1, uint32_t rgba)
+{
+    Tri(x0, y0, x1, y0, x1, y1, rgba);
+    Tri(x0, y0, x1, y1, x0, y1, rgba);
 }
 
 void Diamond(float x, float y, float r, uint32_t rgba, float outline)
@@ -418,30 +435,133 @@ void ReadPoints()
     }
 }
 
+// The other players and the waypoints (gta2-online, gta2-lan), [kind, x, y, rotation, colour] each.
+int NetMarks(int32_t* out, int max)
+{
+    return Gta2Net_RadarMarks ? Gta2Net_RadarMarks(out, max) : 0;
+}
+
+// The full map, while the pause's quit prompt shows: over the screen but the prompt's band at the
+// bottom edge, centred on the player (kept inside the district), 64 blocks from top to bottom.
+void DrawMapScreen(int dw, int dh, double px0, double py0, double heading, double now)
+{
+    const float boxH = std::min(static_cast<float>(dh), dw * 0.75f); // the HUD's 4:3 box
+    const float u = boxH / 480.0f;
+    const float bandTop = dh - (480 - std::clamp(static_cast<int>(gGta2PortQuitBandTop), 240, 470)) * u;
+    const float m = 10 * u;
+    const float x0 = m, y0 = m, x1 = dw - m, y1 = bandTop - m / 2;
+    if (x1 - x0 < 40 || y1 - y0 < 40)
+    {
+        return;
+    }
+    Rect(0, 0, static_cast<float>(dw), bandTop, 0xf0000000);
+    Rect(x0 - std::max(1.0f, u), y0 - std::max(1.0f, u), x1 + std::max(1.0f, u), y1 + std::max(1.0f, u), 0x60ffffff);
+    Rect(x0, y0, x1, y1, kGround);
+    const float k = (y1 - y0) / 64.0f; // pixels per block
+    const double halfW = (x1 - x0) / 2 / k, halfH = (y1 - y0) / 2 / k;
+    const double vcx = halfW >= 128 ? 128 : std::clamp(px0, halfW, 256 - halfW);
+    const double vcy = halfH >= 128 ? 128 : std::clamp(py0, halfH, 256 - halfH);
+    const float ox = (x0 + x1) / 2, oy = (y0 + y1) / 2;
+    auto sx = [&](double wx) { return ox + static_cast<float>((wx - vcx) * k); };
+    auto sy = [&](double wy) { return oy + static_cast<float>((wy - vcy) * k); };
+    // the map, where the view meets the district
+    {
+        const double wx0 = std::max(0.0, vcx - halfW), wx1 = std::min(256.0, vcx + halfW);
+        const double wy0 = std::max(0.0, vcy - halfH), wy1 = std::min(256.0, vcy + halfH);
+        const float u0 = static_cast<float>(wx0 / 256), u1 = static_cast<float>(wx1 / 256);
+        const float v0 = static_cast<float>(wy0 / 256), v1 = static_cast<float>(wy1 / 256);
+        Tri(kMapImage, sx(wx0), sy(wy0), u0, v0, sx(wx1), sy(wy0), u1, v0, sx(wx1), sy(wy1), u1, v1, kWhite);
+        Tri(kMapImage, sx(wx0), sy(wy0), u0, v0, sx(wx1), sy(wy1), u1, v1, sx(wx0), sy(wy1), u0, v1, kWhite);
+    }
+    auto inside = [&](float x, float y, float pad) { return x > x0 + pad && x < x1 - pad && y > y0 + pad && y < y1 - pad; };
+    const float dot = std::max(2.0f, 3.2f * u);
+    for (const Poi& p : gRadar.pois)
+    {
+        const float x = sx(p.x), y = sy(p.y);
+        if (p.kind == kToken || !inside(x, y, dot + 1))
+            continue;
+        Disc(x, y, dot + std::max(1.0f, u), 0xff000000);
+        Disc(x, y, dot, kKindColour[p.kind]);
+    }
+    for (const Mark& mk : gRadar.marks)
+    {
+        const float x = sx(mk.x), y = sy(mk.y);
+        if (!mk.shown || !inside(x, y, 8 * u))
+            continue;
+        if (mk.job)
+        {
+            JobStyle style{kTargetRed, 0};
+            JobOf(mk.colour, &style);
+            const float h = 13 * u;
+            Disc(x, y, h * 0.62f + std::max(1.0f, u), style.colour);
+            Disc(x, y, h * 0.62f, 0xa6000000);
+            if (!mk.logo || !Sprite(mk.logo, x, y, h * 0.8f))
+                Disc(x, y, h * 0.35f, style.colour);
+            if (style.dot)
+                Sprite(style.dot, x + h * 0.45f, y - h * 0.45f, 6 * u);
+        }
+        else
+        {
+            const float t = static_cast<float>(fmod(now, 1000.0) / 1000.0);
+            const float rr = (5 + 4 * t) * u;
+            Ring(x, y, rr, rr + 2 * u, (static_cast<uint32_t>((1 - t) * 255) << 24) | (kTargetRed & 0xffffff));
+            Disc(x, y, 4 * u + std::max(1.0f, u), kWhite);
+            Disc(x, y, 4 * u, kTargetRed);
+        }
+    }
+    int32_t net[13 * 5];
+    const int n = NetMarks(net, 13);
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        for (int i = 0; i < n; ++i)
+        {
+            const int32_t* o = &net[i * 5];
+            const bool player = o[0] == 0;
+            const float x = sx(o[1] / kFx), y = sy(o[2] / kFx);
+            if (player != (pass == 1) || !inside(x, y, 6 * u))
+                continue;
+            const uint32_t colour = o[0] == 2 ? kOwnWaypoint : static_cast<uint32_t>(o[4]);
+            if (player)
+            {
+                const double h = o[3] / 1440.0 * 2 * kPi;
+                Arrow(x, y, atan2(cos(h), sin(h)), 7 * u, colour, u);
+            }
+            else
+            {
+                Diamond(x, y, 5 * u, colour, u);
+            }
+        }
+    }
+    Arrow(sx(px0), sy(py0), atan2(cos(heading), sin(heading)), 9 * u, kWhite, std::max(1.0f, u));
+}
+
 } // namespace
 
 extern "C" {
 
-bool Gta2Native_RadarOn()
+// Options: Radar Off (0), Right (1) or Left (2), kept in the registry (conf/registry.txt).
+int Gta2Native_RadarMode()
 {
     Load();
-    return gRadar.on;
+    return gRadar.mode;
 }
 
-// Options: Radar On/Off, kept in the registry (conf/registry.txt).
-void Gta2Native_SetRadar(bool on)
+void Gta2Native_SetRadarMode(int mode)
 {
     Load();
-    gRadar.on = on;
-    gta2_port_reg_set_dword(kScreen, "port_radar", on ? 1 : 0);
-    gta2_port_set_hud_arrows(on ? 0 : 1);
+    gRadar.mode = std::clamp(mode, 0, 2);
+    gta2_port_reg_set_dword(kScreen, "port_radar", static_cast<unsigned int>(gRadar.mode));
+    gta2_port_set_hud_arrows(gRadar.mode ? 0 : 1);
 }
 
 // render/gles_renderer.cpp, after the game's frame, under the port's screens.
 void Gta2Native_RadarDraw(int dw, int dh)
 {
     Load();
-    if (!gRadar.on || !Gta2Native_IsPlaying())
+    const bool playing = Gta2Native_IsPlaying();
+    const bool mapScreen = playing && Gta2Native_QuitPromptShown() && !Gta2Native_OptionsOpen();
+    gGta2PortQuitAtBottom = mapScreen ? 1 : 0; // the next frame's quit prompt (patch 0020)
+    if (!playing || (!gRadar.mode && !mapScreen))
     {
         return;
     }
@@ -458,14 +578,15 @@ void Gta2Native_RadarDraw(int dw, int dh)
     const float u = dh / 480.0f;
     const float r = roundf(std::max(40.0f, dh * 0.15f)); // inner radius
     const float border = std::max(3.0f, roundf(r * 0.11f));
-    const float cx = dw - r - border - 14 * u, cy = dh - r - border - 14 * u;
+    const float cx = gRadar.mode == 2 ? r + border + 14 * u : dw - r - border - 14 * u;
+    const float cy = dh - r - border - 14 * u;
     const float scale = r / 9.0f; // pixels per block: 18 blocks across
     const float rim = r + border / 2;
 
     // the district's map: an image pixel for each screen pixel or better, at most 8 a block
     if (s[1] != gRadar.epoch)
     {
-        NewDistrict(s[1], scale > 6 ? 8 : 4);
+        NewDistrict(s[1], scale > 6 || mapScreen ? 8 : 4);
     }
     BuildRows(py0);
     const double now = NowMs();
@@ -473,6 +594,11 @@ void Gta2Native_RadarDraw(int dw, int dh)
     {
         gRadar.readAt = now;
         ReadPoints();
+    }
+    if (mapScreen)
+    {
+        DrawMapScreen(dw, dh, px0, py0, heading, now);
+        return;
     }
 
     // the ground, then the map over it: a fan whose texture coordinates are the blocks it covers
@@ -578,10 +704,9 @@ void Gta2Native_RadarDraw(int dw, int dh)
     }
 
     // gta2-online, gta2-lan: waypoints, then the other players, in their colours
-    if (Gta2Net_RadarMarks)
     {
         int32_t net[13 * 5];
-        const int n = Gta2Net_RadarMarks(net, 13);
+        const int n = NetMarks(net, 13);
         for (int pass = 0; pass < 2; ++pass)
         {
             for (int i = 0; i < n; ++i)

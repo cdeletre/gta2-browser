@@ -1458,9 +1458,20 @@ texture), à partir des lectures de `port/platform/map_web.cpp`, déjà compilé
   navigateur ne montre les ennemis qu'à moins de 24 blocs ; en natif ce filtre cachait l'autre
   joueur d'une partie free-for-all à 2 (TSP S et Air X, 15 novembre), il est enlevé.
 
-Options : « Radar » On/Off, à chaud, dans le registre (`screen\port_radar`, `conf/registry.txt`),
-allumé par défaut. Lecture seule vis-à-vis du jeu : rien ne change dans la simulation ni dans
-le lockstep. Pas encore là (le navigateur les a) : la découverte de la carte, l'écran de carte.
+Options : « Radar » Off, Left ou Right (en bas à gauche ou à droite), à chaud, dans le registre
+(`screen\port_radar`, `conf/registry.txt` : 0 éteint, 1 à droite, 2 à gauche ; à droite par
+défaut, la valeur 1 de la première version reste valable). Lecture seule vis-à-vis du jeu : rien
+ne change dans la simulation ni dans le lockstep.
+
+**Écran de carte** (15 novembre, début) : avec la pause (Start, l'invite « quitter ? » du jeu),
+la carte du district couvre l'écran, rectangle de la forme de l'écran (carré en 720×720), 64
+blocs de haut, centrée sur le joueur et gardée dans le district, avec les mêmes repères que le
+radar sauf les jetons (pas encore de découverte de la carte : ils seraient tous visibles). Le
+texte de l'invite descend dans une bande en bas de l'écran, laissée découverte : patch natif
+0020 (`Hud.cpp`, `gGta2PortQuitAtBottom` posé par `radar_native.cpp`, `gGta2PortQuitBandTop`
+pour la hauteur de la bande ; ancré en bas dans la vue haute). L'écran Options (Select pendant
+la pause) passe par-dessus. Pas encore là : déplacer et zoomer la carte, une légende, la
+découverte (le navigateur les a).
 
 Observé dans le conteneur (llvmpipe, Downtown, départ à l'église) : radar en 640×480,
 1280×720 et 720×720, église, armes et flèches de gangs sur le bord ; carte construite en 1,5 à
@@ -1468,7 +1479,9 @@ Observé dans le conteneur (llvmpipe, Downtown, départ à l'église) : radar en
 UBSan du moteur sont les mêmes radar éteint), seule la fuite connue de l'audio SDL à la sortie ;
 « Radar » éteint dans le registre : pas de radar. Propriétaire, sur la TSP S : le radar comme
 attendu, en solo et en réseau (free-for-all à 2 avec l'Air X), hormis l'autre joueur, caché au-delà
-de 24 blocs (corrigé ensuite).
+de 24 blocs (corrigé ensuite). Écran de carte et radar à gauche, vus dans le conteneur : carte en
+640×480, 1280×720 et 720×720, invite lisible dans la bande du bas ; 40 s sous ASan + UBSan avec
+la carte ouverte : aucun rapport nouveau.
 
 ## Reste à faire
 
