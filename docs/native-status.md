@@ -1484,7 +1484,8 @@ attendu, en solo et en réseau (free-for-all à 2 avec l'Air X), hormis l'autre 
 de 24 blocs (corrigé ensuite). Écran de carte et radar à gauche, vus dans le conteneur : carte en
 640×480, 1280×720 et 720×720, invite lisible dans la bande du bas ; 40 s sous ASan + UBSan avec
 la carte ouverte : aucun rapport nouveau. Déplacement vu à la croix (événements manette SDL) et
-aux flèches (événements clavier SDL) ; le zoom pas encore observé.
+aux flèches (événements clavier SDL). Propriétaire (15 novembre) : radar Off/Left/Right, carte,
+déplacement et zoom comme attendu sur la TSP S, l'Air X et la RG CubeXX (720×720, carte carrée).
 
 ## Reste à faire
 
