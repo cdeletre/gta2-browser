@@ -88,6 +88,7 @@ Lobby::Lobby(Transport* transport, const std::string& name, bool host) : mT(tran
         me.Set("id", mT->Id());
         me.Set("name", name);
         me.Set("traffic", true); // knows the More traffic setting (see below)
+        me.Set("twin", true);    // knows the twin stick input bits (see Start)
         mPlayers.Push(me);
     }
     mSettings = Json::Object();
@@ -114,6 +115,11 @@ Lobby::Lobby(Transport* transport, const std::string& name, bool host) : mT(tran
             // this game knows the LAN lobby's More traffic (native patch 0019): an older one
             // would play the match with 16 cars and drift, so the host does not start it then
             hello.Set("traffic", true);
+            // and the twin stick's input bits (native patch 0021): a browser or an older console
+            // does not say so, and the match is then played with classic controls by everyone
+            // GTA2_TEST_NO_TWIN=1 (tests): this game says nothing, as a browser
+            if (!getenv("GTA2_TEST_NO_TWIN"))
+                hello.Set("twin", true);
             mT->Send(id, Message::Of(hello));
         }
     };
@@ -202,6 +208,7 @@ void Lobby::OnMessage(const std::string& from, const Message& m)
             p.Set("name", FirstCodePoints(data["name"].Truthy() ? data["name"].ToText() : "Player", 16));
             p.Set("crew", "");
             p.Set("traffic", data["traffic"].Truthy());
+            p.Set("twin", data["twin"].Truthy());
             mPlayers.Push(p);
         }
         BroadcastRoster();
@@ -607,6 +614,11 @@ void Lobby::Start()
     const char* forced = getenv("GTA2_NET_START_DELAY");
     match.Set("delay", forced ? std::min(8, std::max(1, atoi(forced))) : InputDelayFor(slowest));
     match.Set("crews", mSettings["mode"].Str() == "wars" ? Crews() : Json::Array());
+    // twin stick allowed only when every player's game decodes it (their hello said so)
+    bool twin = true;
+    for (const Json& p : mPlayers.Items())
+        twin = twin && p["twin"].Truthy();
+    match.Set("twin", twin);
     Json msg = Json::Object();
     msg.Set("lobby", "start");
     msg.Set("match", match);

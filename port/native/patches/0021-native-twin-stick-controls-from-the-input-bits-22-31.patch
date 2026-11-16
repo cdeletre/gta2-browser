@@ -1,0 +1,362 @@
+From d1dabff09bd7505b11b4be845b9dce772ee3dbe9 Mon Sep 17 00:00:00 2001
+From: cdeletre <cyril.deletre@gmail.com>
+Date: Sun, 15 Nov 2026 21:41:27 -0500
+Subject: [PATCH] native: twin stick controls from the input bits 22-31, where
+ a match allows them
+
+The console (port/native/platform/input_sdl.cpp) puts a code in the input
+bits the original never uses: 0 classic controls, 1 twin stick, 2 + angle / 3
+twin stick aiming. It travels with the keys, so every machine decodes the same
+thing; it is read only alone or in a match whose players all said they know it
+(gGta2PortTwinAllowed, from the lobby's match). With a code the direction keys
+walk the ped north, south, west and east on screen, the ped turns toward the
+aim (or where it walks, 24 degrees a tick), walks sideways or backwards as it
+faces (Char_B4::Update_545720: the step and the velocity go the walking way),
+and fires where it faces without the lock-on (Ped::ComputeAimAngle_45C9D0);
+a fire truck's, tank's or gun jeep's roof gun turns toward the aim
+(Car_BC::RotateRoofObjectTowardTarget_440C10). Driving is unchanged. The
+browser is unchanged too: it never plays in a match that allows the bits.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ Source/Ped.cpp     |  11 ++++
+ Source/Player.cpp  | 156 +++++++++++++++++++++++++++++++++++++++++++++
+ Source/Player.hpp  |   7 ++
+ Source/char.cpp    |  27 ++++++++
+ Source/winmain.cpp |  27 +++++++-
+ 5 files changed, 225 insertions(+), 3 deletions(-)
+
+diff --git a/Source/Ped.cpp b/Source/Ped.cpp
+index 09812fa6..7b7176e9 100644
+--- a/Source/Ped.cpp
++++ b/Source/Ped.cpp
+@@ -1503,6 +1503,17 @@ Fix16 Ped::GetMoveDirection_45C9B0()
+ MATCH_FUNC(0x45c9d0)
+ Ang16 Ped::ComputeAimAngle_45C9D0()
+ {
++#if defined(GTA2_PORT_NATIVE)
++    {
++        Ang16 aim;
++        if (PortTwinAiming(this, &aim))
++        {
++            // twin stick (Player.cpp): where the ped faces, no lock-on
++            field_130_target_facing_angle = field_12C_facing_angle;
++            return field_130_target_facing_angle;
++        }
++    }
++#endif
+     if (PedTypeIs_45EDE0(ped_type::player_2))
+     {
+         Ped* pNearest = gThreateningPedsList_678468.FindClosestPedInViewCone_4713C0(this->field_1AC_cam.x,
+diff --git a/Source/Player.cpp b/Source/Player.cpp
+index f6ac1736..a6940cc2 100644
+--- a/Source/Player.cpp
++++ b/Source/Player.cpp
+@@ -1263,10 +1263,149 @@ void Player::HandleKeyRelease_566380(u16 key)
+     }
+ }
+ 
++#if defined(GTA2_PORT_NATIVE)
++// ---- Twin stick (native) ----
++// The console (port/native/platform/input_sdl.cpp) puts a code in the input bits 22-31, which the
++// original never uses: 0 classic controls, 1 twin stick without aiming, 2 + angle / 3 twin stick
++// aiming at that angle (Ang16, as Fix16::atan2_fixed_405320 gives it). The code travels with the
++// keys, so every machine of a match decodes the same thing. It is read only where the port allows
++// it: alone, or in a match whose players all run a console build that knows it
++// (gGta2PortTwinAllowed, set from the lobby's match by net/coop_native.cpp). With a code, the four
++// direction keys walk the ped north, south, west and east on screen (diagonals with two), the ped
++// turns toward the aim (or the way it walks), walks sideways or backwards as it faces, and fires
++// where it faces without the original's lock-on; in a fire truck, tank or gun jeep the turret
++// turns toward the aim. Driving is unchanged.
++extern "C" s32 gGta2PortTwinAllowed;
++s32 gGta2PortTwinAllowed = 0;
++namespace
++{
++struct PortTwin
++{
++    s32 code;   // this tick's
++    s32 hold;   // ticks the aim stays after the stick is let go
++    s32 aim;    // Ang16
++    s32 move;   // Ang16
++    bool moving;
++};
++PortTwin sPortTwin[6];
++const s32 kPortTwinHold = 10;
++const s32 kPortTwinTurn = 96;     // per tick, walking (24 degrees)
++const s32 kPortTwinJumpTurn = 24; // per tick, in a jump
++
++PortTwin* PortTwinOf(Player* pPlayer)
++{
++    const u8 idx = pPlayer ? pPlayer->get_idx_4219D0() : 0xFF;
++    return idx < 6 ? &sPortTwin[idx] : NULL;
++}
++
++// The player whose own ped this is, or null.
++Player* PortTwinPlayerOf(Ped* pPed)
++{
++    Player* pPlayer = pPed ? pPed->field_15C_player : NULL;
++    return pPlayer && pPlayer->field_2C4_player_ped == pPed ? pPlayer : NULL;
++}
++
++s32 PortWrap(s32 d)
++{
++    while (d < -720)
++    {
++        d += 1440;
++    }
++    while (d >= 720)
++    {
++        d -= 1440;
++    }
++    return d;
++}
++} // namespace
++
++// Twin stick allowed now: alone, or in a match that allows it.
++extern "C" s32 Gta2Port_TwinGate()
++{
++    return !bStartNetworkGame_7081F0 || gGta2PortTwinAllowed;
++}
++
++// The game's angle (Ang16, 0..1439) of a direction on the map (x right, y down).
++extern "C" s32 Gta2Port_AngleOf(s32 x, s32 y)
++{
++    return Fix16::atan2_fixed_405320(Fix16(y), Fix16(x)).rValue;
++}
++
++bool PortTwinMoving(Ped* pPed, Ang16* pMove)
++{
++    PortTwin* t = PortTwinOf(PortTwinPlayerOf(pPed));
++    if (!t || !t->code || !t->moving)
++    {
++        return false;
++    }
++    *pMove = Ang16(static_cast<s16>(t->move), static_cast<u8>(0));
++    return true;
++}
++
++bool PortTwinAiming(Ped* pPed, Ang16* pAim)
++{
++    PortTwin* t = PortTwinOf(PortTwinPlayerOf(pPed));
++    if (!t || !t->code || t->hold <= 0)
++    {
++        return false;
++    }
++    *pAim = Ang16(static_cast<s16>(t->aim), static_cast<u8>(0));
++    return true;
++}
++
++// Player::DoPedControlInputs_566C80 with a twin stick code: turn and walk; false without one.
++static bool PortTwinWalk(Player* pPlayer, Ped* pPed)
++{
++    PortTwin* t = PortTwinOf(pPlayer);
++    if (!t || !t->code)
++    {
++        return false;
++    }
++    const s32 mx = (pPlayer->field_7B_bNowRightPressed ? 1 : 0) - (pPlayer->field_7A_bNowLeftPressed ? 1 : 0);
++    const s32 my = (pPlayer->field_79_bNowDownPressed ? 1 : 0) - (pPlayer->field_78_bNowForwardPressed ? 1 : 0);
++    t->moving = mx != 0 || my != 0;
++    if (t->moving)
++    {
++        t->move = Gta2Port_AngleOf(mx, my);
++        pPed->CancelEnterCarObjective_45C5C0();
++    }
++    const s32 desired = t->hold > 0 ? t->aim : t->moving ? t->move : -1;
++    s32 turn = 0;
++    if (desired >= 0 && pPed->field_168_game_object)
++    {
++        const s32 limit = pPlayer->field_64_bJumping ? kPortTwinJumpTurn : kPortTwinTurn;
++        turn = PortWrap(desired - pPed->field_168_game_object->get_rotation_433A40().rValue);
++        turn = turn > limit ? limit : turn < -limit ? -limit : turn;
++    }
++    pPlayer->field_8_turn_speed = Ang16(static_cast<s16>(turn), static_cast<u8>(0));
++    pPlayer->field_C_move_direction = t->moving ? kOne_6FE614 : kZero_6FE610;
++    return true;
++}
++#endif
++
+ MATCH_FUNC(0x566520)
+ void Player::CharacterControls_566520()
+ {
+     int input = this->field_4_inputs;
++#if defined(GTA2_PORT_NATIVE)
++    if (PortTwin* t = PortTwinOf(this))
++    {
++        t->code = Gta2Port_TwinGate() ? (static_cast<u32>(input) >> 22) & 0x3FF : 0;
++        if (t->code >= 2)
++        {
++            t->aim = (t->code - 2) * 3;
++            t->hold = kPortTwinHold;
++        }
++        else if (t->code == 0)
++        {
++            t->hold = 0;
++        }
++        else if (t->hold > 0)
++        {
++            --t->hold;
++        }
++    }
++#endif
+ 
+     // up arrow 0x1
+     bool forwardGas = (input & 1) == 1;
+@@ -1525,6 +1664,16 @@ void Player::DoCarControlInputs_566C30(Car_BC* pCar)
+                                  this->field_81_bNowSpecial_1_Pressed,
+                                  this->field_84_bWasSpecial_1_Pressed,
+                                  bAttackPressed);
++#if defined(GTA2_PORT_NATIVE)
++    // twin stick: the roof gun turns toward the aim
++    if (PortTwin* t = PortTwinOf(this))
++    {
++        if (t->code && t->hold > 0 && (pCar->IsFireTruck_4118F0() || pCar->IsTank_411900() || pCar->IsGunJeep_411910()))
++        {
++            pCar->RotateRoofObjectTowardTarget_440C10(Ang16(static_cast<s16>(t->aim), static_cast<u8>(0)));
++        }
++    }
++#endif
+ }
+ 
+ // https://decomp.me/scratch/mQMMn TODO: try to match without Ang16 operator=()
+@@ -1536,6 +1685,10 @@ void Player::DoPedControlInputs_566C80(Ped* pPed)
+     // clear flag
+     pPed->field_21C_bf.bSpottedPlayer = 0;
+ 
++#if defined(GTA2_PORT_NATIVE)
++    if (!PortTwinWalk(this, pPed))
++    {
++#endif
+     // --- Right pressed ---
+     if (field_7B_bNowRightPressed == 1)
+     {
+@@ -1615,6 +1768,9 @@ void Player::DoPedControlInputs_566C80(Ped* pPed)
+     {
+         field_C_move_direction = kZero_6FE610;
+     }
++#if defined(GTA2_PORT_NATIVE)
++    }
++#endif
+ 
+     // --- Jump / handbrake ---
+     if (field_7E_bNowHandBrakeOrJumpPressed == 1 && field_8A_bWasHandBrakeOrJumpPressed)
+diff --git a/Source/Player.hpp b/Source/Player.hpp
+index 8aca87f6..a57aa157 100644
+--- a/Source/Player.hpp
++++ b/Source/Player.hpp
+@@ -461,3 +461,10 @@ inline bool TagGame_28::IsFugitivePed_434B60(Ped* pPed)
+ {
+     return field_0_fugitive && field_0_fugitive->GetPlayerPed_41D020() == pPed;
+ }
++
++#if defined(GTA2_PORT_NATIVE)
++// Twin stick (native, Player.cpp): this tick's walking direction and aim of a player's own ped,
++// from the port's input bits 22-31 (decoded in Player::CharacterControls_566520).
++bool PortTwinMoving(Ped* pPed, Ang16* pMove);
++bool PortTwinAiming(Ped* pPed, Ang16* pAim);
++#endif
+diff --git a/Source/char.cpp b/Source/char.cpp
+index 367fe427..35679f8e 100644
+--- a/Source/char.cpp
++++ b/Source/char.cpp
+@@ -553,6 +553,24 @@ void Char_B4::Update_545720(Fix16 a2)
+         switch (field_8_ped_state_1)
+         {
+             case 0:
++#if defined(GTA2_PORT_NATIVE)
++            {
++                // twin stick (Player.cpp): the step goes the way the player walks, the ped keeps
++                // facing where it turns
++                Ang16 move;
++                if (PortTwinMoving(field_7C_pPed, &move))
++                {
++                    const Ang16 turn = field_7C_pPed->GetTurnSpeed_45C900();
++                    Ang16 facing = field_40_rotation;
++                    facing += turn;
++                    move -= turn; // state_0 adds the turn back
++                    field_40_rotation = move;
++                    Char_B4::state_0_54DDF0();
++                    field_40_rotation = facing;
++                    break;
++                }
++            }
++#endif
+                 Char_B4::state_0_54DDF0(); // Walking
+                 break;
+             case 1:
+@@ -617,6 +635,15 @@ void Char_B4::Update_545720(Fix16 a2)
+             // anti-clockwise?
+             field_98_velocity_vector.SetFromPolar_41E210(field_38_velocity, field_40_rotation);
+         }
++#if defined(GTA2_PORT_NATIVE)
++        {
++            Ang16 move;
++            if (field_8_ped_state_1 == 0 && PortTwinMoving(field_7C_pPed, &move))
++            {
++                field_98_velocity_vector.SetFromPolar_41E210(field_38_velocity, move); // twin stick
++            }
++        }
++#endif
+     }
+     gSpriteGrid_1_679208->AddToRegionBuckets_477B20(field_80_sprite_ptr);
+     if (field_88_obj_2c.field_0_p18)
+diff --git a/Source/winmain.cpp b/Source/winmain.cpp
+index ab94678b..adc2e39c 100644
+--- a/Source/winmain.cpp
++++ b/Source/winmain.cpp
+@@ -1,4 +1,13 @@
+ #include "winmain.hpp"
++#if defined(GTA2_PORT_NATIVE)
++// Twin stick (port/native/platform/input_sdl.cpp): the code that goes in this player's input bits
++// 22-31 (Player.cpp). Weak: the headless build has no controller.
++extern "C" u32 Gta2Native_TwinBits() __attribute__((weak));
++static inline u32 PortTwinBits()
++{
++    return Gta2Native_TwinBits ? Gta2Native_TwinBits() : 0;
++}
++#endif
+ #include "hud_message_priority.hpp"
+ #include "Bink.hpp"
+ #include "InputRecorder_67F8B0.hpp"
+@@ -1445,7 +1454,11 @@ EXPORT void __stdcall do_network_and_local_inputs_4DAF30()
+                 } while (gNetInUsePlayerBits_6F56B8);
+             }
+ 
+-            gCurrentNetInputs_6F57D8.field_0_inputs[gNetworkPlayerIdx_6F56C8].field_0_Inputs = gInputRecorder_67F8B0.get_input_bits_4CEAC0();
++            gCurrentNetInputs_6F57D8.field_0_inputs[gNetworkPlayerIdx_6F56C8].field_0_Inputs = gInputRecorder_67F8B0.get_input_bits_4CEAC0()
++#if defined(GTA2_PORT_NATIVE)
++                | PortTwinBits()
++#endif
++                ;
+             Net_Send_Our_Inputs_4DACB0();
+             Draw_4DA7B0();
+             Net_Receive_Players_Inputs_4DA9F0();
+@@ -1473,7 +1486,11 @@ EXPORT void __stdcall do_network_and_local_inputs_4DAF30()
+     }
+     else
+     {
+-        const u32 inputs = gInputRecorder_67F8B0.get_input_bits_4CEAC0();
++        const u32 inputs = gInputRecorder_67F8B0.get_input_bits_4CEAC0()
++#if defined(GTA2_PORT_NATIVE)
++            | PortTwinBits()
++#endif
++            ;
+         gGame_0x40_67E008->field_38_orf1->SetInputs_565740(inputs);
+     }
+ }
+@@ -1699,7 +1716,11 @@ static bool PortNetworkInputsBegin()
+     }
+     // Input delay (D20, port/platform/net_web.cpp): today's inputs go out for tick + delay, and this
+     // player plays the ones sent delay ticks ago, as everyone else does.
+-    const u32 fresh = gInputRecorder_67F8B0.get_input_bits_4CEAC0();
++    const u32 fresh = gInputRecorder_67F8B0.get_input_bits_4CEAC0()
++#if defined(GTA2_PORT_NATIVE)
++        | PortTwinBits()
++#endif
++        ;
+     gCurrentNetInputs_6F57D8.field_0_inputs[gNetworkPlayerIdx_6F56C8].field_0_Inputs = fresh;
+ #if defined(GTA2_PORT_NATIVE)
+     // Adaptive input delay (native): this player's inputs are a stream that every machine,
+-- 
+2.54.0
+

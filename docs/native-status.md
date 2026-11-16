@@ -712,6 +712,10 @@ et « Écarts par rapport à l'original » ci-dessous).
 
 ## Écarts par rapport à l'original (natif seulement)
 
+- **Twin stick** (16 novembre, patch natif 0021, Options : Control, Twin stick par défaut) : à
+  pied, marche dans la direction du stick et visée au stick droit, sans le verrouillage de la
+  visée ; tourelles vers la visée. Classique pour tous dans une partie avec un navigateur ou une
+  console plus ancienne. Voir « Twin stick » plus bas.
 - **Radar** (15 novembre, `radar_native.cpp`, Options : Radar, allumé par défaut) : affichage
   seulement. Radar allumé, les flèches de gangs et de mission sont sur le bord du radar au lieu
   d'autour du joueur, comme dans le navigateur. Voir « Le radar » plus bas.
@@ -1486,6 +1490,41 @@ de 24 blocs (corrigé ensuite). Écran de carte et radar à gauche, vus dans le 
 la carte ouverte : aucun rapport nouveau. Déplacement vu à la croix (événements manette SDL) et
 aux flèches (événements clavier SDL). Propriétaire (15 novembre) : radar Off/Left/Right, carte,
 déplacement et zoom comme attendu sur la TSP S, l'Air X et la RG CubeXX (720×720, carte carrée).
+
+### Twin stick (branche `native-multiplayer-experimental`, 16 novembre)
+
+Options : « Control » Classic ou Twin stick (Twin stick par défaut ; registre `screen\port_control`).
+À pied : le stick gauche (ou la croix, les flèches) fait marcher vers le nord, le sud, l'ouest et
+l'est de l'écran (diagonales comprises), le stick droit vise ; le piéton se tourne vers la visée
+(ou vers où il marche, 24° par tick), marche de côté ou à reculons, et tire là où il regarde sans
+le verrouillage de l'original (R2 tire toujours) ; la visée reste 10 ticks après avoir lâché le
+stick. En camion de pompiers, tank ou jeep armée : la tourelle tourne vers la visée
+(`RotateRoofObjectTowardTarget_440C10`, à la vitesse des tourelles de l'IA). La conduite ne change
+pas. Idée reprise de reG2 (sans code : pas de licence), sans « regarder plus loin » ni avance de
+la caméra.
+
+Comment : la console met un code dans les bits 22-31 des entrées, inutilisés par l'original
+(0 classique, 1 twin stick, 2 + angle / 3 en visant ; `Gta2Native_TwinBits`, `input_sdl.cpp`).
+Il voyage avec les touches, donc chaque machine décode la même chose. Patch natif 0021
+(`Player.cpp` : décodage dans `CharacterControls_566520`, marche et rotation dans
+`DoPedControlInputs_566C80`, tourelle dans `DoCarControlInputs_566C30` ; `char.cpp` : le pas et
+la vitesse vont dans le sens de la marche ; `Ped.cpp` : visée libre ; `winmain.cpp` : le code
+ajouté aux entrées locales). Le moteur ne lit le code que seul ou dans une partie qui l'autorise.
+
+Parties : chaque console à jour l'annonce dans son `hello` (`twin`), comme « More traffic » ;
+l'hôte met `match.twin` à vrai seulement si tous les joueurs l'ont annoncé, et chaque machine
+règle `gGta2PortTwinAllowed` au début de la partie (`coop_native.cpp`). Un navigateur (inchangé)
+ou une console plus ancienne ne l'annonce pas, et un lobby de navigateur ne met pas `twin` dans
+la partie : tout le monde joue alors en classique, sans changement de version multijoueur
+(`kCoopVersion` reste 4). Le lobby le dit (« Classic controls in this match: … »), et la ligne
+Options affiche « Twin (classic here) ». Chacun garde son réglage dans une partie autorisée.
+
+Observé dans le conteneur : gta2-lan à 2, jeu aléatoire et visée qui tourne
+(`GTA2_TEST_TWIN_AIM=1`), 100 s, ~2 850 ticks : « twin stick allowed », aucune désynchronisation ;
+même chose avec un invité qui ne l'annonce pas (`GTA2_TEST_NO_TWIN=1`, comme un navigateur) :
+« off (classic controls) » des deux côtés, aucune désynchronisation ; seul, le piéton suit la
+visée ; 90 s de jeu aléatoire sous ASan + UBSan avec la visée : aucun rapport nouveau. Pas encore
+vu : une manette réelle, les tourelles, une partie console + navigateur, les consoles.
 
 ## Reste à faire
 

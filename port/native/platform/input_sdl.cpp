@@ -30,6 +30,7 @@
 #if !defined(GTA2_NATIVE_HEADLESS)
 #include <SDL.h>
 #include <ctype.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -46,6 +47,10 @@ extern "C" void gta2_port_key(int scancode, int vk, int down, int ch);
 extern "C" void gta2_port_release_all_keys();
 extern "C" bool Gta2Native_IsPlaying();       // status_native.cpp
 extern "C" bool Gta2Native_QuitPromptShown(); // status_native.cpp
+extern "C" int Gta2Port_TwinGate();                   // Player.cpp (native patch 0021)
+extern "C" int Gta2Port_AngleOf(int x, int y);        // same: the game's angle of a direction
+extern "C" void gta2_port_reg_set_dword(const char* path, const char* name, unsigned int value);
+constexpr double kAimDeadzone = 0.35 * 32767;         // the right stick aims beyond this
 extern "C" bool Gta2Native_MapScreenShown();  // radar_native.cpp: the map screen, with the pause
 extern "C" void Gta2Native_MapInput(int dx, int dy, int zoom);
 extern "C" unsigned int Gta2Native_RegistryDword(const char* path, const char* name, unsigned int fallback);
@@ -219,6 +224,10 @@ constexpr int kTriggerThreshold = 16384;
 std::string gConfDir = ".";
 
 bool gPressed[kInputCount] = {};
+// Twin stick (Options: Control): the right stick's position, and the setting (registry
+// screen\port_control: 1 twin stick, the default; 0 classic).
+int gRightX = 0, gRightY = 0;
+int gControl = -1; // not read yet
 // The map screen with a keyboard: the arrows held (up, down, left, right), and - / = pressed.
 bool gMapArrows[4] = {};
 int gMapZoomKeys = 0;
@@ -645,6 +654,55 @@ int Gta2Native_PadButtonForLabel(int sdlButtonAsLabel)
 
 // options_native.cpp: face_buttons (0 auto, 1 nintendo, 2 xbox), changed at once and
 // written to controls.ini (only that line: the rest of the file stays as it is).
+// Options: Control, Classic (0) or Twin stick (1, the default), kept in the registry.
+int Gta2Native_ControlMode()
+{
+    if (gControl < 0)
+    {
+        gControl = Gta2Native_RegistryDword("hklm\\software\\dma design ltd\\gta2\\screen", "port_control", 1) ? 1 : 0;
+    }
+    return gControl;
+}
+
+void Gta2Native_SetControlMode(int mode)
+{
+    gControl = mode ? 1 : 0;
+    gta2_port_reg_set_dword("hklm\\software\\dma design ltd\\gta2\\screen", "port_control", static_cast<unsigned int>(gControl));
+}
+
+// Twin stick in use now: the setting, and allowed here (alone, or in a match that allows it).
+bool Gta2Native_TwinActive()
+{
+    return Gta2Native_ControlMode() == 1 && Gta2Port_TwinGate();
+}
+
+// winmain.cpp (native patch 0021), once a tick: the twin stick code for this player's input bits
+// 22-31 (Player.cpp): 0 classic, 1 twin stick, 2 + angle / 3 aiming with the right stick.
+unsigned int Gta2Native_TwinBits()
+{
+    if (!Gta2Native_TwinActive())
+    {
+        return 0;
+    }
+    unsigned int code = 1;
+    // GTA2_TEST_TWIN_AIM=1 (tests): the right stick goes round, a turn every 6 s
+    static const bool testAim = getenv("GTA2_TEST_TWIN_AIM") != nullptr;
+    if (testAim)
+    {
+        const double t = SDL_GetTicks() / 1000.0 * (2 * 3.14159265358979 / 6);
+        gRightX = static_cast<int>(cos(t) * 30000);
+        gRightY = static_cast<int>(sin(t) * 30000);
+    }
+    const double m = sqrt(static_cast<double>(gRightX) * gRightX + static_cast<double>(gRightY) * gRightY);
+    if (m > kAimDeadzone && Gta2Native_IsPlaying() && !Gta2Native_QuitPromptShown() && !Gta2Native_OptionsOpen())
+    {
+        // the stick's direction is the map's: x right, y down (the camera never turns)
+        const int angle = Gta2Port_AngleOf(gRightX / 64, gRightY / 64);
+        code = 2 + static_cast<unsigned int>(((angle % 1440) + 1440) % 1440) / 3;
+    }
+    return code << 22;
+}
+
 int Gta2Native_FaceButtons()
 {
     return gFaceMode;
@@ -855,6 +913,8 @@ void Gta2Native_InputEvent(const SDL_Event& e)
                     gPressed[kStickUp] = gStickAsDpad && v < -gStickDeadzone;
                     gPressed[kStickDown] = gStickAsDpad && v > gStickDeadzone;
                     break;
+                case SDL_CONTROLLER_AXIS_RIGHTX: gRightX = v; break;
+                case SDL_CONTROLLER_AXIS_RIGHTY: gRightY = v; break;
                 case SDL_CONTROLLER_AXIS_TRIGGERLEFT: gPressed[kL2] = v > kTriggerThreshold; break;
                 case SDL_CONTROLLER_AXIS_TRIGGERRIGHT: gPressed[kR2] = v > kTriggerThreshold; break;
                 default: break;

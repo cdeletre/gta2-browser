@@ -21,6 +21,7 @@ extern "C" {
 void gta2_port_net_configure(int count, int me, int delay);
 void gta2_port_set_friendly_fire(int on);
 extern int32_t gGta2PortTrafficCap; // native patch 0019 (Car_BC.cpp): the traffic cars' limit
+extern "C" int32_t gGta2PortTwinAllowed; // native patch 0021 (Player.cpp): twin stick in this match
 void gta2_port_net_set_rules(int type, int limit, int minutes);
 void gta2_port_set_ride_together(int policy);
 void gta2_port_set_player_team(int slot, int team, const char* side);
@@ -174,6 +175,10 @@ void SetupCoop(Lobby* lobby, const Json& match)
     gGta2PortTrafficCap = match["traffic"].Str() == "more" ? std::min(64, 16 * count) : 16;
     if (gGta2PortTrafficCap != 16)
         fprintf(stderr, "gta2: co-op: more traffic, %d cars at most\n", gGta2PortTrafficCap);
+    // twin stick: only when every player's game decodes its input bits (the host's lobby says so;
+    // a match from a browser's lobby has no such field: classic controls); every machine reads it here
+    gGta2PortTwinAllowed = match["twin"].Truthy() ? 1 : 0;
+    fprintf(stderr, "gta2: co-op: twin stick %s in this match\n", gGta2PortTwinAllowed ? "allowed" : "off (classic controls)");
     for (int i = 0; i < count; ++i)
     {
         const int crew = mode == "wars" ? CrewOf(match, players[static_cast<size_t>(i)]["id"].Str()) : -1;

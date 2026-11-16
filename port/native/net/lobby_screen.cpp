@@ -42,6 +42,8 @@ extern "C" bool Gta2Native_OskOpen();
 extern "C" void Gta2Native_OskInput(int action);
 extern "C" void Gta2Native_OskStart(const char* title, const char* initial, int maxLen, void (*done)(bool ok, const char* text));
 
+extern "C" int Gta2Native_ControlMode(); // platform/input_sdl.cpp: 0 classic, 1 twin stick
+
 namespace gta2net
 {
 namespace
@@ -880,6 +882,16 @@ void Draw(int dw, int dh)
         hint = "Nobody hosts " + gS.config->room + " yet: one player must pick Create room.";
     if (gS.phase == kRoom && gLobby && gLobby->IsHost() && (gS.otherHost || gLobby->SilentPeers(3000) > 0))
         hint = gS.config->room + " already has a host: leave, then pick Join room.";
+    // twin stick: classic controls for everyone when a player's game does not know it
+    if (hint.empty() && gS.phase == kRoom && gLobby && Gta2Native_ControlMode() == 1)
+    {
+        std::string old;
+        for (const Json& p : gLobby->Players().Items())
+            if (!p["twin"].Truthy())
+                old += (old.empty() ? "" : ", ") + p["name"].Str();
+        if (!old.empty())
+            hint = "Classic controls in this match: " + old + " plays in a browser or an older version.";
+    }
     if (!hint.empty())
     {
         // two lines when it does not fit

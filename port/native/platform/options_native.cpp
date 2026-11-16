@@ -13,6 +13,7 @@
 // plus the port's own settings:
 //   face buttons             controls.ini face_buttons      at once (input_sdl.cpp)
 //   radar: off, left, right  screen\port_radar             at once (radar_native.cpp)
+//   control: classic, twin   screen\port_control           at once (input_sdl.cpp, Player.cpp)
 //
 // It opens from the main menu's Options, and in the city from the pause (Start, then Select:
 // input_sdl.cpp) or F8 (the original's GTA2 Manager key). The original's quit prompt does
@@ -44,6 +45,9 @@ extern "C" void Gta2Native_OverlayText(float x, float y, float px, uint32_t rgba
 extern "C" bool Gta2Native_IsPlaying();          // status_native.cpp
 extern "C" int Gta2Native_FaceButtons();          // input_sdl.cpp: 0 auto, 1 nintendo, 2 xbox
 extern "C" void Gta2Native_SetFaceButtons(int mode); // input_sdl.cpp, also writes controls.ini
+extern "C" int Gta2Native_ControlMode();            // input_sdl.cpp: 0 classic, 1 twin stick
+extern "C" void Gta2Native_SetControlMode(int mode); // input_sdl.cpp, also writes the registry
+extern "C" bool Gta2Native_TwinActive();             // input_sdl.cpp: in use now
 extern "C" int Gta2Native_RadarMode();              // radar_native.cpp: 0 off, 1 right, 2 left
 extern "C" void Gta2Native_SetRadarMode(int mode);  // radar_native.cpp, also writes the registry
 // gta2-online's lobby screen (net/lobby_screen.cpp) takes this screen's inputs and drawing while
@@ -74,6 +78,7 @@ enum Line
     kExploding,
     kLighting,
     kFaceButtons,
+    kControl,
     kRadar,
     kChat,      // gta2-online only
     kWaypoints, // gta2-online only
@@ -81,7 +86,7 @@ enum Line
     kLineCount
 };
 const char* const kLabels[kLineCount] = {"Music and radio", "Sound effects", "Text speed",    "Exploding scores",
-                                         "Lighting",        "Face buttons",  "Radar",         "Chat messages", "Waypoints",
+                                         "Lighting",        "Face buttons",  "Control",       "Radar",         "Chat messages", "Waypoints",
                                          "Back"};
 
 // The lines this binary shows: the multiplayer ones in gta2-online only.
@@ -145,6 +150,13 @@ void Value(int line, char* out, size_t size)
         case kExploding: snprintf(out, size, "%s", bExplodingScoresOff_67D4FB ? "Off" : "On"); break;
         case kLighting: snprintf(out, size, "%s", Lighting() ? "On" : "Off"); break;
         case kFaceButtons: snprintf(out, size, "%s", kFaces[std::clamp(Gta2Native_FaceButtons(), 0, 2)]); break;
+        case kControl:
+            snprintf(out, size, "%s",
+                     Gta2Native_ControlMode() == 0  ? "Classic"
+                     : Gta2Native_TwinActive()      ? "Twin stick"
+                     : Gta2Native_IsPlaying()       ? "Twin (classic here)"
+                                                    : "Twin stick");
+            break;
         case kRadar:
         {
             static const char* const kRadarModes[] = {"Off", "Right", "Left"};
@@ -195,6 +207,9 @@ void Change(int line, int dir)
             break;
         case kFaceButtons:
             Gta2Native_SetFaceButtons((Gta2Native_FaceButtons() + (dir > 0 ? 1 : 2)) % 3);
+            break;
+        case kControl:
+            Gta2Native_SetControlMode(Gta2Native_ControlMode() ? 0 : 1);
             break;
         case kRadar:
         {
