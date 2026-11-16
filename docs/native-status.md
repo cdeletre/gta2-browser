@@ -1470,8 +1470,10 @@ radar sauf les jetons (pas encore de découverte de la carte : ils seraient tous
 texte de l'invite descend dans une bande en bas de l'écran, laissée découverte : patch natif
 0020 (`Hud.cpp`, `gGta2PortQuitAtBottom` posé par `radar_native.cpp`, `gGta2PortQuitBandTop`
 pour la hauteur de la bande ; ancré en bas dans la vue haute). L'écran Options (Select pendant
-la pause) passe par-dessus. Pas encore là : déplacer et zoomer la carte, une légende, la
-découverte (le navigateur les a).
+la pause) passe par-dessus. La croix ou le stick déplacent la carte (60 % de sa hauteur par
+seconde), L1 dézoome et R1 zoome (32, 64, 128 ou 256 blocs de haut) ; au clavier, les flèches,
+`-` et `=` (`input_sdl.cpp`, rien de tout cela n'arrive au jeu pendant la carte). Elle se rouvre
+sur le joueur à 64 blocs. Pas encore là : une légende, la découverte (le navigateur les a).
 
 Observé dans le conteneur (llvmpipe, Downtown, départ à l'église) : radar en 640×480,
 1280×720 et 720×720, église, armes et flèches de gangs sur le bord ; carte construite en 1,5 à
@@ -1481,7 +1483,8 @@ UBSan du moteur sont les mêmes radar éteint), seule la fuite connue de l'audio
 attendu, en solo et en réseau (free-for-all à 2 avec l'Air X), hormis l'autre joueur, caché au-delà
 de 24 blocs (corrigé ensuite). Écran de carte et radar à gauche, vus dans le conteneur : carte en
 640×480, 1280×720 et 720×720, invite lisible dans la bande du bas ; 40 s sous ASan + UBSan avec
-la carte ouverte : aucun rapport nouveau.
+la carte ouverte : aucun rapport nouveau. Déplacement vu à la croix (événements manette SDL) et
+aux flèches (événements clavier SDL) ; le zoom pas encore observé.
 
 ## Reste à faire
 

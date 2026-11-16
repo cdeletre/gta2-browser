@@ -8,7 +8,9 @@
 // The map screen: with the pause (Start: the game's quit prompt), the district's map over the
 // screen, a rectangle as the screen's shape, centred on the player, with the same markers; the
 // quit prompt moves to a band at the bottom edge, left uncovered (native patch 0020:
-// gGta2PortQuitAtBottom, gGta2PortQuitBandTop). Tokens are left off it (no discovery yet).
+// gGta2PortQuitAtBottom, gGta2PortQuitBandTop). The d-pad or the stick moves it, L1 zooms out
+// and R1 in (a keyboard: the arrows, - and =; input_sdl.cpp); it opens on the player, 64 blocks high, each time. Tokens are left
+// off it (no discovery yet).
 //
 // What it shows, from port/platform/map_web.cpp (the same reads as the browser's map, all
 // read-only towards the game, so it changes nothing in a network game's simulation):
@@ -23,7 +25,7 @@
 //   - in gta2-online and gta2-lan, the other players, allies and enemies, at any distance, and
 //     the waypoints (net/hud_net.cpp, Gta2Net_RadarMarks; the browser shows enemies only close);
 //   - the player, an arrow in the middle, and the north on the rim.
-// Not here (the browser has them): discovery of the map, panning and zooming the map screen.
+// Not here (the browser has them): discovery of the map, a legend.
 #if !defined(GTA2_NATIVE_HEADLESS)
 #include <stdint.h>
 #include <stdio.h>
@@ -142,6 +144,18 @@ struct Radar
     std::vector<int32_t> rows;
 };
 Radar gRadar;
+
+// The map screen's view: its centre (blocks), the height it shows (kSpans), the d-pad held.
+constexpr double kSpans[] = {32, 64, 128, 256};
+struct MapView
+{
+    bool open = false;
+    double cx = 128, cy = 128;
+    int span = 1;
+    int dx = 0, dy = 0;
+    double last = 0;
+};
+MapView gMap;
 
 double NowMs()
 {
@@ -457,10 +471,16 @@ void DrawMapScreen(int dw, int dh, double px0, double py0, double heading, doubl
     Rect(0, 0, static_cast<float>(dw), bandTop, 0xf0000000);
     Rect(x0 - std::max(1.0f, u), y0 - std::max(1.0f, u), x1 + std::max(1.0f, u), y1 + std::max(1.0f, u), 0x60ffffff);
     Rect(x0, y0, x1, y1, kGround);
-    const float k = (y1 - y0) / 64.0f; // pixels per block
+    const float k = static_cast<float>((y1 - y0) / kSpans[gMap.span]); // pixels per block
     const double halfW = (x1 - x0) / 2 / k, halfH = (y1 - y0) / 2 / k;
-    const double vcx = halfW >= 128 ? 128 : std::clamp(px0, halfW, 256 - halfW);
-    const double vcy = halfH >= 128 ? 128 : std::clamp(py0, halfH, 256 - halfH);
+    // the d-pad moves it at 60% of its height a second; it stays inside the district
+    const double dt = std::min(100.0, now - gMap.last) / 1000.0;
+    gMap.last = now;
+    gMap.cx += gMap.dx * dt * kSpans[gMap.span] * 0.6;
+    gMap.cy += gMap.dy * dt * kSpans[gMap.span] * 0.6;
+    gMap.cx = halfW >= 128 ? 128 : std::clamp(gMap.cx, halfW, 256 - halfW);
+    gMap.cy = halfH >= 128 ? 128 : std::clamp(gMap.cy, halfH, 256 - halfH);
+    const double vcx = gMap.cx, vcy = gMap.cy;
     const float ox = (x0 + x1) / 2, oy = (y0 + y1) / 2;
     auto sx = [&](double wx) { return ox + static_cast<float>((wx - vcx) * k); };
     auto sy = [&](double wy) { return oy + static_cast<float>((wy - vcy) * k); };
@@ -532,12 +552,36 @@ void DrawMapScreen(int dw, int dh, double px0, double py0, double heading, doubl
             }
         }
     }
-    Arrow(sx(px0), sy(py0), atan2(cos(heading), sin(heading)), 9 * u, kWhite, std::max(1.0f, u));
+    if (inside(sx(px0), sy(py0), 0))
+    {
+        Arrow(sx(px0), sy(py0), atan2(cos(heading), sin(heading)), 9 * u, kWhite, std::max(1.0f, u));
+    }
+    // the controls, in the top left corner
+    {
+        const float fp = std::max(1.0f, floorf(dh / 240.0f));
+        const char* const hint = "D-pad: move   L1 / R1: zoom";
+        Rect(x0, y0, x0 + (strlen(hint) * 6 + 6) * fp, y0 + 12 * fp, 0xc0000000);
+        Gta2Native_OverlayText(x0 + 3 * fp, y0 + 3 * fp, fp, 0xffd0d0d0, hint);
+    }
 }
 
 } // namespace
 
 extern "C" {
+
+// input_sdl.cpp: the map screen is up, and what the controller does to it (dx, dy: -1, 0, 1 while
+// held; zoom: -1 out, 1 in, on a press).
+bool Gta2Native_MapScreenShown()
+{
+    return gMap.open && Gta2Native_IsPlaying() && Gta2Native_QuitPromptShown() && !Gta2Native_OptionsOpen();
+}
+
+void Gta2Native_MapInput(int dx, int dy, int zoom)
+{
+    gMap.dx = dx;
+    gMap.dy = dy;
+    gMap.span = std::clamp(gMap.span - zoom, 0, 3);
+}
 
 // Options: Radar Off (0), Right (1) or Left (2), kept in the registry (conf/registry.txt).
 int Gta2Native_RadarMode()
@@ -561,6 +605,10 @@ void Gta2Native_RadarDraw(int dw, int dh)
     const bool playing = Gta2Native_IsPlaying();
     const bool mapScreen = playing && Gta2Native_QuitPromptShown() && !Gta2Native_OptionsOpen();
     gGta2PortQuitAtBottom = mapScreen ? 1 : 0; // the next frame's quit prompt (patch 0020)
+    if (!mapScreen)
+    {
+        gMap.open = false;
+    }
     if (!playing || (!gRadar.mode && !mapScreen))
     {
         return;
@@ -597,9 +645,19 @@ void Gta2Native_RadarDraw(int dw, int dh)
     }
     if (mapScreen)
     {
+        if (!gMap.open)
+        {
+            // opens on the player, 64 blocks high
+            gMap = MapView();
+            gMap.open = true;
+            gMap.cx = px0;
+            gMap.cy = py0;
+            gMap.last = now;
+        }
         DrawMapScreen(dw, dh, px0, py0, heading, now);
         return;
     }
+    gMap.open = false;
 
     // the ground, then the map over it: a fan whose texture coordinates are the blocks it covers
     Disc(cx, cy, r, kGround);

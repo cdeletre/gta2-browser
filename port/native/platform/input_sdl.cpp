@@ -46,6 +46,8 @@ extern "C" void gta2_port_key(int scancode, int vk, int down, int ch);
 extern "C" void gta2_port_release_all_keys();
 extern "C" bool Gta2Native_IsPlaying();       // status_native.cpp
 extern "C" bool Gta2Native_QuitPromptShown(); // status_native.cpp
+extern "C" bool Gta2Native_MapScreenShown();  // radar_native.cpp: the map screen, with the pause
+extern "C" void Gta2Native_MapInput(int dx, int dy, int zoom);
 extern "C" unsigned int Gta2Native_RegistryDword(const char* path, const char* name, unsigned int fallback);
 extern "C" bool Gta2Native_OptionsOpen();             // options_native.cpp
 extern "C" void Gta2Native_OptionsInput(int action);  // options_native.cpp
@@ -217,6 +219,9 @@ constexpr int kTriggerThreshold = 16384;
 std::string gConfDir = ".";
 
 bool gPressed[kInputCount] = {};
+// The map screen with a keyboard: the arrows held (up, down, left, right), and - / = pressed.
+bool gMapArrows[4] = {};
+int gMapZoomKeys = 0;
 bool gBlocked[kInputCount] = {};
 int gPlaying = -1; // unknown
 std::set<Key> gHeld; // keys the controller is holding down
@@ -769,6 +774,30 @@ void Gta2Native_InputEvent(const SDL_Event& e)
                 }
                 break;
             }
+            if (Gta2Native_MapScreenShown())
+            {
+                // the map screen (with the pause): the arrows move it, - and = zoom out and in
+                const SDL_Scancode sc = e.key.keysym.scancode;
+                const int arrow = sc == SDL_SCANCODE_UP ? 0 : sc == SDL_SCANCODE_DOWN ? 1 : sc == SDL_SCANCODE_LEFT ? 2
+                                : sc == SDL_SCANCODE_RIGHT ? 3 : -1;
+                if (arrow >= 0)
+                {
+                    gMapArrows[arrow] = e.type == SDL_KEYDOWN;
+                    if (e.type == SDL_KEYDOWN)
+                        break;
+                }
+                else if ((sc == SDL_SCANCODE_MINUS || sc == SDL_SCANCODE_KP_MINUS || sc == SDL_SCANCODE_EQUALS ||
+                          sc == SDL_SCANCODE_KP_PLUS) && !Gta2Native_OptionsOpen())
+                {
+                    if (e.type == SDL_KEYDOWN && !e.key.repeat)
+                        gMapZoomKeys += sc == SDL_SCANCODE_MINUS || sc == SDL_SCANCODE_KP_MINUS ? -1 : 1;
+                    break;
+                }
+            }
+            else
+            {
+                gMapArrows[0] = gMapArrows[1] = gMapArrows[2] = gMapArrows[3] = false;
+            }
             if (const Key* k = KeyFor(e.key.keysym.scancode))
             {
                 const bool down = e.type == SDL_KEYDOWN;
@@ -957,6 +986,26 @@ void Gta2Native_InputFrame()
         if (gLogInput)
         {
             fprintf(stderr, "gta2: input: layout %s\n", playing ? "city" : "menu");
+        }
+    }
+    // The map screen (radar_native.cpp, with the pause): the d-pad or the stick moves the map,
+    // L1 zooms out and R1 in; none of them reach the game (its quit prompt has no use for them).
+    // A keyboard's arrows and - / = do the same (Gta2Native_InputEvent).
+    if (Gta2Native_MapScreenShown())
+    {
+        const int dx = (gPressed[kPadRight] || gPressed[kStickRight] || gMapArrows[3] ? 1 : 0) -
+            (gPressed[kPadLeft] || gPressed[kStickLeft] || gMapArrows[2] ? 1 : 0);
+        const int dy = (gPressed[kPadDown] || gPressed[kStickDown] || gMapArrows[1] ? 1 : 0) -
+            (gPressed[kPadUp] || gPressed[kStickUp] || gMapArrows[0] ? 1 : 0);
+        static bool l1Was = false, r1Was = false;
+        const int zoom = (gPressed[kL1] && !l1Was ? -1 : 0) + (gPressed[kR1] && !r1Was ? 1 : 0) + gMapZoomKeys;
+        gMapZoomKeys = 0;
+        l1Was = gPressed[kL1];
+        r1Was = gPressed[kR1];
+        Gta2Native_MapInput(dx, dy, zoom);
+        for (int b : {kPadUp, kPadDown, kPadLeft, kPadRight, kStickUp, kStickDown, kStickLeft, kStickRight, kL1, kR1})
+        {
+            gBlocked[b] = gBlocked[b] || gPressed[b];
         }
     }
     // In a match (gta2-online), Select is three gestures: a tap (released within 0.3 s, no d-pad)
