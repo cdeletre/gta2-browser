@@ -1453,8 +1453,10 @@ texture), à partir des lectures de `port/platform/map_web.cpp`, déjà compilé
   du jeu) : dedans, le logo du gang ou un anneau qui pulse ; dehors, la flèche du jeu sur le
   bord. Radar allumé, le jeu ne dessine plus ses flèches autour du joueur (`gta2_port_set_hud_arrows`,
   comme le navigateur) ;
-- gta2-online et gta2-lan : les autres joueurs (ennemis à moins de 24 blocs seulement, en Gang
-  Wars et free-for-all) et les waypoints (`Gta2Net_RadarMarks`, `net/hud_net.cpp`).
+- gta2-online et gta2-lan : les autres joueurs, alliés comme ennemis, à toute distance (sur le
+  bord quand ils sont loin), et les waypoints (`Gta2Net_RadarMarks`, `net/hud_net.cpp`). Le
+  navigateur ne montre les ennemis qu'à moins de 24 blocs ; en natif ce filtre cachait l'autre
+  joueur d'une partie free-for-all à 2 (TSP S et Air X, 15 novembre), il est enlevé.
 
 Options : « Radar » On/Off, à chaud, dans le registre (`screen\port_radar`, `conf/registry.txt`),
 allumé par défaut. Lecture seule vis-à-vis du jeu : rien ne change dans la simulation ni dans
@@ -1464,8 +1466,9 @@ Observé dans le conteneur (llvmpipe, Downtown, départ à l'église) : radar en
 1280×720 et 720×720, église, armes et flèches de gangs sur le bord ; carte construite en 1,5 à
 1,6 s ; 90 s de soak sous ASan + UBSan : aucune erreur dans le nouveau code (les rapports
 UBSan du moteur sont les mêmes radar éteint), seule la fuite connue de l'audio SDL à la sortie ;
-« Radar » éteint dans le registre : pas de radar. Pas encore vu : une console, une partie en
-réseau avec le radar, le changement depuis l'écran Options.
+« Radar » éteint dans le registre : pas de radar. Propriétaire, sur la TSP S : le radar comme
+attendu, en solo et en réseau (free-for-all à 2 avec l'Air X), hormis l'autre joueur, caché au-delà
+de 24 blocs (corrigé ensuite).
 
 ## Reste à faire
 

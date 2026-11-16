@@ -13,8 +13,8 @@
 //     point at now): inside, the gang's logo or a pulsing ring; outside, the game's own arrow
 //     sprite on the rim, pointing their way. While the radar is on, the game's arrows around the
 //     player are not drawn (gta2_port_set_hud_arrows, as in the browser);
-//   - in gta2-online and gta2-lan, the other players and the waypoints (net/hud_net.cpp,
-//     Gta2Net_RadarMarks): enemies only when they are close, as in the browser;
+//   - in gta2-online and gta2-lan, the other players, allies and enemies, at any distance, and
+//     the waypoints (net/hud_net.cpp, Gta2Net_RadarMarks; the browser shows enemies only close);
 //   - the player, an arrow in the middle, and the north on the rim.
 // Not here (the browser has them): discovery of the map, the full map screen.
 #if !defined(GTA2_NATIVE_HEADLESS)
