@@ -1,0 +1,79 @@
+From 40c4d0d3d8dcead287b00e53310d6a62f71e551b Mon Sep 17 00:00:00 2001
+From: cdeletre <cyril.deletre@gmail.com>
+Date: Sun, 15 Nov 2026 20:20:33 -0500
+Subject: [PATCH] native: the quit prompt at the bottom edge while the map
+ screen shows
+
+The port's map screen (port/native/platform/radar_native.cpp) opens with the
+pause (Start) and covers the screen. While it is up it sets
+gGta2PortQuitAtBottom: the quit prompt's three lines then go to the bottom
+edge of the screen (bottom-anchored in a tall view), and gGta2PortQuitBandTop
+tells the screen where their band starts, so that it leaves them visible.
+Otherwise the prompt is drawn as before; the web build is unchanged.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ Source/Hud.cpp | 33 +++++++++++++++++++++++++++++++++
+ 1 file changed, 33 insertions(+)
+
+diff --git a/Source/Hud.cpp b/Source/Hud.cpp
+index 69b122bf..65ef6d64 100644
+--- a/Source/Hud.cpp
++++ b/Source/Hud.cpp
+@@ -1369,6 +1369,16 @@ bool Hud_QuitMessage_1::IsOnQuitMessage_5D13C0(s32 action, Player* pPlayer)
+ 
+ // ----------------------------------------------------
+ 
++#if defined(GTA2_PORT_NATIVE)
++// The native map screen asks for the quit prompt at the bottom edge (set by radar_native.cpp) and
++// reads the top of its band (HUD units, 0..480 from the bottom-anchored box's top).
++extern "C" s32 gGta2PortQuitAtBottom;
++extern "C" s32 gGta2PortQuitBandTop;
++s32 gGta2PortQuitAtBottom = 0;
++s32 gGta2PortQuitBandTop = 400;
++extern "C" void Gta2Port_SetFrameHeight(s32 height, s32 hudOffsetY); // port/render/frame.cpp
++#endif
++
+ MATCH_FUNC(0x5d1430)
+ void Hud_QuitMessage_1::DrawQuitMessage_5D1430()
+ {
+@@ -1384,6 +1394,20 @@ void Hud_QuitMessage_1::DrawQuitMessage_5D1430()
+         s32 max_text_width = Frontend::GetMaxTextWidth_5D8990(pQuitText, word_7064D8);
+         s32 line_spacing_added = CountLineSpacing_5D8940(pQuitText, word_7064D8);
+         s32 line2_ypos = ((3 * (160 - line_spacing_added)) / 2);
++#if defined(GTA2_PORT_NATIVE)
++        // The native map screen (port/native/platform/radar_native.cpp) is up: the three lines go
++        // to the bottom edge, under it, and the screen leaves them that band.
++        const bool portAtBottom = gGta2PortQuitAtBottom != 0;
++        if (portAtBottom)
++        {
++            line2_ypos = 480 - 14 - 2 * line_spacing_added;
++            gGta2PortQuitBandTop = line2_ypos - line_spacing_added - 6;
++            if (const Camera_0xBC* pCam = gViewCamera_676978)
++            {
++                Gta2Port_SetFrameHeight(pCam->field_6C_screen_px_height, pCam->PortHudOffsetY() * 2);
++            }
++        }
++#endif
+ 
+         DrawText_5D7720(pQuitText, (u32)((640 - max_text_width) / 2), line2_ypos - line_spacing_added, word_7064D8, 2, 0, 0, 0);
+ 
+@@ -1396,6 +1420,15 @@ void Hud_QuitMessage_1::DrawQuitMessage_5D1430()
+         s32 max_text_width_3 = Frontend::GetMaxTextWidth_5D8990(pQuitText3, word_7064D8);
+ 
+         DrawText_5D7720(pQuitText3, (u32)((640 - max_text_width_3) / 2), line2_ypos + line_spacing_added, word_7064D8, 2, 0, 0, 0);
++#if defined(GTA2_PORT_NATIVE)
++        if (portAtBottom)
++        {
++            if (const Camera_0xBC* pCam = gViewCamera_676978)
++            {
++                Gta2Port_SetFrameHeight(pCam->field_6C_screen_px_height, pCam->PortHudOffsetY()); // back to centred
++            }
++        }
++#endif
+     }
+ }
+ 
+-- 
+2.54.0
+
